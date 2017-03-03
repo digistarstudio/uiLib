@@ -40,6 +40,7 @@ BOOL uiDrawer::PushDestRect(uiRect rect)
 
 	rect.Move(m_OriginX, m_OriginY);
 	m_RenderDestRect.IntersectWith(rect);
+	m_RenderDestRect.IntersectWith(m_RenderUpdateRect);
 
 	if (m_RenderDestRect.IsValidRect())
 	{

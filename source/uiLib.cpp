@@ -20,13 +20,17 @@ class CTabFormContext1 : public uiFormBase
 {
 public:
 
+	void OnCreate()
+	{
+		SetTitle(_T("Tab Pane No. 1"));
+	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 200, 0));
 		pDrawer->DrawText(_T("Context 1"), rect, DT_CENTER);
 	}
-	void OnMouseEnter()
+	void OnMouseEnter(INT x, INT y)
 	{
 		printx("---> CTabFormContext1::OnMouseEnter\n");
 	}
@@ -40,13 +44,17 @@ class CTabFormContext2 : public uiFormBase
 {
 public:
 
+	void OnCreate()
+	{
+		SetTitle(_T("Tab Pane No. 2"));
+	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(10, 125, 175));
 		pDrawer->DrawText(_T("Context 2"), rect, DT_CENTER);
 	}
-	void OnMouseEnter()
+	void OnMouseEnter(INT x, INT y)
 	{
 		printx("---> CTabFormContext2::OnMouseEnter\n");
 	}
@@ -69,14 +77,16 @@ public:
 	void OnCreate()
 	{
 		uiForm::OnCreate();
-		printx("---> CMyForm::OnCreate\n");
+		printx("---> CFormEx::OnCreate\n");
+
+		SetHeaderBar(_T("test child form"));
 
 		m_pSubForm = new uiForm;
-		m_pSubForm->Create(this, 20, 20, 100, 60, FCF_VISIBLE);
+		m_pSubForm->Create(this, 20, 20, 110, 60, FCF_CENTER);
+	//	m_pSubForm->Create(this, 20, 20, 110, 60);
 		m_pSubForm->SetHeaderBar(_T("test child form"));
 	}
-
-	virtual void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer)
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 125, 125));
@@ -104,17 +114,17 @@ public:
 		printx("---> CFormEx2::OnCreate\n");
 
 		m_pTabForm = new uiTabForm;
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP);
-		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM);
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP); // uiTabForm::TFF_FORCE_SHOW_TAB
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM);
 	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT);
+		m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB);
 	//	m_pSubForm->SetHeaderBar(_T("test child form"));
 
 	//	uiFormBase *pBase = nullptr;
 	//	m_pTabForm->AddPane(pBase, -1);
 
 		m_pButton = new uiButton;
-		m_pButton->Create(this, 60, 400, 50, 50, FCF_VISIBLE);
+		m_pButton->Create(this, 60, 400, 50, 50);
 		Bind(m_pButton->GetID());
 	}
 
@@ -135,8 +145,8 @@ public:
 				pBaseForm = new CTabFormContext2;
 			}
 
-			pBaseForm->Create(m_pTabForm, 0, 0, 0, 0, FCF_VISIBLE);
-			m_pTabForm->AddPane(pBaseForm, -1, FALSE);
+			pBaseForm->Create(m_pTabForm, 0, 0, 0, 0);
+			m_pTabForm->AddPane(pBaseForm, -1, TRUE);
 
 			++CalledCount;
 			bDone = TRUE;
@@ -181,15 +191,18 @@ public:
 
 		printx("---> CMyForm::OnCreate\n");
 
+		SetHeaderBar(_T("test"));
+		SetMenuBar(nullptr);
+
 		m_pButton = new uiButton;
-		m_pButton->Create(this, 60, 60, 50, 50, FCF_VISIBLE);
+		m_pButton->Create(this, 60, 60, 50, 50);
 
 		m_pButton2 = new uiButton2;
-		m_pButton2->Create(this, 60, 120, 50, 50, FCF_VISIBLE);
+		m_pButton2->Create(this, 60, 120, 50, 50);
 
 		m_pSubForm = new CFormEx;
-		m_pSubForm->Create(this, 150, 150, 100, 150, FCF_VISIBLE);
-		m_pSubForm->SetHeaderBar(_T("test child form"));
+		m_pSubForm->Create(this, 150, 150, 170, 200);
+
 
 		Bind(m_pButton->GetID());
 		Bind(m_pButton2->GetID());
@@ -225,7 +238,7 @@ public:
 		if (id == m_pButton->GetID())
 		{
 			uiForm *pToolForm = new uiForm;
-			pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL | FCF_VISIBLE);
+			pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
 			pToolForm->SetHeaderBar(_T("test"));
 			bDone = TRUE;
 		}
@@ -234,7 +247,7 @@ public:
 			printx("Button 2 was clicked!\n");
 
 			uiForm *pForm = new CFormEx2;
-			pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_VISIBLE);
+			pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER);
 			pForm->SetHeaderBar(_T("test"));
 			bDone = TRUE;
 		}
@@ -287,10 +300,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	BASE_FRAME *pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FORM_CREATION_FLAG::FCF_CENTER);
+//	pForm->Create(nullptr, 150, 150, 600, 400, FORM_CREATION_FLAG::FCF_INVISIBLE);
 
-	pForm->SetHeaderBar(_T("test"));
-	pForm->SetMenuBar(nullptr);
-	pForm->Show(FSM_SHOW);
 
 //	pForm->Move(1000, 600);
 

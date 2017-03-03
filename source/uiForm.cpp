@@ -73,11 +73,11 @@ BOOL uiFormBase::Create(uiFormBase *parent, const RECT& rect, FORM_CREATION_FLAG
 }
 //*/
 
-BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG cf)
+BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, UINT fcf)
 {
 	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
-		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight);
+		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
 
 		printx("CreateTemplateWindow completed!\n");
 
@@ -87,26 +87,30 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		if (pAppBaseForm == nullptr)
 			pAppBaseForm = this;
 
+		if (fcf & FCF_CENTER)
+			pWnd->MoveToCenter();
+
 		OnCreate();
 		bCreated = true;
-
+		bShow = !(fcf & FCF_INVISIBLE);
 		return (pWnd != nullptr);
 	}
 
-	if (cf & FCF_TOOL)
+	if (fcf & FCF_TOOL)
 	{
 		ASSERT(parent != nullptr);
-		uiWindow *pWnd = CreateTemplateWindow(UWT_TOOL, this, parent, x, y, nWidth, nHeight);
+		uiWindow *pWnd = CreateTemplateWindow(UWT_TOOL, this, parent, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
 
 		m_FrameRect.Init(nWidth, nHeight);
 		m_ClientRect = m_FrameRect;
 		parent->AddChild(this);
 
-		if (cf & FCF_VISIBLE)
-			pWnd->ShowImp(FSM_SHOW);
+		if (fcf & FCF_CENTER)
+			pWnd->MoveToCenter();
 
 		OnCreate();
 		bCreated = true;
+		bShow = !(fcf & FCF_INVISIBLE);
 	}
 	else if (parent != nullptr)
 	{
@@ -116,8 +120,12 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		parent->AddChild(this);
 		m_pPlate = parent;
 
+		if (fcf & FCF_CENTER)
+			MoveToCenter();
+
 		OnCreate();
 		bCreated = true;
+		bShow = !(fcf & FCF_INVISIBLE);
 	}
 	else
 	{
@@ -160,9 +168,6 @@ void uiFormBase::Close()
 
 void uiFormBase::DePlate()
 {
-
-
-
 }
 
 void uiFormBase::Move(INT x, INT y)
@@ -174,6 +179,25 @@ void uiFormBase::Move(INT x, INT y)
 	else
 	{
 		m_FrameRect.Move(x - m_FrameRect.Left, y - m_FrameRect.Top);
+	}
+}
+
+void uiFormBase::MoveToCenter()
+{
+	if (IsRootForm())
+	{
+		m_pWnd->MoveToCenter();
+	}
+	else if (!m_bSideDocked)
+	{
+		uiRect rect = m_pPlate->GetClientRect(), FrameRect = GetFrameRect();
+		INT mx = (rect.Width() - FrameRect.Width()) / 2;
+		INT my = (rect.Height() - FrameRect.Height()) / 2;
+		Move(mx, my);
+	}
+	else
+	{
+		ASSERT(0);
 	}
 }
 
@@ -574,7 +598,7 @@ void uiFormBase::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 //	printx("---> uiFormBase::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
 }
 
-void uiFormBase::OnMouseEnter()
+void uiFormBase::OnMouseEnter(INT x, INT y)
 {
 //	if (GetKeyState(VK_F2) < 0)
 		printx("---> uiFormBase::OnMouseEnter\n");
@@ -635,7 +659,7 @@ BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 {
 	ASSERT(pMenu != nullptr);
 
-	BOOL bResult = uiFormBase::Create(parent, 0, 0, 100, DEFAULT_BAR_HEIGHT, FCF_VISIBLE);
+	BOOL bResult = uiFormBase::Create(parent, 0, 0, 100, DEFAULT_BAR_HEIGHT, FCF_NONE);
 
 //	m_Count = pMenu->GetCount(FALSE);
 	m_Count = 3;
@@ -662,7 +686,7 @@ void uiHeaderForm::EntryOnCommand(UINT id)
 	m_pParent->EntryOnCommand(id);
 }
 
-void uiHeaderForm::OnMouseEnter()
+void uiHeaderForm::OnMouseEnter(INT x, INT y)
 {
 	printx("---> uiHeaderForm::OnMouseEnter\n");
 }
@@ -680,13 +704,13 @@ void uiHeaderForm::OnCreate()
 	if ((m_pCloseBtn = new uiButton) != nullptr)
 	{
 		m_pCloseBtn->SetID(uiID_CLOSE);
-		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28, FCF_VISIBLE);
+		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28);
 	}
 
 	if ((m_pMinBtn = new uiButton) != nullptr)
 	{
 		m_pMinBtn->SetID(uiID_MINIMIZE);
-		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28, FCF_VISIBLE);
+		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28);
 	}
 
 	UpdateLayout(rect.Width(), rect.Height());
@@ -817,6 +841,7 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 	m_SideDockedFormList.push_back(pDockingForm);
 
 	m_ClientRect = rect;
+	RedrawForm();
 
 	return TRUE;
 }
@@ -824,7 +849,6 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 void uiForm::OnCreate()
 {
 	m_ClientRect.Inflate(-FRAME_WIDTH, -FRAME_WIDTH);
-
 }
 
 BOOL uiForm::SetHeaderBar(const TCHAR* pStr)
@@ -983,7 +1007,7 @@ BOOL uiDockableForm::OnDeplate(INT iReason, uiFormBase *pDockingForm)
 }
 
 
-BOOL uiTabForm::Create(uiFormBase *pParent, TAB_FORM_FLAGS tff)
+BOOL uiTabForm::Create(uiFormBase *pParent, UINT TAB_FORM_FLAGS)
 {
 	uiRect rect;
 //	if (tff & TFF_FULL_FORM)
@@ -994,13 +1018,15 @@ BOOL uiTabForm::Create(uiFormBase *pParent, TAB_FORM_FLAGS tff)
 	INT height = rect.Height() - m_TopMargin - m_BottomMargin;
 	BOOL bResult = uiForm::Create(pParent, m_LeftMargin, m_TopMargin, width, height, FCF_NONE);
 
-	m_Flag = tff;
+	m_Flag = TAB_FORM_FLAGS;
 
 	if (m_Flag & TFF_TAB_TOP || m_Flag & TFF_TAB_BOTTOM)
 	{
+		m_TabHeight = DEFAULT_TAB_HEIGHT;
 	}
 	else
 	{
+		m_TabWidth = DEFAULT_TAB_HEIGHT;
 	}
 
 	return TRUE;
@@ -1011,9 +1037,9 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 	stPaneInfo NewPaneInfo;
 
 	if (TestFlag(TFF_TAB_TOP) || TestFlag(TFF_TAB_BOTTOM))
-		NewPaneInfo.FullRect = uiSize(80, DEFAULT_TAB_HEIGHT); // test code.
+		NewPaneInfo.FullRect = uiSize(80, m_TabHeight); // test code.
 	else
-		NewPaneInfo.FullRect = uiSize(DEFAULT_TAB_HEIGHT, 80);
+		NewPaneInfo.FullRect = uiSize(m_TabWidth, 80);
 
 	if (pForm == nullptr)
 	{
@@ -1034,7 +1060,17 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 	if (bActivate || m_TotalPane == 1)
 		ActivateTab(index);
 
-	RedrawTabs(-1); // It's safe to redraw all tabs here.
+	if (m_TotalPane == 2 && !TestFlag(TFF_FORCE_SHOW_TAB))
+	{
+		// Update size and position of the first pane.
+		GetPaneInfo(0)->pForm->Move(m_PaneRegion.Left, m_PaneRegion.Top);
+		GetPaneInfo(0)->pForm->Size(m_PaneRegion.Width(), m_PaneRegion.Height());
+		RedrawForm();
+	}
+	else if (m_TotalPane != 1 || TestFlag(TFF_FORCE_SHOW_TAB))
+	{
+		RedrawTabs(-1); // It's safe to redraw all tabs here.
+	}
 
 	return TRUE;
 }
@@ -1066,23 +1102,29 @@ void uiTabForm::Layout()
 	uiRect ClientRect = GetClientRect();
 	m_PaneRegion = m_TabsRegion = ClientRect;
 
+	if (m_TotalPane == 1 && !TestFlag(TFF_FORCE_SHOW_TAB))
+	{
+		m_TabsRegion.Reset();
+		return;
+	}
+
 	switch(m_Flag & (TFF_TAB_TOP | TFF_TAB_BOTTOM | TFF_TAB_LEFT | TFF_TAB_RIGHT))
 	{
 	case TFF_TAB_TOP:
-		m_TabsRegion.Bottom = DEFAULT_TAB_HEIGHT;
-		m_PaneRegion.Inflate(0, -DEFAULT_TAB_HEIGHT, 0, 0);
+		m_TabsRegion.Bottom = m_TabHeight;
+		m_PaneRegion.Inflate(0, -m_TabHeight, 0, 0);
 		break;
 	case TFF_TAB_BOTTOM:
-		m_TabsRegion.Top = ClientRect.Height() - DEFAULT_TAB_HEIGHT;
-		m_PaneRegion.Inflate(0, 0, 0, -DEFAULT_TAB_HEIGHT);
+		m_TabsRegion.Top = ClientRect.Height() - m_TabHeight;
+		m_PaneRegion.Inflate(0, 0, 0, -m_TabHeight);
 		break;
 	case TFF_TAB_LEFT:
-		m_TabsRegion.Right = DEFAULT_TAB_HEIGHT;
-		m_PaneRegion.Inflate(-DEFAULT_TAB_HEIGHT, 0, 0, 0);
+		m_TabsRegion.Right = m_TabWidth;
+		m_PaneRegion.Inflate(-m_TabWidth, 0, 0, 0);
 		break;
 	case TFF_TAB_RIGHT:
-		m_TabsRegion.Left = ClientRect.Width() - DEFAULT_TAB_HEIGHT;
-		m_PaneRegion.Inflate(0, 0, -DEFAULT_TAB_HEIGHT, 0);
+		m_TabsRegion.Left = ClientRect.Width() - m_TabWidth;
+		m_PaneRegion.Inflate(0, 0, -m_TabWidth, 0);
 		break;
 	}
 
@@ -1101,8 +1143,8 @@ void uiTabForm::UpdateTabsRect()
 
 	if (m_Flag & TFF_TAB_TOP || m_Flag & TFF_TAB_BOTTOM)
 	{
-		top = (m_Flag & TFF_TAB_TOP) ? 0 : rect.Height() - DEFAULT_TAB_HEIGHT;
-		bottom = top + DEFAULT_TAB_HEIGHT;
+		top = (m_Flag & TFF_TAB_TOP) ? 0 : rect.Height() - m_TabHeight;
+		bottom = top + m_TabHeight;
 		width = rect.Width() / m_TotalPane;
 		mod = rect.Width() % m_TotalPane;
 		if (rect.Width() > FullTabsSize.iWidth)
@@ -1110,8 +1152,8 @@ void uiTabForm::UpdateTabsRect()
 	}
 	else
 	{
-		left = (m_Flag & TFF_TAB_LEFT) ? 0 : rect.Width() - DEFAULT_TAB_HEIGHT;
-		right = left + DEFAULT_TAB_HEIGHT;
+		left = (m_Flag & TFF_TAB_LEFT) ? 0 : rect.Width() - m_TabWidth;
+		right = left + m_TabWidth;
 		height = rect.Height() / m_TotalPane;
 		mod = rect.Height() % m_TotalPane;
 		if (rect.Height() > FullTabsSize.iHeight)
@@ -1238,11 +1280,14 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 	uiRect rect = GetClientRect(), tRect;
 	pDrawer->FillRect(rect, RGB(128, 128, 200));
 
-	pDrawer->FillRect(m_PaneRegion, RGB(205, 128, 200)); // test code.
-//	pDrawer->FillRect(m_TabsRegion, RGB(0, 0, 0)); // test code.
+	if (m_TabsRegion.IsEmpty())
+		return;
 
+	stPaneInfo *pPaneInfo;
 	for (INT i = 0; i < m_TotalPane; ++i)
 	{
+		pPaneInfo = GetPaneInfo(i);
+
 		tRect = m_pPaneInfoArray[i].Rect;
 		tRect.Inflate(-1, -1, -1, -1);
 
@@ -1253,7 +1298,7 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 		else
 			pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? m_ColorHover : m_ColorDefault);
 
-		pDrawer->DrawText(_T("Test"), tRect, DT_CENTER);
+		pDrawer->DrawText(pPaneInfo->pForm->GetTitle(), tRect, DT_CENTER);
 	}
 }
 

@@ -39,6 +39,7 @@ public:
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
+	INLINE void SetUpdateRect(const uiRect &rect) { m_RenderUpdateRect = rect; }
 	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 
 
@@ -54,7 +55,7 @@ protected:
 		uiRect rect;
 	};
 
-	uiRect m_RenderDestRect;
+	uiRect m_RenderDestRect, m_RenderUpdateRect;
 	INT m_OriginX, m_OriginY;
 	TList<stRenderDestInfo> m_RectList;
 

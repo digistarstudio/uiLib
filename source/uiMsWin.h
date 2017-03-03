@@ -39,6 +39,7 @@ public:
 	void ResizeImp(INT x, INT y);
 	void PostMsgHandler(UINT msg);
 	void FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect);
+	void MoveToCenter();
 
 	BOOL OnClose();
 	void OnCreate();
@@ -63,13 +64,16 @@ public:
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 
-	void MouseEnterForm(uiFormBase *pForm);
+	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
 
 	INLINE void ClientToScreent(INT& x, INT& y) { POINT pt = { x, y }; ::ClientToScreen((HWND)m_Handle, &pt); x = pt.x; y = pt.y; }
 	INLINE void SetHandle(void *HandleIn) { m_Handle = HandleIn; }
 	INLINE void* GetHandle() const { return m_Handle; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage((HWND)m_Handle, msg, wParam, lParam); }
+	INLINE BOOL UpdateWindow() { return ::UpdateWindow((HWND)m_Handle); }
+	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect((HWND)m_Handle, (LPRECT)&rect); }
+	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow((HWND)m_Handle, nCmdShow); }
 
 
 protected:
@@ -212,6 +216,6 @@ protected:
 };
 
 
-uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight);
+uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
 
 

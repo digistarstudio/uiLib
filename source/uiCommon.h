@@ -55,8 +55,8 @@ struct uiRect
 	INLINE void Resize(INT nNewWidth, INT nNewHeight) { Right = Left + nNewWidth;  Bottom = Top + nNewHeight; }
 	INLINE void Reset() { Left = Top = Right = Bottom = 0; }
 
-	INLINE INT Width() { return Right - Left; }
-	INLINE INT Height() { return Bottom - Top; }
+	INLINE INT Width() const { return Right - Left; }
+	INLINE INT Height() const { return Bottom - Top; }
 
 	INLINE void SetWidth(INT NewWidth) { Right = Left + NewWidth; }
 	INLINE void SetHeight(INT NewHeight) { Bottom = Top + NewHeight; }
@@ -64,10 +64,11 @@ struct uiRect
 	INLINE void Init(INT iWidth, INT iHeight) { Left = Top = 0; Right = iWidth; Bottom = iHeight; }
 	INLINE void Move(INT x, INT y) { Left += x; Right += x; Top += y; Bottom += y; }
 
-	INLINE BOOL IsPointIn(INT x, INT y) { return (Left <= x && x < Right) && (Top <= y && y < Bottom); }
+	INLINE BOOL IsPointIn(INT x, INT y) const { return (Left <= x && x < Right) && (Top <= y && y < Bottom); }
+	INLINE BOOL IsEmpty() const { return (!Left && !Right && !Top && !Bottom); }
 
-	INLINE uiPoint GetLeftTop() { return uiPoint(Left, Top); }
-	INLINE uiPoint GetRightBottom() { return uiPoint(Right, Bottom); }
+	INLINE uiPoint GetLeftTop() const { return uiPoint(Left, Top); }
+	INLINE uiPoint GetRightBottom() const { return uiPoint(Right, Bottom); }
 
 	INLINE void IntersectWith(const uiRect &rectIn) // The rectangle will be invalid if there is no intersection.
 	{

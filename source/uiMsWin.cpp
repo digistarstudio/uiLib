@@ -246,7 +246,8 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	case WM_CTRL_MSG:
 		pForm = (uiFormBase*)wParam;
-		pForm->EntryOnCommand(lParam);
+		pWnd = pForm->GetBaseWnd();
+		pForm->EntryOnCommand(lParam); // pForm might be destroyed after calling this method.
 		break;
 	}
 
@@ -258,7 +259,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight)
+uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible)
 {
 	static BOOL bRegistered = FALSE;
 	const TCHAR *pWndClass = _T("WndClass");
@@ -286,8 +287,8 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 
 	HWND hParent = (ParentForm == nullptr) ? NULL : (HWND)ParentForm->GetBaseWnd()->GetHandle();
 	RECT r = { x, y, (LONG)(x + nWidth), (LONG)(x + nHeight) };
-	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_POPUP /*| WS_SIZEBOX | WS_MAXIMIZEBOX*/;
-	//	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU;
+	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX | WS_MAXIMIZEBOX*/;
+	// DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU;
 
 	switch (uwt)
 	{
@@ -295,7 +296,6 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 		break;
 	case UWT_TOOL:
 		ASSERT(hParent != NULL);
-	//	Style = WS_POPUPWINDOW | WS_CAPTION;
 		ExStyle = WS_EX_TOOLWINDOW;
 		break;
 	case UWT_MENU:
@@ -443,7 +443,7 @@ void uiWindow::ShowImp(FORM_SHOW_MODE sm)
 		break;
 	}
 
-	ShowWindow((HWND)m_Handle, iCmdShow);
+	ShowWindow(iCmdShow);
 }
 
 BOOL uiWindow::SizeImp(UINT nWidth, UINT nHeight)
@@ -526,12 +526,11 @@ void uiWindow::PostMsgHandler(UINT msg)
 		{
 			bRetrackMouse = false;
 			m_pHoverForm = m_pForm->FindByPos(pt.x, pt.y, &DestX, &DestY);
-			MouseEnterForm(m_pHoverForm);
+			MouseEnterForm(m_pHoverForm, DestX, DestY);
 		} while (bRetrackMouse);
-	}
 
-#ifdef DEBUG
-#endif
+		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing this message.
+	}
 }
 
 BOOL uiWindow::OnClose()
@@ -589,7 +588,7 @@ void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 
 	//VERIFY(GetRegionData(hRgn, sizeof(rdata), &rdata) == 0);
 
-	GetWindowRect(hWnd, &rect);
+	::GetWindowRect(hWnd, &rect);
 	//	hdc = GetDCEx(hWnd, 0, DCX_WINDOW);
 	hdc = GetWindowDC(hWnd);
 
@@ -603,13 +602,16 @@ void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 
 void uiWindow::OnPaint()
 {
-	uiRect rect;
-	GetUiRect(rect);
-	ASSERT(rect.Left == 0 && rect.Top == 0);
+	uiRect FullRect, UpdateRect;
+	GetUiRect(FullRect);
+	ASSERT(FullRect.Left == 0 && FullRect.Top == 0);
 
 	PAINTSTRUCT ps;
 	m_Drawer.Begin(&ps);
-	if (m_Drawer.PushDestRect(rect))
+	memcpy(&UpdateRect, &ps.rcPaint, sizeof(UpdateRect));
+	m_Drawer.SetUpdateRect(UpdateRect);
+
+	if (m_Drawer.PushDestRect(FullRect))
 	{
 		m_pForm->EntryOnPaint(&m_Drawer, 1);
 		m_Drawer.PopDestRect();
@@ -819,6 +821,18 @@ void uiWindow::FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect)
 	}
 }
 
+void uiWindow::MoveToCenter()
+{
+	RECT rect;
+	VERIFY(SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0) != 0);
+
+	uiRect ur;
+	GetWindowRect(ur);
+	INT mx = (rect.left + rect.right - ur.Width()) / 2;
+	INT my = (rect.top + rect.bottom - ur.Height()) / 2;
+	MoveImp(mx, my);
+}
+
 void uiWindow::OnDragging(INT x, INT y)
 {
 	ASSERT(m_pDraggingForm != m_pForm);
@@ -922,7 +936,7 @@ void uiWindow::OnMouseMove(UINT nType, INT x, INT y)
 		if(m_pHoverForm != nullptr)
 			MouseLeaveForm(m_pHoverForm);
 		m_pHoverForm = pForm;
-		MouseEnterForm(m_pHoverForm);
+		MouseEnterForm(m_pHoverForm, destX, destY);
 	}
 
 	m_pHoverForm->OnMouseMove(destX, destY, MmdFlags);
@@ -1043,19 +1057,22 @@ void uiWindow::OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		m_pHoverForm->OnMouseBtnClk(KeyType, x, y);
 }
 
-void uiWindow::MouseEnterForm(uiFormBase *pForm)
+void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)
 {
-	pForm->OnMouseEnter();
+	ASSERT(!pForm->bMouseHover);
+	pForm->OnMouseEnter(x, y);
+	pForm->bMouseHover = true;
 }
 
 void uiWindow::MouseLeaveForm(uiFormBase *pForm)
 {
+	ASSERT(pForm->bMouseHover);
 	pForm->OnMouseLeave();
+	pForm->bMouseHover = false;
 }
 
 void uiWindow::OnDragging()
 {
-
 }
 
 
