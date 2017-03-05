@@ -158,6 +158,8 @@ public:
 	void Show(FORM_SHOW_MODE sm);
 	BOOL Size(INT nWidth, INT nHeight);
 	void RedrawForm(const uiRect *pUpdateRect = nullptr);
+	void RedrawFrame(const uiRect *pUpdateRect = nullptr);
+
 	void PopupMenu(INT x, INT y, uiMenu *pMenu);
 
 	virtual FORM_CLASS GetClass() { return FC_BASE; }
@@ -167,7 +169,7 @@ public:
 
 	virtual UTX::CSimpleList* GetSideDockedFormList() { return nullptr; }
 	virtual uiFormBase* FindByPos(INT x, INT y, INT *DestX, INT *DestY); // x and y are in frame space.
-	virtual void ToWindowSpace(uiFormBase *pForm, uiRect &rect);
+	virtual void ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip);
 	virtual void ToWindowSpace(uiFormBase *pForm, INT &x, INT &y);
 
 	void StartDragging(INT x, INT y);
@@ -250,14 +252,14 @@ public:
 	{
 		rect = m_FrameRect;
 		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, rect);
+			GetPlate()->ToWindowSpace(this, rect, FALSE);
 	}
 	INLINE void ClientToWindow(uiRect &rect)
 	{
 		rect = m_ClientRect;
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, rect);
+			GetPlate()->ToWindowSpace(this, rect, FALSE);
 	}
 
 	INLINE void ClientToScreen(INT &x, INT &y)
@@ -291,8 +293,9 @@ public:
 
 	INLINE BOOL HasChildrenForm() const { return IS_VALID_ENTRY(m_ListChildren.next, m_ListChildren); }
 //	INLINE BOOL HasDockedForm() const { return (m_pFormSplitter != nullptr); }
-	INLINE BOOL IsPointIn(INT x, INT y) { return m_FrameRect.IsPointIn(x, y); } // Parent space.
-	INLINE BOOL IsMouseHovering() { return bMouseHover; }
+	INLINE BOOL IsPointIn(INT x, INT y) const { return m_FrameRect.IsPointIn(x, y); } // Parent space.
+	INLINE BOOL IsMouseHovering() const { return bMouseHover; }
+	INLINE BOOL IsVisible() const { return bShow; }
 
 	INLINE uiFormBase* GetParent() { return m_pParent; }
 	INLINE uiFormBase* GetPlate() { return m_pPlate; }
@@ -325,8 +328,8 @@ public:
 	{
 		switch (CT_SIZEABLE)
 		{
-		case CT_SIZEABLE:
-			return bSizeable;
+	//	case CT_SIZEABLE:
+	//		return bSizeable;
 		case CT_ALLOWSIDEDOCK:
 			return bAllowSideDock;
 		case CT_ALLOWCLIENTDOCK:
@@ -387,7 +390,7 @@ protected:
 	bool m_bActivated = false;
 
 	// Capabilities.
-	bool bSizeable = false;
+//	bool bSizeable = false;
 	bool bNoBorder = false;
 	bool bAllowSideDock = false;
 	bool bAllowClientDock = false;
@@ -424,6 +427,16 @@ public:
 		}
 	}
 
+	BOOL Enable(BOOL bEnable)
+	{
+		if ((!m_bDisabled && !bEnable) || (m_bDisabled && bEnable))
+		{
+			m_bDisabled = !bEnable;
+			RedrawForm();
+			return TRUE;
+		}
+		return FALSE;
+	}
 
 	INLINE void GenerateMessage()
 	{
@@ -446,6 +459,7 @@ public:
 protected:
 
 	UINT m_ID;
+	bool m_bDisabled = false;
 
 
 };
@@ -634,6 +648,7 @@ public:
 
 
 	void EntryOnCommand(UINT id);
+	BOOL ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose);
 
 	void OnMouseEnter(INT x, INT y);
 	void OnMouseLeave();
@@ -647,11 +662,12 @@ public:
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
 
 
+
 protected:
 
 	void UpdateLayout(INT NewWidth, INT NewHeight);
 
-	POINT m_pt;
+	//POINT m_pt;
 
 	uiButton *m_pMinBtn = nullptr;
 	uiButton *m_pMiddleBtn = nullptr;
@@ -687,7 +703,7 @@ public:
 
 	virtual void OnCreate();
 //	virtual uiFormBase* FindByPos(INT x, INT y);
-	virtual BOOL SetHeaderBar(const TCHAR* pStr);
+	virtual BOOL SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm = nullptr);
 	virtual BOOL SetMenuBar(uiMenu* pMenu);
 
 	void OnFramePaint(uiDrawer* pDrawer)
@@ -761,8 +777,13 @@ public:
 	{
 		INT sx = x, sy = y;
 		ClientToScreen(sx, sy);
-		printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y);
-		RedrawForm();
+		printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, sx, sy);
+
+		POINT p;
+		if (GetCursorPos(&p))
+			printx("Real screen pos - x:%d, y:%d\n", p.x, p.y);
+
+	//	RedrawForm();
 	}
 
 	void OnMouseEnter(INT x, INT y)
@@ -787,8 +808,9 @@ public:
 		else
 			pDrawer->RoundRect(rect, RGB(155, 200, 155), size, size);
 
-	//	rect.Inflate(-1, -1, -1, -1);
-	//	pDrawer->FillRect(rect, RGB(30, 50, 30));
+		rect.Inflate(-1, -1, -1, -1);
+	//	rect.Inflate(10, 10);
+		pDrawer->FillRect(rect, RGB(30, 50, 30));
 	}
 
 
@@ -880,7 +902,7 @@ public:
 	BOOL Create(uiFormBase *pParent, UINT TAB_FORM_FLAGS);
 	BOOL AddPane(uiFormBase *pForm, INT index, BOOL bActivate);
 
-	BOOL DeletePane();
+	BOOL DeletePane(INT index);
 	BOOL DetachPane(INT index, uiForm *pForm = nullptr);
 
 	BOOL ActivateTab(INT index);
@@ -892,18 +914,19 @@ public:
 	void OnMouseEnter(INT x, INT y)
 	{
 		printx("---> uiTabForm::OnMouseEnter\n");
-	//	RedrawForm();
 	}
 	void OnMouseLeave()
 	{
 		printx("---> uiTabForm::OnMouseLeave\n");
 
-		if (m_HighlightIndex != -1 && m_HighlightIndex != m_ActiveIndex)
+		if (m_HighlightIndex != -1 )
 		{
-			RedrawForm(&GetPaneInfo(m_HighlightIndex)->Rect);
+			if (m_HighlightIndex != m_ActiveIndex)
+				RedrawForm(&GetPaneInfo(m_HighlightIndex)->Rect);
 			m_HighlightIndex = -1;
 		}
 	}
+
 
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
@@ -990,9 +1013,10 @@ private:
 	BOOL ReleasePaneInfo(INT index)
 	{
 		ASSERT(0 <= index && index < m_TotalPane);
-		if (m_TotalPane != 1 && index == m_TotalPane - 1)
-			memcpy(&m_pPaneInfoArray[index], &m_pPaneInfoArray[index + 1], sizeof(stPaneInfo) * (m_TotalPane - index - 1));
+		if (m_TotalPane != 1 && index != m_TotalPane - 1)
+			memmove(&m_pPaneInfoArray[index], &m_pPaneInfoArray[index + 1], sizeof(stPaneInfo) * (m_TotalPane - index - 1));
 		--m_TotalPane;
+		return TRUE;
 	}
 
 

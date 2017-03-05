@@ -39,7 +39,9 @@ public:
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
-	INLINE void SetUpdateRect(const uiRect &rect) { m_RenderUpdateRect = rect; }
+//	INLINE void SetUpdateRect(const uiRect &rect) { m_RenderUpdateRect = rect; }
+
+	INLINE void SetUpdateRect(const uiRect *pRect) { ASSERT(!m_OriginX && !m_OriginY); m_RenderDestRect = *pRect; }
 	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 
 
@@ -179,6 +181,7 @@ public:
 			::DeleteObject(m_hBmp);
 
 		ASSERT(m_PaintDC == NULL);
+		ASSERT(m_hRgn == NULL);
 	}
 
 	void Begin(void *pCtx);

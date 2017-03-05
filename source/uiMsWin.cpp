@@ -602,20 +602,19 @@ void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 
 void uiWindow::OnPaint()
 {
-	uiRect FullRect, UpdateRect;
-	GetUiRect(FullRect);
-	ASSERT(FullRect.Left == 0 && FullRect.Top == 0);
-
 	PAINTSTRUCT ps;
 	m_Drawer.Begin(&ps);
-	memcpy(&UpdateRect, &ps.rcPaint, sizeof(UpdateRect));
-	m_Drawer.SetUpdateRect(UpdateRect);
+	m_Drawer.SetUpdateRect((uiRect*)&ps.rcPaint);
 
-	if (m_Drawer.PushDestRect(FullRect))
+
+	if (GetKeyState(VK_F2) < 0)
 	{
-		m_pForm->EntryOnPaint(&m_Drawer, 1);
-		m_Drawer.PopDestRect();
+		uiRect rect;
+		memcpy(&rect, &ps.rcPaint, sizeof(rect));
+		m_Drawer.FillRect(rect, RGB(0, 0, 255));
 	}
+	else
+		m_pForm->EntryOnPaint(&m_Drawer, 1);
 	m_Drawer.End(&ps);
 }
 
@@ -839,16 +838,18 @@ void uiWindow::OnDragging(INT x, INT y)
 
 	INT OffsetX = x - m_MDPosX;
 	INT OffsetY = y - m_MDPosY;
+	uiRect OriginalFrameRect;
 
 	if (!m_bSizing)
 	{
-		m_pDraggingForm->RedrawForm();
+		OriginalFrameRect = m_pDraggingForm->m_FrameRect;
 		m_pDraggingForm->MoveByOffset(OffsetX, OffsetY);
-		m_pDraggingForm->RedrawForm();
+		OriginalFrameRect.UnionWith(m_pDraggingForm->m_FrameRect);
+		m_pDraggingForm->RedrawFrame(&OriginalFrameRect);
 	}
 	else
 	{
-		uiRect OldRectWS, NewRectWS, DestFrameRect = m_pDraggingForm->m_FrameRect;
+		uiRect OldRectWS, DestFrameRect = m_pDraggingForm->m_FrameRect;
 		m_pDraggingForm->FrameToWindow(OldRectWS);
 
 		if (m_SizingHitSide & uiForm::NCHT_TOP)
@@ -880,12 +881,13 @@ void uiWindow::OnDragging(INT x, INT y)
 		if (OffsetX || OffsetY)
 		{
 			FormSizing(m_pDraggingForm, m_SizingHitSide, &DestFrameRect);
-			m_pDraggingForm->m_FrameRect = DestFrameRect; // Must update the form first.
-			m_pDraggingForm->FrameToWindow(NewRectWS);
-			m_pDraggingForm->OnFrameSize(DestFrameRect.Width(), DestFrameRect.Height());
 
-			NewRectWS.UnionWith(OldRectWS);
-			RedrawImp(&NewRectWS);
+			OriginalFrameRect = m_pDraggingForm->m_FrameRect;
+			m_pDraggingForm->m_FrameRect = DestFrameRect; // Must update the form first.
+			m_pDraggingForm->OnFrameSize(DestFrameRect.Width(), DestFrameRect.Height());
+			DestFrameRect.UnionWith(OriginalFrameRect);
+
+			m_pDraggingForm->RedrawFrame(&DestFrameRect);
 		}
 	}
 

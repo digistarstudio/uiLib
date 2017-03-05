@@ -65,7 +65,30 @@ public:
 
 };
 
+class CTabFormContext3 : public uiFormBase
+{
+public:
 
+	void OnCreate()
+	{
+		SetTitle(_T("Tab Pane No. 3"));
+	}
+	void OnPaint(uiDrawer* pDrawer)
+	{
+		uiRect rect = GetClientRect();
+		pDrawer->FillRect(rect, RGB(199, 225, 175));
+		pDrawer->DrawText(_T("Context 3"), rect, DT_CENTER);
+	}
+	void OnMouseEnter(INT x, INT y)
+	{
+		printx("---> CTabFormContext3::OnMouseEnter\n");
+	}
+	void OnMouseLeave()
+	{
+		printx("---> CTabFormContext3::OnMouseLeave\n");
+	}
+
+};
 
 class CFormEx : public uiForm
 {
@@ -114,11 +137,13 @@ public:
 		printx("---> CFormEx2::OnCreate\n");
 
 		m_pTabForm = new uiTabForm;
+		m_pTabForm->SetMargin(3, 3, 3, 3);
 	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP); // uiTabForm::TFF_FORCE_SHOW_TAB
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM);
+		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB);
 	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT);
-		m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB);
-	//	m_pSubForm->SetHeaderBar(_T("test child form"));
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB);
+
+		m_pTabForm->SetHeaderBar(_T("test child form"));
 
 	//	uiFormBase *pBase = nullptr;
 	//	m_pTabForm->AddPane(pBase, -1);
@@ -126,6 +151,10 @@ public:
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 60, 400, 50, 50);
 		Bind(m_pButton->GetID());
+
+		m_pButton2 = new uiButton;
+		m_pButton2->Create(this, 125, 400, 50, 50);
+		Bind(m_pButton2->GetID());
 	}
 
 	virtual void OnCommand(INT id, BOOL &bDone)
@@ -136,20 +165,23 @@ public:
 		if (id == m_pButton->GetID())
 		{
 			uiFormBase *pBaseForm = nullptr;
-			if (CalledCount % 2 == 0)
-			{
+			if (CalledCount % 3 == 0)
 				pBaseForm = new CTabFormContext1;
-			}
-			else
-			{
+			else if (CalledCount % 3 == 1)
 				pBaseForm = new CTabFormContext2;
-			}
+			else
+				pBaseForm = new CTabFormContext3;
 
 			pBaseForm->Create(m_pTabForm, 0, 0, 0, 0);
 			m_pTabForm->AddPane(pBaseForm, -1, TRUE);
 
 			++CalledCount;
 			bDone = TRUE;
+		}
+		else if (id == m_pButton2->GetID())
+		{
+	//		m_pTabForm->RedrawForm();
+			m_pTabForm->DeletePane(0);
 		}
 
 		if (id == uiID_CLOSE)
@@ -168,7 +200,7 @@ public:
 
 protected:
 
-	uiButton *m_pButton;
+	uiButton *m_pButton, *m_pButton2;
 	uiTabForm *m_pTabForm;
 
 

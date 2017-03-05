@@ -144,6 +144,8 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\external\Template.h" />
+    <ClInclude Include="source\external\UTX.h" />
     <ClInclude Include="source\Resource.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\targetver.h" />
@@ -165,6 +167,7 @@
     <ClCompile Include="source\uiForm.cpp" />
     <ClCompile Include="source\uiLib.cpp" />
     <ClCompile Include="source\uiMsWin.cpp" />
+    <ClCompile Include="source\UTX.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="uiLib.rc" />

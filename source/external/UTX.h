@@ -25,7 +25,7 @@
 #ifdef _DEBUG
 	#define VERIFY(statement) ASSERT(statement)
 #else
-	#define VERIFY(statement) statement
+	#define VERIFY(statement) ((void)(statement))
 #endif
 
 #define INLINE inline

@@ -265,17 +265,44 @@ BOOL uiFormBase::Size(INT nWidth, INT nHeight)
 
 void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
 {
+	if (!IsVisible())
+		return;
+
 	uiRect dest, temp;
+
 	if (pUpdateRect == nullptr)
-		FrameToWindow(dest);
+	{
+		dest = m_FrameRect;
+		if (GetPlate() != nullptr)
+			GetPlate()->ToWindowSpace(this, dest, TRUE);
+	}
 	else
 	{
-		ClientToWindow(temp);
+		temp = m_ClientRect;
+		temp.Move(m_FrameRect.Left, m_FrameRect.Top);
+		if (GetPlate() != nullptr)
+			GetPlate()->ToWindowSpace(this, temp, TRUE);
+
 		dest = *pUpdateRect;
 		dest.Move(temp.Left, temp.Top);
+		dest.IntersectWith(temp);
 	}
 
-	GetBaseWnd()->RedrawImp(&dest);
+	if (dest.IsValidRect())
+		GetBaseWnd()->RedrawImp(&dest);
+}
+
+void uiFormBase::RedrawFrame(const uiRect *pUpdateRect)
+{
+	if (!IsVisible())
+		return;
+
+	uiRect dest = (pUpdateRect == nullptr) ? m_FrameRect : *pUpdateRect;
+	if (GetPlate() != nullptr)
+		GetPlate()->ToWindowSpace(this, dest, TRUE);
+
+	if (dest.IsValidRect())
+		GetBaseWnd()->RedrawImp(&dest);
 }
 
 void uiFormBase::PopupMenu(INT x, INT y, uiMenu *pMenu)
@@ -365,6 +392,9 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 		for (list_entry *pNext = head.next; IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
 		{
 			uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pNext);
+			ASSERT(pForm->GetPlate() == this);
+			if (!pForm->bShow)
+				continue;
 			if (pForm->IsPointIn(x, y))
 				return pForm->FindByPos(x - pForm->m_FrameRect.Left, y - pForm->m_FrameRect.Top, DestX, DestY);
 		}
@@ -382,11 +412,10 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
 		pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-		if (pSubForm->m_bSideDocked)
+		if (!pSubForm->bShow || pSubForm->m_bSideDocked)
 			continue;
 		if (pSubForm->GetPlate() != this)
 			continue;
-
 		if (pSubForm->IsPointIn(cx, cy))
 			return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY);
 	}
@@ -396,20 +425,25 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 	return this;
 }
 
-void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect)
+void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip)
 {
 	if (pForm->m_bSideDocked)
 	{
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
+
+		if (bClip)
+			rect.IntersectWith(m_FrameRect);
 	}
 	else
 	{
 		rect.Move(m_ClientRect.Left, m_ClientRect.Top);
+		if (bClip)
+			rect.IntersectWith(m_ClientRect);
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 	}
 
 	if (GetPlate() != nullptr)
-		GetPlate()->ToWindowSpace(this, rect);
+		GetPlate()->ToWindowSpace(this, rect, bClip);
 }
 
 void uiFormBase::ToWindowSpace(uiFormBase *pForm, INT &x, INT &y)
@@ -686,6 +720,12 @@ void uiHeaderForm::EntryOnCommand(UINT id)
 	m_pParent->EntryOnCommand(id);
 }
 
+BOOL uiHeaderForm::ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose)
+{
+	ASSERT(bCreated);
+	return TRUE;
+}
+
 void uiHeaderForm::OnMouseEnter(INT x, INT y)
 {
 	printx("---> uiHeaderForm::OnMouseEnter\n");
@@ -741,9 +781,8 @@ void uiHeaderForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 
 void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 {
-	//	uiFormBase::OnPaint(pDrawer);
+//	printx("---> uiHeaderForm::OnPaint\n");
 
-	//	printx("---> uiButton::OnPaint\n");
 	uiRect rect = GetClientRect();
 	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
 //	pDrawer->FillRect(rect, color);
@@ -776,10 +815,6 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 
 void uiForm::OnSizing(uiRect* pRect)
 {
-
-//	if(pRect)
-
-
 }
 
 BOOL uiForm::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
@@ -851,18 +886,20 @@ void uiForm::OnCreate()
 	m_ClientRect.Inflate(-FRAME_WIDTH, -FRAME_WIDTH);
 }
 
-BOOL uiForm::SetHeaderBar(const TCHAR* pStr)
+BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm)
 {
 	INT HeaderHeight = 26;
 	INT BorderWidth = 3;
 
-	uiFormBase *pHeader = new uiHeaderForm;
-	pHeader->Create(this, 0, 0, 100, HeaderHeight, FCF_NONE);
-
+	if (pHeaderForm == nullptr)
+	{
+		pHeaderForm = new uiHeaderForm;
+		pHeaderForm->Create(this, 0, 0, 100, HeaderHeight, FCF_NONE);
+	}
 	m_minSize.iHeight = HeaderHeight + 2 * BorderWidth;
 	m_minSize.iWidth = 150;
 
-	SideDock(pHeader, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
+	SideDock(pHeaderForm, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
 
 	return FALSE;
 }
@@ -1036,6 +1073,11 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 {
 	stPaneInfo NewPaneInfo;
 
+	if (GetKeyState(VK_F2) < 0)
+	{
+		printx("aaa\n");
+	}
+
 	if (TestFlag(TFF_TAB_TOP) || TestFlag(TFF_TAB_BOTTOM))
 		NewPaneInfo.FullRect = uiSize(80, m_TabHeight); // test code.
 	else
@@ -1075,6 +1117,48 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 	return TRUE;
 }
 
+BOOL uiTabForm::DeletePane(INT index)
+{
+	ASSERT(m_TotalPane > 0);
+
+	if (index >= m_TotalPane)
+		return FALSE;
+	if (index < 0)
+		index = m_TotalPane - 1;
+
+	BOOL bUpdateTabsRect = (index != m_TotalPane - 1);
+	INT NewActiveIndex = m_ActiveIndex;
+	if (index == m_ActiveIndex)
+	{
+		NewActiveIndex -= (m_ActiveIndex == m_TotalPane - 1) ? 1 : -1;
+		if (NewActiveIndex >= 0)
+			ActivateTab(NewActiveIndex);
+		else
+			m_ActiveIndex = -1;
+	}
+
+	uiFormBase *pForm = GetPaneInfo(index)->pForm;
+	pForm->Close();
+	ReleasePaneInfo(index);
+
+	if (m_ActiveIndex > index)
+		--m_ActiveIndex;
+	if (bUpdateTabsRect)
+		UpdateTabsRect();
+
+	if (m_TotalPane == 1 && !TestFlag(TFF_FORCE_SHOW_TAB))
+	{
+		Layout();
+		GetPaneInfo(0)->pForm->Move(m_PaneRegion.Left, m_PaneRegion.Top);
+		GetPaneInfo(0)->pForm->Size(m_PaneRegion.Width(), m_PaneRegion.Height());
+		RedrawForm();
+	}
+	else
+		RedrawTabs(-1);
+
+	return TRUE;
+}
+
 BOOL uiTabForm::ActivateTab(INT index)
 {
 	if (m_ActiveIndex == index)
@@ -1100,6 +1184,7 @@ void uiTabForm::Layout()
 	}
 
 	uiRect ClientRect = GetClientRect();
+	ClientRect.Inflate(-m_LeftMargin, -m_TopMargin, -m_RightMargin, -m_BottomMargin);
 	m_PaneRegion = m_TabsRegion = ClientRect;
 
 	if (m_TotalPane == 1 && !TestFlag(TFF_FORCE_SHOW_TAB))
@@ -1140,24 +1225,27 @@ void uiTabForm::UpdateTabsRect()
 	uiSize FullTabsSize = GetFullTabsSize();
 	INT top, bottom, left, right, width, height, mod, var = 0;
 	uiRect rect = GetClientRect();
+	rect.Inflate(-m_LeftMargin, -m_TopMargin, -m_RightMargin, -m_BottomMargin);
 
 	if (m_Flag & TFF_TAB_TOP || m_Flag & TFF_TAB_BOTTOM)
 	{
-		top = (m_Flag & TFF_TAB_TOP) ? 0 : rect.Height() - m_TabHeight;
+		top = (m_Flag & TFF_TAB_TOP) ? rect.Top : rect.Bottom - m_TabHeight;
 		bottom = top + m_TabHeight;
 		width = rect.Width() / m_TotalPane;
 		mod = rect.Width() % m_TotalPane;
 		if (rect.Width() > FullTabsSize.iWidth)
 			bUseFullSize = TRUE;
+		var = rect.Left;
 	}
 	else
 	{
-		left = (m_Flag & TFF_TAB_LEFT) ? 0 : rect.Width() - m_TabWidth;
+		left = (m_Flag & TFF_TAB_LEFT) ? rect.Left : rect.Right - m_TabWidth;
 		right = left + m_TabWidth;
 		height = rect.Height() / m_TotalPane;
 		mod = rect.Height() % m_TotalPane;
 		if (rect.Height() > FullTabsSize.iHeight)
 			bUseFullSize = TRUE;
+		var = rect.Top;
 	}
 
 	for (INT i = 0; i < m_TotalPane; ++i, mod--)
@@ -1188,6 +1276,9 @@ void uiTabForm::UpdateTabsRect()
 
 void uiTabForm::RedrawTabs(INT index1, INT index2)
 {
+	if (!IsVisible())
+		return;
+
 	if (index1 == -1)
 	{
 		RedrawForm(&m_TabsRegion);

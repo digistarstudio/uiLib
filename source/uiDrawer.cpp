@@ -40,7 +40,6 @@ BOOL uiDrawer::PushDestRect(uiRect rect)
 
 	rect.Move(m_OriginX, m_OriginY);
 	m_RenderDestRect.IntersectWith(rect);
-	m_RenderDestRect.IntersectWith(m_RenderUpdateRect);
 
 	if (m_RenderDestRect.IsValidRect())
 	{
@@ -91,26 +90,12 @@ void uiWndDrawer::Begin(void *pCtx)
 
 	m_RenderDestRect.Init(m_nWidth, m_nHeight);
 	m_PaintDC = BeginPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
-
-/*
-	// Test code.
-	{
-		RECT rect;
-		rect.left = 0;
-		rect.top = 0;
-		rect.right = m_nWidth;
-		rect.bottom = m_nHeight;
-		::FillRect(m_MemDC, &rect, (HBRUSH)(COLOR_WINDOW + 1));
-
-		rect.bottom = 30;
-		if (DrawCaption(m_hWnd, m_MemDC, &rect, DC_ACTIVE | DC_TEXT) == 0)
-			printx("DrawCaption failed!\n");
-	}
-	//*/
 }
 
 void uiWndDrawer::End(void *pCtx)
 {
+	ASSERT(m_OriginX == 0 && m_OriginY == 0);
+
 	if (m_hRgn != NULL)
 	{
 		SelectClipRgn(m_MemDC, NULL);

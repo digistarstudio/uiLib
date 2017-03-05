@@ -33,12 +33,6 @@ using namespace std;
 #include ".\external\UTX.h"
 #include ".\external\Template.h"
 
-#ifdef _DEBUG
-	#pragma comment(lib, "CorelibDU.lib")
-#else
-	#pragma comment(lib, "CorelibU.lib")
-#endif
-
 
 #ifndef CONTAINING_RECORD
 	#define CONTAINING_RECORD(address, type, field) ((type*)((CHAR*)(address) - (DWORD_PTR)(&((type *)0)->field)))
