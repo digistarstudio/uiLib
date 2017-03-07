@@ -138,7 +138,7 @@ public:
 
 		m_pTabForm = new uiTabForm;
 		m_pTabForm->SetMargin(3, 3, 3, 3);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP); // uiTabForm::TFF_FORCE_SHOW_TAB
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB); // uiTabForm::TFF_FORCE_SHOW_TAB
 		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB);
 	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT);
 	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB);
@@ -181,7 +181,7 @@ public:
 		else if (id == m_pButton2->GetID())
 		{
 	//		m_pTabForm->RedrawForm();
-			m_pTabForm->DeletePane(0);
+			m_pTabForm->DeletePane(1);
 		}
 
 		if (id == uiID_CLOSE)
@@ -335,7 +335,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 //	pForm->Create(nullptr, 150, 150, 600, 400, FORM_CREATION_FLAG::FCF_INVISIBLE);
 
 
-//	pForm->Move(1000, 600);
+//	pForm->Move(1000, 680);
 
 	uiMonitorEvent();
 /*

@@ -90,6 +90,8 @@ void uiWndDrawer::Begin(void *pCtx)
 
 	m_RenderDestRect.Init(m_nWidth, m_nHeight);
 	m_PaintDC = BeginPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
+
+	m_WndDrawDC.Attach((m_TotalBackBuffer == 0) ? m_PaintDC : m_BackBuffer[m_CurrentBackBufferIndex].GetMemDC());
 }
 
 void uiWndDrawer::End(void *pCtx)
@@ -98,32 +100,37 @@ void uiWndDrawer::End(void *pCtx)
 
 	if (m_hRgn != NULL)
 	{
-		SelectClipRgn(m_MemDC, NULL);
+		SelectClipRgn(m_WndDrawDC.GetDC(), NULL);
 		DeleteObject(m_hRgn);
 		m_hRgn = NULL;
 	}
 
-	BitBlt(m_PaintDC, 0, 0, m_nWidth, m_nHeight, m_MemDC, 0, 0, SRCCOPY);
+	if (m_TotalBackBuffer > 0)
+	{
+		BitBlt(m_PaintDC, 0, 0, m_nWidth, m_nHeight, m_WndDrawDC.GetDC(), 0, 0, SRCCOPY);
+		if (++m_CurrentBackBufferIndex == m_TotalBackBuffer)
+			m_CurrentBackBufferIndex = 0;
+	}
+
+	m_WndDrawDC.Detach();
 	EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
 	m_PaintDC = NULL;
 }
 
-BOOL uiWndDrawer::InitBackBuffer(HWND hWnd, UINT nWidth, UINT nHeight)
+BOOL uiWndDrawer::InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight)
 {
+	ASSERT(nCount <= MAX_BACKBUFFER_COUNT);
 	ASSERT(m_hWnd == NULL);
-	ASSERT(m_MemDC == NULL && m_hBmp == NULL && m_hOldBmp == NULL);
 
 	m_hWnd = hWnd;
 	HDC hDC = GetDC(hWnd);
 	ASSERT(hDC != NULL);
 
-	m_MemDC = CreateCompatibleDC(hDC);
-	m_hBmp = CreateCompatibleBitmap(hDC, nWidth, nHeight);
-	ASSERT(m_MemDC != NULL && m_hBmp != NULL);
-	m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
-	VERIFY(ReleaseDC(hWnd, hDC) == 1);
+	m_TotalBackBuffer = nCount;
+	for (; nCount; --nCount)
+		m_BackBuffer[nCount - 1].Init(hDC, nWidth, nHeight);
 
-	m_WndDC.Attach(m_MemDC);
+	VERIFY(ReleaseDC(hWnd, hDC) == 1);
 
 	m_nWidth = nWidth;
 	m_nHeight = nHeight;
@@ -133,16 +140,12 @@ BOOL uiWndDrawer::InitBackBuffer(HWND hWnd, UINT nWidth, UINT nHeight)
 
 void uiWndDrawer::ResizeBackBuffer(UINT nWidth, UINT nHeight)
 {
-	if (m_hBmp != NULL)
+	if (m_TotalBackBuffer > 0)
 	{
-		SelectObject(m_MemDC, m_hOldBmp);
-		::DeleteObject(m_hBmp);
-
 		HDC hDC = GetDC(m_hWnd);
-		m_hBmp = CreateCompatibleBitmap(hDC, nWidth, nHeight);
+		for (INT i = 0; i < m_TotalBackBuffer; ++i)
+			m_BackBuffer[i].Resize(hDC, nWidth, nHeight);
 		ReleaseDC(m_hWnd, hDC);
-
-		m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
 	}
 
 	m_nWidth = nWidth;
@@ -162,31 +165,31 @@ void uiWndDrawer::FillRect(uiRect rect, UINT32 color)
 {
 	rect.Move(m_OriginX, m_OriginY);
 
-	m_WndDC.SetBrush(color, FALSE);
-	m_WndDC.FillRect((RECT*)&rect);
+	m_WndDrawDC.SetBrush(color, FALSE);
+	m_WndDrawDC.FillRect((RECT*)&rect);
 }
 
 void uiWndDrawer::RoundRect(uiRect rect, UINT32 color, INT width, INT height)
 {
 	rect.Move(m_OriginX, m_OriginY);
 
-	m_WndDC.SetPen(1, color);
-	m_WndDC.SetBrush(0, TRUE);
-	m_WndDC.RoundRect((RECT*)&rect, width, height);
+	m_WndDrawDC.SetPen(1, color);
+	m_WndDrawDC.SetBrush(0, TRUE);
+	m_WndDrawDC.RoundRect((RECT*)&rect, width, height);
 }
 
 void uiWndDrawer::DrawEdge(uiRect &rect, UINT color)
 {
 //	HPEN hPen = CreatePen(PS_SOLID, LineWidth, color);
-//	HPEN *hOldPen = (HPEN*)SelectObject(m_MemDC, hPen);
+//	HPEN *hOldPen = (HPEN*)SelectObject(m_WndDrawDC.GetDC(), hPen);
 
-	::DrawEdge(m_MemDC, (RECT*)&rect, EDGE_ETCHED, BF_RECT | BF_ADJUST);
+	::DrawEdge(m_WndDrawDC.GetDC(), (RECT*)&rect, EDGE_ETCHED, BF_RECT | BF_ADJUST);
 }
 
 void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth)
 {
-	HPEN hPen = CreatePen(PS_SOLID, LineWidth, color);
-	HPEN *hOldPen = (HPEN*)SelectObject(m_MemDC, hPen);
+//	HPEN hPen = CreatePen(PS_SOLID, LineWidth, color);
+//	HPEN *hOldPen = (HPEN*)SelectObject(m_WndDrawDC.GetDC(), hPen);
 
 //	::DrawLine(x, y,
 
@@ -195,14 +198,15 @@ void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWi
 
 void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
 {
-	SetBkMode(m_MemDC, TRANSPARENT);
-	SetTextColor(m_MemDC, RGB(128, 128, 128));
+	HDC hMemDC = m_WndDrawDC.GetDC();
+	SetBkMode(hMemDC, TRANSPARENT);
+	SetTextColor(hMemDC, RGB(128, 128, 128));
 
 	HFONT hFont, hOldFont;
 	// Retrieve a handle to the variable stock font.  
 	hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT); // DEFAULT_GUI_FONT SYSTEM_FONT
 
-	if (hOldFont = (HFONT)SelectObject(m_MemDC, hFont))
+	if (hOldFont = (HFONT)SelectObject(hMemDC, hFont))
 	{
 		uiRect temp = rect;
 		temp.Move(m_OriginX, m_OriginY);
@@ -214,10 +218,10 @@ void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
 		VERIFY(ftSystem.GetLogFont(&sys));
 
 
-	//	::DrawText(m_MemDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
-		::TextOut(m_MemDC, temp.Left, temp.Top, pText, _tcslen(pText));
+	//	::DrawText(hMemDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
+		::TextOut(hMemDC, temp.Left, temp.Top, pText, _tcslen(pText));
 		// Restore the original font.        
-		SelectObject(m_MemDC, hOldFont);
+		SelectObject(hMemDC, hOldFont);
 	}
 
 }

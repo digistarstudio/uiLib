@@ -537,8 +537,8 @@ BOOL uiWindow::OnClose()
 {
 	if (m_pForm->OnClose())
 	{
-		if (m_pForm->m_pParent != nullptr)
-			m_pForm->DetachChild(m_pForm);
+		if (m_pForm->GetParent() != nullptr)
+			m_pForm->GetParent()->DetachChild(m_pForm);
 		m_pForm->EntryOnDestroy(this); // m_pForm will delete itself.
 		m_pForm = nullptr;
 		return TRUE;
@@ -548,13 +548,11 @@ BOOL uiWindow::OnClose()
 
 void uiWindow::OnCreate()
 {
-	//	printx("---> uiWindow::OnCreate\n");
+	//printx("---> uiWindow::OnCreate\n");
 
 	uiRect rect;
 	GetUiRect(rect);
-	m_Drawer.InitBackBuffer((HWND)m_Handle, rect.Width(), rect.Height());
-
-	//	TrackMouseLeave(); // Not necessary here.
+	m_Drawer.InitBackBuffer(1, (HWND)m_Handle, rect.Width(), rect.Height());
 }
 
 void uiWindow::OnDestroy()
@@ -564,12 +562,12 @@ void uiWindow::OnDestroy()
 
 void uiWindow::OnKeyDown(INT iKey)
 {
-	//	printx("---> uiWindow::OnKeyDown\n");
+	//printx("---> uiWindow::OnKeyDown\n");
 }
 
 void uiWindow::OnKeyUp(INT iKey)
 {
-	//	printx("---> uiWindow::OnKeyUp\n");
+	//printx("---> uiWindow::OnKeyUp\n");
 }
 
 void uiWindow::OnMove()
@@ -606,15 +604,17 @@ void uiWindow::OnPaint()
 	m_Drawer.Begin(&ps);
 	m_Drawer.SetUpdateRect((uiRect*)&ps.rcPaint);
 
-
 	if (GetKeyState(VK_F2) < 0)
 	{
 		uiRect rect;
 		memcpy(&rect, &ps.rcPaint, sizeof(rect));
-		m_Drawer.FillRect(rect, RGB(0, 0, 255));
+		m_Drawer.FillRect(rect, RGB(rand() % 256, rand() % 256, rand() % 256));
+		printx("---> uiWindow::OnPaint\n");
 	}
 	else
+	{
 		m_pForm->EntryOnPaint(&m_Drawer, 1);
+	}
 	m_Drawer.End(&ps);
 }
 

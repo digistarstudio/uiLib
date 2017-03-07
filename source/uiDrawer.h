@@ -146,6 +146,8 @@ public:
 		return TRUE;
 	}
 
+	INLINE HDC GetDC() const { return m_hDC; }
+
 
 protected:
 
@@ -158,28 +160,82 @@ protected:
 };
 
 
+class uiWndBackBuffer
+{
+public:
+
+	enum { MAX_WIDTH = 65536, MAX_HEIGHT = 65536, };
+
+	uiWndBackBuffer()
+	:m_MemDC(NULL), m_hOldBmp(NULL), m_hBmp(NULL)
+	{
+	}
+	~uiWndBackBuffer()
+	{
+		if (m_MemDC != NULL)
+		{
+			::SelectObject(m_MemDC, m_hOldBmp); // This may not be necessary.
+			::DeleteDC(m_MemDC); // Delete memory dc first then delete bitmap.
+		}
+		if (m_hBmp != NULL)
+			::DeleteObject(m_hBmp);
+	}
+
+	BOOL Init(HDC hDC, UINT NewWidth, UINT NewHeight)
+	{
+		ASSERT(NewWidth < MAX_WIDTH && NewHeight < MAX_HEIGHT);
+
+		m_MemDC = CreateCompatibleDC(hDC);
+		m_hBmp = CreateCompatibleBitmap(hDC, NewWidth, NewHeight);
+		ASSERT(m_MemDC != NULL && m_hBmp != NULL);
+		if (m_MemDC == NULL || m_hBmp == NULL)
+			return FALSE;
+		m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
+	
+		return TRUE;
+	}
+	BOOL Resize(HDC hDC, UINT NewWidth, UINT NewHeight)
+	{
+		if (m_hBmp != NULL)
+		{
+			SelectObject(m_MemDC, m_hOldBmp);
+			::DeleteObject(m_hBmp);
+
+			m_hBmp = CreateCompatibleBitmap(hDC, NewWidth, NewHeight);
+			m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
+			return (m_hBmp != NULL);
+		}
+		return TRUE;
+	}
+
+	INLINE HDC GetMemDC() const { return m_MemDC; }
+
+
+protected:
+
+	HDC     m_MemDC;
+	HBITMAP m_hOldBmp, m_hBmp;
+
+
+};
+
+
 class uiWndDrawer : public uiDrawer
 {
 public:
 
+	enum { MAX_BACKBUFFER_COUNT = 3, };
+
 	uiWndDrawer()
 	:m_hWnd(NULL), m_PaintDC(NULL)
 	{
-		m_MemDC = NULL;
-		m_hBmp = NULL;
-		m_hOldBmp = NULL;
 		m_hRgn = NULL;
-
+		m_TotalBackBuffer = m_CurrentBackBufferIndex = 0;
 		m_nWidth = m_nHeight = 0;
 	}
 	~uiWndDrawer()
 	{
-		m_WndDC.Detach();
-		if (m_MemDC != NULL)
-			::DeleteDC(m_MemDC); // Delete memory dc first then delete bitmap.
-		if (m_hBmp != NULL)
-			::DeleteObject(m_hBmp);
-
+		ASSERT(m_WndDrawDC.GetDC() == NULL);
 		ASSERT(m_PaintDC == NULL);
 		ASSERT(m_hRgn == NULL);
 	}
@@ -187,7 +243,7 @@ public:
 	void Begin(void *pCtx);
 	void End(void *pCtx);
 
-	BOOL InitBackBuffer(HWND hWnd, UINT nWidth, UINT nHeight);
+	BOOL InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight);
 	void ResizeBackBuffer(UINT nWidth, UINT nHeight);
 
 	void FillRect(uiRect rect, UINT32 color);
@@ -201,24 +257,25 @@ protected:
 
 	virtual void OnDestRectChanged(BOOL bRestore)
 	{
+		HDC hMemDC = m_WndDrawDC.GetDC();
 		if (m_hRgn != NULL)
 		{
-			SelectClipRgn(m_MemDC, NULL);
+			SelectClipRgn(hMemDC, NULL);
 			DeleteObject(m_hRgn);
 		}
 		m_hRgn = CreateRectRgn(m_RenderDestRect.Left, m_RenderDestRect.Top, m_RenderDestRect.Right, m_RenderDestRect.Bottom);
-		INT i = SelectClipRgn(m_MemDC, m_hRgn);
+		INT i = SelectClipRgn(hMemDC, m_hRgn);
 		ASSERT(i != ERROR);
 	}
 
 	HWND m_hWnd;
 	HDC m_PaintDC;
 
-	HDC m_MemDC;
-	uiWndDC m_WndDC;
-	HBITMAP m_hBmp, m_hOldBmp;
+	uiWndDC m_WndDrawDC;
 	HRGN m_hRgn;
 
+	INT m_TotalBackBuffer, m_CurrentBackBufferIndex;
+	uiWndBackBuffer m_BackBuffer[MAX_BACKBUFFER_COUNT];
 	UINT m_nWidth, m_nHeight;
 
 

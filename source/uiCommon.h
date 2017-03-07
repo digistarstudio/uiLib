@@ -62,6 +62,7 @@ struct uiRect
 	INLINE void SetHeight(INT NewHeight) { Bottom = Top + NewHeight; }
 
 	INLINE void Init(INT iWidth, INT iHeight) { Left = Top = 0; Right = iWidth; Bottom = iHeight; }
+	INLINE void InitForUnion() { Left = Top = MAX_INT_VALUE; Right = Bottom = MIN_INT_VALUE; }
 	INLINE void Move(INT x, INT y) { Left += x; Right += x; Top += y; Bottom += y; }
 
 	INLINE BOOL IsPointIn(INT x, INT y) const { return (Left <= x && x < Right) && (Top <= y && y < Bottom); }
@@ -174,6 +175,12 @@ public:
 			free(m_pStr);
 	}
 
+	INT Format()
+	{
+
+
+
+	}
 
 	INLINE INT Length() const { return m_len - 1; }
 	INLINE BOOL IsEmpty() const { return (m_len <= 1); }
@@ -219,7 +226,7 @@ public:
 		return *this;
 	}
 
-	operator const TCHAR*() { return (m_pStr == nullptr) ? _T("") : m_pStr; }
+	operator const TCHAR*() const { return (m_pStr == nullptr) ? _T("") : m_pStr; }
 
 
 protected:

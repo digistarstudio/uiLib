@@ -154,12 +154,14 @@ void uiFormBase::Close()
 {
 	if (OnClose())
 	{
-		if (m_pParent != nullptr)
-			m_pParent->DetachChild(this);
+		if (GetParent() != nullptr)
+			GetParent()->DetachChild(this);
+		if (GetPlate() != nullptr)
+			RedrawForm();
 
 		uiWindow *pWnd = m_pWnd; // Cache this first.
 
-		EntryOnDestroy(GetBaseWnd()); // m_pForm will delete itself.
+		EntryOnDestroy(GetBaseWnd()); // m_pForm will delete itself after this call.
 
 		if (pWnd != nullptr)
 			pWnd->CloseImp();
@@ -521,6 +523,7 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 
 			if (pDrawer->PushDestRect(pForm->m_FrameRect))
 			{
+				ASSERT(pForm->m_FrameRect.IsValidRect());
 				pForm->EntryOnPaint(pDrawer, depth + 1);
 				pDrawer->PopDestRect();
 			}
@@ -545,6 +548,7 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 
 			if (pDrawer->PushDestRect(pChild->m_FrameRect))
 			{
+				ASSERT(pChild->m_FrameRect.IsValidRect());
 				pChild->EntryOnPaint(pDrawer, depth + 1);
 				pDrawer->PopDestRect();
 			}
@@ -716,8 +720,8 @@ BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 
 void uiHeaderForm::EntryOnCommand(UINT id)
 {
-	ASSERT(m_pParent != nullptr);
-	m_pParent->EntryOnCommand(id);
+	ASSERT(GetParent() != nullptr);
+	GetParent()->EntryOnCommand(id);
 }
 
 BOOL uiHeaderForm::ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose)
@@ -771,7 +775,7 @@ void uiHeaderForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		x = rect.Left + m_ClientRect.Left + x;
 		y = rect.Top + m_ClientRect.Top + y;
 
-		m_pParent->StartDragging(x, y);
+		GetParent()->StartDragging(x, y);
 	}
 }
 
@@ -872,7 +876,7 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 
 	pDockingForm->m_bSideDocked = true;
 	pDockingForm->m_DockFlag = fdf;
-	ASSERT(pDockingForm->m_pParent == this);
+	ASSERT(pDockingForm->GetParent() == this);
 	m_SideDockedFormList.push_back(pDockingForm);
 
 	m_ClientRect = rect;
@@ -1073,11 +1077,6 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 {
 	stPaneInfo NewPaneInfo;
 
-	if (GetKeyState(VK_F2) < 0)
-	{
-		printx("aaa\n");
-	}
-
 	if (TestFlag(TFF_TAB_TOP) || TestFlag(TFF_TAB_BOTTOM))
 		NewPaneInfo.FullRect = uiSize(80, m_TabHeight); // test code.
 	else
@@ -1121,7 +1120,7 @@ BOOL uiTabForm::DeletePane(INT index)
 {
 	ASSERT(m_TotalPane > 0);
 
-	if (index >= m_TotalPane)
+	if (m_TotalPane == 0 || index >= m_TotalPane)
 		return FALSE;
 	if (index < 0)
 		index = m_TotalPane - 1;
@@ -1196,7 +1195,7 @@ void uiTabForm::Layout()
 	switch(m_Flag & (TFF_TAB_TOP | TFF_TAB_BOTTOM | TFF_TAB_LEFT | TFF_TAB_RIGHT))
 	{
 	case TFF_TAB_TOP:
-		m_TabsRegion.Bottom = m_TabHeight;
+		m_TabsRegion.Bottom = ClientRect.Top + m_TabHeight;
 		m_PaneRegion.Inflate(0, -m_TabHeight, 0, 0);
 		break;
 	case TFF_TAB_BOTTOM:
@@ -1204,7 +1203,7 @@ void uiTabForm::Layout()
 		m_PaneRegion.Inflate(0, 0, 0, -m_TabHeight);
 		break;
 	case TFF_TAB_LEFT:
-		m_TabsRegion.Right = m_TabWidth;
+		m_TabsRegion.Right = ClientRect.Left + m_TabWidth;
 		m_PaneRegion.Inflate(-m_TabWidth, 0, 0, 0);
 		break;
 	case TFF_TAB_RIGHT:
@@ -1219,7 +1218,7 @@ void uiTabForm::Layout()
 void uiTabForm::UpdateTabsRect()
 {
 	ASSERT(m_TotalPane >= 1);
-	ASSERT(m_pPaneInfoArray != nullptr);
+//	ASSERT(m_pPaneInfoArray != nullptr);
 
 	BOOL bUseFullSize = FALSE;
 	uiSize FullTabsSize = GetFullTabsSize();
@@ -1318,11 +1317,11 @@ void uiTabForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 
 		}
 		m_bDraggingTab = false;
-		printx("---> MKT_LEFT\n");
+		printx("---> MKT_LEFT up\n");
 		break;
 
 	case MKT_RIGHT:
-		printx("---> MKT_RIGHT\n");
+		printx("---> MKT_RIGHT up\n");
 		break;
 	}
 }
@@ -1343,27 +1342,33 @@ void uiTabForm::OnMouseMove(INT x, INT y, UINT mmd)
 
 	if (NewHighlightIndex != m_HighlightIndex)
 	{
-		uiRect DirtyRect;
 		if (NewHighlightIndex != -1)
-			DirtyRect = GetPaneInfo(NewHighlightIndex)->Rect;
-		if (m_HighlightIndex != -1)
-			DirtyRect.UnionWith(GetPaneInfo(m_HighlightIndex)->Rect);
+			RedrawTabs(NewHighlightIndex, m_HighlightIndex);
+		else if (m_HighlightIndex != -1)
+			RedrawTabs(m_HighlightIndex, NewHighlightIndex);
 		m_HighlightIndex = NewHighlightIndex;
-		RedrawForm(&DirtyRect);
 	}
 }
 
 void uiTabForm::OnSize(UINT nNewWidth, UINT nNewHeight)
 {
 	Layout();
+	BOOL bHide = !m_PaneRegion.IsValidRect();
 
 	for (INT i = 0; i < m_TotalPane; ++i)
 	{
-		GetPaneInfo(i)->pForm->Move(m_PaneRegion.Left, m_PaneRegion.Top);
-		GetPaneInfo(i)->pForm->Size(m_PaneRegion.Width(), m_PaneRegion.Height());
+		if (bHide)
+		{
+			GetPaneInfo(i)->pForm->Move(-5, -5); // Move to somewhere that system will clip it.
+			GetPaneInfo(i)->pForm->Size(1, 1);
+		}
+		else
+		{
+			GetPaneInfo(i)->pForm->Move(m_PaneRegion.Left, m_PaneRegion.Top);
+			GetPaneInfo(i)->pForm->Size(m_PaneRegion.Width(), m_PaneRegion.Height());
+		}
 	}
-
-	RedrawForm();
+//	RedrawForm();
 }
 
 void uiTabForm::OnPaint(uiDrawer* pDrawer)
@@ -1379,7 +1384,7 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 	{
 		pPaneInfo = GetPaneInfo(i);
 
-		tRect = m_pPaneInfoArray[i].Rect;
+		tRect = GetPaneInfo(i)->Rect;
 		tRect.Inflate(-1, -1, -1, -1);
 
 	//	pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? RGB(220, 220, 220) : RGB(200, 200, 200));

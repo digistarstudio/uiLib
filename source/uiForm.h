@@ -241,11 +241,6 @@ public:
 		list_remove(&pChildForm->m_ListChildrenEntry);
 		INIT_LIST_ENTRY(&pChildForm->m_ListChildrenEntry);
 		pChildForm->m_pParent = nullptr;
-		if (pChildForm->bShow)
-		{
-			uiRect rect = pChildForm->m_FrameRect;
-			RedrawForm(&rect);
-		}
 	}
 
 	INLINE void FrameToWindow(uiRect &rect)
@@ -297,13 +292,13 @@ public:
 	INLINE BOOL IsMouseHovering() const { return bMouseHover; }
 	INLINE BOOL IsVisible() const { return bShow; }
 
-	INLINE uiFormBase* GetParent() { return m_pParent; }
-	INLINE uiFormBase* GetPlate() { return m_pPlate; }
+	INLINE uiFormBase* GetParent() const { return m_pParent; }
+	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
 
-	INLINE uiRect GetFrameRect() { return uiRect(0, 0, m_FrameRect.Width(), m_FrameRect.Height()); }
-	INLINE uiRect GetClientRect() { return uiRect(0, 0, m_ClientRect.Width(), m_ClientRect.Height()); }
+	INLINE uiRect GetFrameRect() const { return uiRect(0, 0, m_FrameRect.Width(), m_FrameRect.Height()); }
+	INLINE uiRect GetClientRect() const { return uiRect(0, 0, m_ClientRect.Width(), m_ClientRect.Height()); }
 
-	INLINE uiString& GetTitle() { return m_strTitle; }
+	INLINE const uiString& GetTitle() const { return m_strTitle; }
 	INLINE void SetTitle(const TCHAR* pStrName) { m_strTitle = pStrName; }
 
 	BOOL IsDirectChildForm(uiFormBase *pForm)
@@ -868,17 +863,11 @@ public:
 		:pForm(nullptr), bTabForm(false)
 		{
 		}
-	/*
-		stPaneInfo& operator=(stPaneInfo&& rvalue)
-		{
-			pForm = rvalue.pForm;
-			return *this;
-		} //*/
 
 		uiFormBase *pForm;
-		uiRect Rect;  // visible rect only.
-		uiSize FullRect; // Size needed for showing complete text.
-		bool bTabForm;   // Form was created automatically.
+		uiRect Rect;       // visible rect only
+		uiSize FullRect;   // size needed for showing complete text
+		bool bTabForm;     // Form was created automatically.
 	};
 
 	uiTabForm::uiTabForm()
@@ -887,7 +876,6 @@ public:
 		m_ActiveIndex = -1;
 		m_HighlightIndex = -1;
 		m_PaneArraySize = 0;
-		m_pPaneInfoArray = nullptr;
 
 		m_ColorActive = RGB(255, 255, 255);
 		m_ColorHover = RGB(230, 230, 230);
@@ -895,7 +883,6 @@ public:
 	}
 	virtual uiTabForm::~uiTabForm()
 	{
-		SAFE_DELETE_ARRAY(m_pPaneInfoArray);
 	}
 
 
@@ -919,7 +906,7 @@ public:
 	{
 		printx("---> uiTabForm::OnMouseLeave\n");
 
-		if (m_HighlightIndex != -1 )
+		if (m_HighlightIndex != -1)
 		{
 			if (m_HighlightIndex != m_ActiveIndex)
 				RedrawForm(&GetPaneInfo(m_HighlightIndex)->Rect);
@@ -936,12 +923,12 @@ public:
 
 
 	INLINE BOOL TestFlag(TAB_FORM_FLAGS flag) { return m_Flag & flag; }
-	INLINE void SetMargin(INT left, INT top = -1, INT right = -1, INT buttom = -1)
+	INLINE void SetMargin(INT left, INT top = -1, INT right = -1, INT bottom = -1)
 	{
 		if (left != -1) m_LeftMargin = left;
-		if (left != -1) m_TopMargin = top;
-		if (left != -1) m_RightMargin = right;
-		if (left != -1) m_BottomMargin = buttom;
+		if (top != -1) m_TopMargin = top;
+		if (right != -1) m_RightMargin = right;
+		if (bottom != -1) m_BottomMargin = bottom;
 	}
 	uiSize GetFullTabsSize()
 	{
@@ -965,7 +952,7 @@ protected:
 	UINT16 m_TabWidth, m_TabHeight;
 
 	INT m_PaneArraySize;
-	stPaneInfo *m_pPaneInfoArray;
+	std::vector<stPaneInfo> m_PaneInfoArray;
 
 	uiRect m_TabsRegion, m_PaneRegion;
 
@@ -976,46 +963,26 @@ private:
 
 	INT AddPaneInfo(stPaneInfo *pNewPaneInfo, INT index = -1)
 	{
-		if (m_PaneArraySize == m_TotalPane)
-		{
-			INT iNewPaneInfoArraySize = 1;
-			if (m_PaneArraySize != 0)
-				iNewPaneInfoArraySize = m_PaneArraySize * 2;
-
-			stPaneInfo *pNewArray = new stPaneInfo[iNewPaneInfoArraySize];
-
-			if (m_TotalPane)
-			{
-				memcpy(pNewArray, m_pPaneInfoArray, sizeof(stPaneInfo) * m_TotalPane);
-				delete[] m_pPaneInfoArray;
-			}
-			m_pPaneInfoArray = pNewArray;
-			m_PaneArraySize = iNewPaneInfoArraySize;
-		}
-
-		if (index < 0 || index >= m_TotalPane)
-		{
-			index = m_TotalPane;
-			memcpy(&m_pPaneInfoArray[index], pNewPaneInfo, sizeof(stPaneInfo));
-		}
-		else
-		{
-			memmove(&m_pPaneInfoArray[index], &m_pPaneInfoArray[index + 1], (m_TotalPane - index) * sizeof(stPaneInfo));
-		}
-		m_TotalPane++;
+		if (index == -1)
+			index = m_PaneInfoArray.size();
+		m_PaneInfoArray.insert(m_PaneInfoArray.begin() + index, 1, *pNewPaneInfo);
+		m_TotalPane = m_PaneInfoArray.size();
 		return index;
 	}
 	stPaneInfo* GetPaneInfo(INT index)
 	{
 		ASSERT(0 <= index && index < m_TotalPane);
-		return &m_pPaneInfoArray[index];
+		return &m_PaneInfoArray[index];
 	}
 	BOOL ReleasePaneInfo(INT index)
 	{
 		ASSERT(0 <= index && index < m_TotalPane);
-		if (m_TotalPane != 1 && index != m_TotalPane - 1)
-			memmove(&m_pPaneInfoArray[index], &m_pPaneInfoArray[index + 1], sizeof(stPaneInfo) * (m_TotalPane - index - 1));
+		if (0 > index || index > m_TotalPane)
+			return FALSE;
+
+		m_PaneInfoArray.erase(m_PaneInfoArray.begin() + index);
 		--m_TotalPane;
+
 		return TRUE;
 	}
 
