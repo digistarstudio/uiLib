@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "uiForm.h"
 #include "uiMsWin.h"
+#include "FormStyle.h"
 
 
 void uiMonitorEvent()
@@ -47,39 +48,13 @@ uiFormBase::~uiFormBase()
 	printx("---> uiFormBase::~uiFormBase\n");
 }
 
-/*
-BOOL uiFormBase::Create(uiFormBase *parent, const RECT& rect, FORM_CREATION_FLAG cf)
-{
-	if (!UICore::bSilentMode && parent == nullptr)
-	{
-		UINT32 nWidth = rect.right - rect.left;
-		UINT32 nHeight = rect.bottom - rect.top;
-		uiWindow *pWnd = CreateTemplateWindow(this, rect.left, rect.top, nWidth, nHeight);
-
-		if (pAppBaseForm == nullptr)
-			pAppBaseForm = this;
-
-		return (pWnd != nullptr);
-	}
-
-	if (parent == nullptr)
-	{
-	}
-	else
-	{
-	}
-
-	return TRUE;
-}
-//*/
 
 BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, UINT fcf)
 {
 	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
 		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
-
-		printx("CreateTemplateWindow completed!\n");
+	//	printx("CreateTemplateWindow completed!\n");
 
 		m_FrameRect.Init(nWidth, nHeight);
 		m_ClientRect = m_FrameRect;
@@ -90,9 +65,8 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		if (fcf & FCF_CENTER)
 			pWnd->MoveToCenter();
 
-		OnCreate();
-		bCreated = true;
-		bShow = !(fcf & FCF_INVISIBLE);
+		EntryOnCreate(!(fcf & FCF_INVISIBLE));
+
 		return (pWnd != nullptr);
 	}
 
@@ -107,10 +81,6 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 
 		if (fcf & FCF_CENTER)
 			pWnd->MoveToCenter();
-
-		OnCreate();
-		bCreated = true;
-		bShow = !(fcf & FCF_INVISIBLE);
 	}
 	else if (parent != nullptr)
 	{
@@ -122,15 +92,13 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 
 		if (fcf & FCF_CENTER)
 			MoveToCenter();
-
-		OnCreate();
-		bCreated = true;
-		bShow = !(fcf & FCF_INVISIBLE);
 	}
 	else
 	{
-	//	ASSERT();
+		ASSERT(0);
 	}
+
+	EntryOnCreate(!(fcf & FCF_INVISIBLE));
 
 	return TRUE;
 }
@@ -139,15 +107,16 @@ void uiFormBase::Bind(UINT CmdID)
 {
 #ifdef _DEBUG
 
-	for (size_t i = 0, total = m_IDList.size(); i < total; ++i)
-		if (m_IDList[i] == CmdID)
+	std::vector<UINT> &IDList = GetIDList();
+	for (size_t i = 0, total = IDList.size(); i < total; ++i)
+		if (IDList[i] == CmdID)
 		{
 			ASSERT(0);
 		}
 
 #endif
 
-	m_IDList.push_back(CmdID);
+	GetIDList().push_back(CmdID);
 }
 
 void uiFormBase::Close()
@@ -306,6 +275,17 @@ void uiFormBase::RedrawFrame(const uiRect *pUpdateRect)
 	if (dest.IsValidRect())
 		GetBaseWnd()->RedrawImp(&dest);
 }
+
+uiFormBase* uiFormBase::SetCapture()
+{
+	return GetBaseWnd()->CaptureMouseFocus(this);
+}
+
+BOOL uiFormBase::ReleaseCapture()
+{
+	return GetBaseWnd()->ReleaseMouseFocus(this);
+}
+
 
 void uiFormBase::PopupMenu(INT x, INT y, uiMenu *pMenu)
 {
@@ -483,6 +463,16 @@ void uiFormBase::StartDragging(INT x, INT y)
 	pWnd->StartDraggingImp(this, x, y, rect);
 }
 
+void uiFormBase::EntryOnCreate(BOOL bShow)
+{
+	ASSERT(!bCreated);
+
+	bCreated = true;
+	bShow = (bShow != 0);
+	m_pStyle = GetDefaultStyleObject(this);
+	OnCreate();
+}
+
 BOOL uiFormBase::EntryOnClose()
 {
 	return TRUE;
@@ -567,9 +557,10 @@ void uiFormBase::EntryOnSize(UINT nNewWidth, UINT nNewHeight)
 void uiFormBase::EntryOnCommand(UINT id)
 {
 	BOOL bDone = FALSE;
-	for (size_t i = 0, total = m_IDList.size(); i < total; ++i)
+	std::vector<UINT> &IDList = GetIDList();
+	for (size_t i = 0, total = IDList.size(); i < total; ++i)
 	{
-		if (m_IDList[i] == id)
+		if (IDList[i] == id)
 		{
 			bDone = TRUE;
 			OnCommand(id, bDone);
@@ -638,13 +629,16 @@ void uiFormBase::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 
 void uiFormBase::OnMouseEnter(INT x, INT y)
 {
-//	if (GetKeyState(VK_F2) < 0)
-		printx("---> uiFormBase::OnMouseEnter\n");
+	//printx("---> uiFormBase::OnMouseEnter\n");
 }
 
 void uiFormBase::OnMouseLeave()
 {
-	printx("---> uiFormBase::OnMouseLeave\n");
+	//printx("---> uiFormBase::OnMouseLeave\n");
+}
+
+void uiFormBase::OnMouseFocusLost()
+{
 }
 
 void uiFormBase::OnMouseMove(INT x, INT y, UINT mmd)
@@ -686,10 +680,6 @@ void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
 
 //	printx("---> Frame x:%d y:%d x2:%d y2:%d (Width: %d Height: %d)\n",
 //		m_FrameRect.Left, m_FrameRect.Top, m_FrameRect.Right, m_FrameRect.Bottom, m_FrameRect.Width(), m_FrameRect.Height());
-}
-
-void uiFormBase::OnSizing(uiRect* pRect)
-{
 }
 
 
@@ -789,8 +779,8 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 
 	uiRect rect = GetClientRect();
 	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
-//	pDrawer->FillRect(rect, color);
-	pDrawer->FillRect(rect, RGB(255, 255, 255));
+	pDrawer->FillRect(rect, color);
+//	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
 	pDrawer->DrawText(GetParent()->GetTitle(), rect, DT_CENTER);
 }
@@ -1082,6 +1072,9 @@ BOOL uiTabForm::AddPane(uiFormBase *pForm, INT index, BOOL bActivate)
 	else
 		NewPaneInfo.FullRect = uiSize(m_TabWidth, 80);
 
+//	if (GetKeyState(VK_F2) < 0)
+//		NewPaneInfo.FullRect = uiSize(200, m_TabHeight);
+
 	if (pForm == nullptr)
 	{
 		pForm = new uiFormBase;
@@ -1297,7 +1290,11 @@ void uiTabForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	case MKT_LEFT:
 		if (m_HighlightIndex != -1 && m_ActiveIndex != m_HighlightIndex)
 			ActivateTab(m_HighlightIndex);
-		m_bDraggingTab = true;
+		if (m_HighlightIndex != -1 && TestFlag(TFF_DRAGGABLE_TAB))
+		{
+			SetCapture();
+			m_bDraggingTab = true;
+		}
 		break;
 
 	case MKT_RIGHT:
@@ -1316,7 +1313,11 @@ void uiTabForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		{
 
 		}
-		m_bDraggingTab = false;
+		if (m_bDraggingTab)
+		{
+			ReleaseCapture();
+			m_bDraggingTab = false;
+		}
 		printx("---> MKT_LEFT up\n");
 		break;
 
@@ -1326,9 +1327,29 @@ void uiTabForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	}
 }
 
+void uiTabForm::GetBufferRect(const uiRect &OldRect, const uiRect &NewRect, uiRect &out)
+{
+	if (TestFlag(TFF_TAB_TOP) || TestFlag(TFF_TAB_BOTTOM))
+	{
+		if (OldRect.Left < NewRect.Left)
+			out.Init(OldRect.Right, OldRect.Top, NewRect.Left, OldRect.Bottom);
+		else
+			out.Init(NewRect.Right, OldRect.Top, OldRect.Left, OldRect.Bottom);
+	}
+	else
+	{
+		if (OldRect.Top < NewRect.Top)
+			out.Init(OldRect.Left, OldRect.Bottom, OldRect.Right, NewRect.Top);
+		else
+			out.Init(OldRect.Left, NewRect.Bottom, OldRect.Right, OldRect.Top);
+	}
+}
+
 void uiTabForm::OnMouseMove(INT x, INT y, UINT mmd)
 {
 //	printx("---> uiTabForm::OnMouseMove client pos x:%d, y:%d.\n", x, y);
+	if (!m_TotalPane)
+		return;
 
 	INT NewHighlightIndex = -1;
 	for (INT i = 0; i < m_TotalPane; ++i)
@@ -1338,6 +1359,32 @@ void uiTabForm::OnMouseMove(INT x, INT y, UINT mmd)
 			continue;
 		NewHighlightIndex = i;
 		break;
+	}
+
+	if (m_bDraggingTab)
+	{
+		while (NewHighlightIndex != -1 && NewHighlightIndex != m_ActiveIndex)
+		{
+			if (m_OldTabRect.IsValidRect())
+			{
+				uiRect BufRect;
+				GetBufferRect(m_OldTabRect, m_PaneInfoArray[m_ActiveIndex].Rect, BufRect);
+				if (BufRect.IsPointIn(x, y))
+					break;
+			}
+
+			m_OldTabRect = m_PaneInfoArray[m_ActiveIndex].Rect;
+			iter_swap(m_PaneInfoArray.begin() + NewHighlightIndex, m_PaneInfoArray.begin() + m_ActiveIndex);
+			UpdateTabsRect();
+
+			if (!m_PaneInfoArray[m_ActiveIndex].Rect.IsPointIn(x, y))
+				m_OldTabRect.Reset();
+
+			RedrawTabs(NewHighlightIndex, m_ActiveIndex);
+			m_HighlightIndex = m_ActiveIndex = NewHighlightIndex;
+			break;
+		}
+		return;
 	}
 
 	if (NewHighlightIndex != m_HighlightIndex)

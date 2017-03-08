@@ -62,6 +62,7 @@ struct uiRect
 	INLINE void SetHeight(INT NewHeight) { Bottom = Top + NewHeight; }
 
 	INLINE void Init(INT iWidth, INT iHeight) { Left = Top = 0; Right = iWidth; Bottom = iHeight; }
+	INLINE void Init(INT left, INT top, INT right, INT bottom) { Left = left; Top = top; Right = right; Bottom = bottom; }
 	INLINE void InitForUnion() { Left = Top = MAX_INT_VALUE; Right = Bottom = MIN_INT_VALUE; }
 	INLINE void Move(INT x, INT y) { Left += x; Right += x; Top += y; Bottom += y; }
 

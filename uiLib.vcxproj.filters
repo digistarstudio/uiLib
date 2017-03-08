@@ -48,6 +48,9 @@
     <ClInclude Include="source\external\UTX.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\FormStyle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\stdafx.cpp">
@@ -69,6 +72,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\UTX.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\FormStyle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

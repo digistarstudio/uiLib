@@ -36,7 +36,6 @@ namespace UICore
 	INIT_UI init_ui;
 	uiWinCursor GCursor;
 
-	uiFormStyle GFormStyle = { 4, 0, 0, 0, 0 };
 }
 
 static uiWinCursor& uiGetCursor() { return UICore::GCursor; }
@@ -135,6 +134,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	case WM_PAINT:
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnPaint();
+		bProcessed = TRUE;
 		break;
 
 	case WM_CLOSE:
@@ -229,6 +229,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	case WM_CAPTURECHANGED:
 		LogWndMsg("Msg: WM_CAPTURECHANGED HWND: %p\n", lParam);
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnMouseCaptureLost();
+		bProcessed = TRUE;
 		break;
 
 	case WM_MOUSELEAVE:
@@ -348,6 +351,8 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 	m_pForm = pFormIn;
 	m_pHoverForm = nullptr;
 	m_pDraggingForm = nullptr;
+	m_pMouseFocusForm = nullptr;
+	m_pKeyboardFocusForm = nullptr;
 
 	m_TrackMouseClick = 0;
 	m_NonClientArea = 0;
@@ -357,10 +362,6 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 	ZeroMemory(m_MouseKeyDownTime, sizeof(m_MouseKeyDownTime));
 	ZeroMemory(m_MouseClickTime, sizeof(m_MouseClickTime));
 	ZeroMemory(m_pFirstClickedForm, sizeof(m_pFirstClickedForm));
-
-	m_bTrackMouseLeave = false;
-	m_bDragging = false;
-	m_bClosed = false;
 }
 
 uiWindow::~uiWindow()
@@ -385,6 +386,11 @@ BOOL uiWindow::GetUiRect(uiRect &rect)
 
 void uiWindow::OnFormDestroy(uiFormBase *pForm)
 {
+	if (m_pMouseFocusForm == pForm)
+	{
+		m_pMouseFocusForm = nullptr;
+		bRetrackMouse = true;
+	}
 	if (m_pHoverForm == pForm)
 	{
 		m_pHoverForm = nullptr;
@@ -467,6 +473,7 @@ void uiWindow::StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMov
 		::ClientToScreen((HWND)m_Handle, &pt);
 		MouseMoveRect.Move(pt.x, pt.y);
 		ClipCursor((RECT*)&MouseMoveRect);
+		SetCapture();
 	}
 }
 
@@ -552,7 +559,7 @@ void uiWindow::OnCreate()
 
 	uiRect rect;
 	GetUiRect(rect);
-	m_Drawer.InitBackBuffer(1, (HWND)m_Handle, rect.Width(), rect.Height());
+	m_Drawer.InitBackBuffer(2, (HWND)m_Handle, rect.Width(), rect.Height());
 }
 
 void uiWindow::OnDestroy()
@@ -633,7 +640,7 @@ BOOL uiWindow::OnSetCursor()
 
 void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 {
-	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
+//	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
 	switch (nType)
 	{
@@ -655,6 +662,7 @@ void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 
 void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 {
+/*
 	switch (fwSide)
 	{
 	case WMSZ_LEFT:
@@ -681,7 +689,7 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 	case WMSZ_BOTTOMRIGHT:
 		printx("uiWindow::OnSizing. Bottom Right edge!\n");
 		break;
-	}
+	} //*/
 
 	uiSize si = m_pForm->GetMinSize();
 	if (si.iHeight > 0 && pRect->bottom - pRect->top < si.iHeight)
@@ -700,6 +708,47 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 	}
 
 	//	m_pForm->OnSizing((uiRect*)pRect);
+}
+
+uiFormBase* uiWindow::CaptureMouseFocus(uiFormBase* pForm)
+{
+	uiFormBase *pOriginalFocusForm = nullptr;
+
+	if (bMouseFocusCaptured)
+	{
+		if (pForm == m_pMouseFocusForm)
+			return m_pMouseFocusForm;
+
+		pOriginalFocusForm = m_pMouseFocusForm;
+		m_pMouseFocusForm->OnMouseFocusLost();
+		m_pMouseFocusForm = pForm;
+		return pOriginalFocusForm;
+	}
+
+	HWND hWnd = SetCapture();
+	if (hWnd != NULL && GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentProcessId())
+	{
+		uiWindow *pWnd = uiWindowGet(hWnd);
+		pOriginalFocusForm = pWnd->m_pMouseFocusForm;
+	}
+	m_pMouseFocusForm = pForm;
+	bMouseFocusCaptured = true;
+
+	return pOriginalFocusForm;
+}
+
+BOOL uiWindow::ReleaseMouseFocus(uiFormBase* pForm)
+{
+	if (!bMouseFocusCaptured)
+		return FALSE;
+
+	if (m_pMouseFocusForm == pForm)
+	{
+		ReleaseCapture();
+		bMouseFocusCaptured = false;
+		return TRUE;
+	}
+	return FALSE;
 }
 
 INT64 uiWindow::OnNCHitTest(INT x, INT y)
@@ -766,6 +815,7 @@ BOOL uiWindow::OnLButtonDown(INT x, INT y)
 		m_bSizing = m_bDragging = true;
 		m_SizingHitSide = m_NonClientArea;
 		uiGetCursor().StartSizing(FALSE);
+		SetCapture();
 
 		uiRect MouseMoveRect;
 		m_pDraggingForm->GetPlate()->ClientToWindow(MouseMoveRect);
@@ -786,7 +836,10 @@ BOOL uiWindow::OnLButtonUp(INT x, INT y)
 	if (m_bDragging)
 	{
 		if (m_pDraggingForm != m_pForm)
+		{
+			ReleaseCapture();
 			ClipCursor(NULL);
+		}
 		m_bDragging = false;
 
 		if (m_bSizing)
@@ -799,6 +852,50 @@ BOOL uiWindow::OnLButtonUp(INT x, INT y)
 	}
 
 	return FALSE;
+}
+
+void uiWindow::OnMouseCaptureLost()
+{
+	if (m_bDragging)
+	{
+		ASSERT(!bMouseFocusCaptured);
+
+		if (m_pDraggingForm != m_pForm)
+			ClipCursor(NULL);
+		m_bDragging = false;
+
+		if (m_bSizing)
+		{
+			m_bSizing = false;
+			uiGetCursor().StartSizing(TRUE);
+		}
+	}
+	else if (m_pMouseFocusForm != nullptr)
+	{
+		ASSERT(bMouseFocusCaptured);
+		m_pMouseFocusForm->OnMouseFocusLost();
+		m_pMouseFocusForm = nullptr;
+		bMouseFocusCaptured = false;
+	}
+
+	POINT pt, cpt;
+	GetCursorPos(&pt);
+	cpt = pt;
+	ScreenToClient((HWND)m_Handle, &cpt);
+	uiRect WndRect;
+	GetWindowRect(WndRect);
+
+	if (WndRect.IsPointIn(pt.x, pt.y)) // Make sure mouse cursor is inside the window.
+	{
+		INT DestX, DestY;
+		uiFormBase *pNewHoverForm = m_pForm->FindByPos(cpt.x, cpt.y, &DestX, &DestY); // This will return itself even if mouse is outside it's area.
+		if (pNewHoverForm != m_pHoverForm)
+		{
+			if (m_pHoverForm != nullptr)
+				MouseLeaveForm(m_pHoverForm);
+			bRetrackMouse = true;
+		}
+	}
 }
 
 void uiWindow::FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect)
@@ -929,6 +1026,13 @@ void uiWindow::OnMouseMove(UINT nType, INT x, INT y)
 		OnDragging(x, y);
 		return;
 	}
+	if (m_pMouseFocusForm != nullptr)
+	{
+		uiRect rect;
+		m_pMouseFocusForm->ClientToWindow(rect);
+		m_pMouseFocusForm->OnMouseMove(x - rect.Left, y - rect.Top, MmdFlags);
+		return;
+	}
 
 	INT destX, destY, FrameX = x, FrameY = y;
 	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
@@ -972,15 +1076,26 @@ void uiWindow::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	}
 
 	uiRect rect;
-	m_pHoverForm->ClientToWindow(rect);
-	m_pHoverForm->OnMouseBtnDown(KeyType, x - rect.Left, y - rect.Top);
+	if (m_pMouseFocusForm != nullptr)
+	{
+		m_pMouseFocusForm->ClientToWindow(rect);
+		m_pMouseFocusForm->OnMouseBtnDown(KeyType, x - rect.Left, y - rect.Top);
+	}
+	else if (m_pHoverForm != nullptr) // This could be null while debugging.
+	{
+		m_pHoverForm->ClientToWindow(rect);
+		m_pHoverForm->OnMouseBtnDown(KeyType, x - rect.Left, y - rect.Top);
+	}
 }
 
 void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 {
 	//	printx("---> uiWindow::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
-	m_pHoverForm->OnMouseBtnUp(KeyType, x, y);
-	if (m_pHoverForm == nullptr)
+	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
+	if (pDestForm != nullptr)
+		pDestForm->OnMouseBtnUp(KeyType, x, y);
+	pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
+	if (pDestForm == nullptr) // Re-check to avoid accessing null pointer. Hover form might be deleted after key up event is called.
 		return;
 
 	UINT64 ctime = GetTimeStamp();
@@ -993,8 +1108,8 @@ void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		{
 			if (ctime - m_MouseKeyDownTime[MKT_LEFT] <= MOUSE_CLICK_INTERVAL)
 			{
-				m_pHoverForm->OnMouseBtnClk(MKT_LEFT, x, y);
-				m_pFirstClickedForm[MKT_LEFT] = m_pHoverForm;
+				pDestForm->OnMouseBtnClk(MKT_LEFT, x, y);
+				m_pFirstClickedForm[MKT_LEFT] = pDestForm;
 			}
 			m_TrackMouseClick &= ~MCKT_LEFT;
 		}
@@ -1005,8 +1120,8 @@ void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		{
 			if (ctime - m_MouseKeyDownTime[MKT_MIDDLE] <= MOUSE_CLICK_INTERVAL)
 			{
-				m_pHoverForm->OnMouseBtnClk(MKT_MIDDLE, x, y);
-				m_pFirstClickedForm[MKT_MIDDLE] = m_pHoverForm;
+				pDestForm->OnMouseBtnClk(MKT_MIDDLE, x, y);
+				m_pFirstClickedForm[MKT_MIDDLE] = pDestForm;
 			}
 			m_TrackMouseClick &= ~MCKT_MIDDLE;
 		}
@@ -1017,8 +1132,8 @@ void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 		{
 			if (ctime - m_MouseKeyDownTime[MKT_RIGHT] <= MOUSE_CLICK_INTERVAL)
 			{
-				m_pHoverForm->OnMouseBtnClk(MKT_RIGHT, x, y);
-				m_pFirstClickedForm[MKT_RIGHT] = m_pHoverForm;
+				pDestForm->OnMouseBtnClk(MKT_RIGHT, x, y);
+				m_pFirstClickedForm[MKT_RIGHT] = pDestForm;
 			}
 			m_TrackMouseClick &= ~MCKT_RIGHT;
 		}
@@ -1031,7 +1146,8 @@ void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 
 void uiWindow::OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 {
-	if (m_pHoverForm == nullptr)
+	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
+	if (pDestForm == nullptr)
 		return;
 
 	printx("---> uiWindow::OnMouseBtnDbClk Type:%d x:%d y:%d\n", KeyType, x, y);
@@ -1040,23 +1156,23 @@ void uiWindow::OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	switch (KeyType)
 	{
 	case MKT_LEFT:
-		if (m_pFirstClickedForm[MKT_LEFT] != m_pHoverForm)
+		if (m_pFirstClickedForm[MKT_LEFT] != pDestForm)
 			bDBClick = FALSE;
 		break;
 	case MKT_MIDDLE:
-		if (m_pFirstClickedForm[MKT_MIDDLE] != m_pHoverForm)
+		if (m_pFirstClickedForm[MKT_MIDDLE] != pDestForm)
 			bDBClick = FALSE;
 		break;
 	case MKT_RIGHT:
-		if (m_pFirstClickedForm[MKT_RIGHT] != m_pHoverForm)
+		if (m_pFirstClickedForm[MKT_RIGHT] != pDestForm)
 			bDBClick = FALSE;
 		break;
 	}
 
 	if (bDBClick)
-		m_pHoverForm->OnMouseBtnDbClk(KeyType, x, y);
+		pDestForm->OnMouseBtnDbClk(KeyType, x, y);
 	else
-		m_pHoverForm->OnMouseBtnClk(KeyType, x, y);
+		pDestForm->OnMouseBtnClk(KeyType, x, y);
 }
 
 void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)
@@ -1071,10 +1187,6 @@ void uiWindow::MouseLeaveForm(uiFormBase *pForm)
 	ASSERT(pForm->bMouseHover);
 	pForm->OnMouseLeave();
 	pForm->bMouseHover = false;
-}
-
-void uiWindow::OnDragging()
-{
 }
 
 

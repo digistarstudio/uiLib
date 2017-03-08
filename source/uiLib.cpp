@@ -26,6 +26,7 @@ public:
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
+		printx("---> CTabFormContext1::OnPaint\n");
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 200, 0));
 		pDrawer->DrawText(_T("Context 1"), rect, DT_CENTER);
@@ -138,10 +139,10 @@ public:
 
 		m_pTabForm = new uiTabForm;
 		m_pTabForm->SetMargin(3, 3, 3, 3);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB); // uiTabForm::TFF_FORCE_SHOW_TAB
-		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB);
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB); // uiTabForm::TFF_FORCE_SHOW_TAB
+		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
 
 		m_pTabForm->SetHeaderBar(_T("test child form"));
 
@@ -224,7 +225,7 @@ public:
 		printx("---> CMyForm::OnCreate\n");
 
 		SetHeaderBar(_T("test"));
-		SetMenuBar(nullptr);
+	//	SetMenuBar(nullptr);
 
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 60, 60, 50, 50);
@@ -325,8 +326,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	uiString a, b;
 	a = _T("Unicode string\n");
-
+	
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
+	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
 	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
 	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
 

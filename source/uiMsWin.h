@@ -53,9 +53,13 @@ public:
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
 	void OnSizing(INT fwSide, RECT *pRect);
 
+	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
+	BOOL ReleaseMouseFocus(uiFormBase* pForm);
+
 	INT64 OnNCHitTest(INT x, INT y);
 	BOOL OnLButtonDown(INT x, INT y);
 	BOOL OnLButtonUp(INT x, INT y);
+	void OnMouseCaptureLost();
 	void OnDragging(INT x, INT y);
 
 	void OnMouseLeave();
@@ -67,13 +71,15 @@ public:
 	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
 
-	INLINE void ClientToScreent(INT& x, INT& y) { POINT pt = { x, y }; ::ClientToScreen((HWND)m_Handle, &pt); x = pt.x; y = pt.y; }
+	INLINE HWND GetHandle() const { return (HWND)m_Handle; }
 	INLINE void SetHandle(void *HandleIn) { m_Handle = HandleIn; }
-	INLINE void* GetHandle() const { return m_Handle; }
+	INLINE void ClientToScreent(INT& x, INT& y) { POINT pt = { x, y }; ::ClientToScreen((HWND)m_Handle, &pt); x = pt.x; y = pt.y; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage((HWND)m_Handle, msg, wParam, lParam); }
 	INLINE BOOL UpdateWindow() { return ::UpdateWindow((HWND)m_Handle); }
 	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect((HWND)m_Handle, (LPRECT)&rect); }
 	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow((HWND)m_Handle, nCmdShow); }
+	INLINE HWND SetCapture() { return ::SetCapture((HWND)m_Handle); }
+	INLINE BOOL ReleaseCapture() { return ::ReleaseCapture(); }
 
 
 protected:
@@ -119,13 +125,14 @@ protected:
 		return ((((UINT64)filetime.dwHighDateTime) << 32) + filetime.dwLowDateTime) / 10000; // Convert to millisecond.
 	}
 
-	void OnDragging();
 
 	void *m_Handle;
 
 	uiFormBase *m_pForm;
 	uiFormBase *m_pHoverForm;
 	uiFormBase *m_pDraggingForm;
+	uiFormBase *m_pMouseFocusForm;
+	uiFormBase *m_pKeyboardFocusForm;
 
 	uiWndDrawer m_Drawer;
 
@@ -138,12 +145,12 @@ protected:
 	UINT64 m_MouseKeyDownTime[MKT_TOTAL], m_MouseClickTime[MKT_TOTAL];
 	uiFormBase *m_pFirstClickedForm[MKT_TOTAL];
 
-	bool m_bTrackMouseLeave;
-	bool m_bDragging;
+	bool m_bTrackMouseLeave = false;
+	bool m_bDragging = false;
 	bool m_bSizing = false;
-	bool m_bClosed;
 	bool bChangeCursor = false;
 	bool bRetrackMouse = false;
+	bool bMouseFocusCaptured = false;
 
 
 };

@@ -13,6 +13,7 @@
 class uiMenu;
 class uiFormBase;
 class uiWindow;
+struct uiFormStyle;
 
 
 BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y);
@@ -20,14 +21,6 @@ BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id);
 void uiMonitorEvent();
 
 
-struct uiFormStyle
-{
-	UINT8 FormEdgeWidth;
-	UINT8 ClientEdgeType;
-	UINT8 ClientEdgeWidth;
-	UINT32 ClientEdgeColor;
-	UINT32 ClientColor;
-};
 
 enum FORM_SHOW_MODE
 {
@@ -87,9 +80,13 @@ enum FORM_CLASS
 	FC_BASE,
 
 	FC_TOOLBAR,
-	FC_FRAME,
+	FC_FORM,
+	FC_HEADER_BAR,
 
 	FC_CONTROL,
+	FC_BUTTON,
+	FC_STATIC,
+
 };
 
 enum FORM_DOCKING_FLAG
@@ -160,6 +157,9 @@ public:
 	void RedrawForm(const uiRect *pUpdateRect = nullptr);
 	void RedrawFrame(const uiRect *pUpdateRect = nullptr);
 
+	uiFormBase* SetCapture();
+	BOOL ReleaseCapture();
+
 	void PopupMenu(INT x, INT y, uiMenu *pMenu);
 
 	virtual FORM_CLASS GetClass() { return FC_BASE; }
@@ -174,6 +174,7 @@ public:
 
 	void StartDragging(INT x, INT y);
 
+	void EntryOnCreate(BOOL bShow);
 	BOOL EntryOnClose();
 	void EntryOnDestroy(uiWindow *pWnd);
 	void EntryOnPaint(uiDrawer* pDrawer, INT depth);
@@ -199,6 +200,7 @@ public:
 	virtual void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	virtual void OnMouseEnter(INT x, INT y);
 	virtual void OnMouseLeave();
+	virtual void OnMouseFocusLost();
 	virtual void OnMouseMove(INT x, INT y, UINT mmd); // MOUSE_MOVE_DIRECTION.
 	virtual void OnMove(INT x, INT y);
 	virtual INT  OnNCHitTest(INT x, INT y);
@@ -206,7 +208,6 @@ public:
 	virtual void OnFramePaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
-	virtual void OnSizing(uiRect* pRect);
 
 	virtual BOOL IsDockableForm() const { return FALSE; }
 
@@ -357,12 +358,12 @@ protected:
 		return pPlate->m_pWnd;
 	}
 
-//	union
-//	{
-		uiWindow   *m_pWnd;
-		uiFormBase *m_pPlate;
-//	};
-	uiFormBase *m_pParent;
+	INLINE std::vector<UINT>& GetIDList() { return m_IDList; }
+
+
+	uiWindow    *m_pWnd;
+	uiFormBase  *m_pPlate;
+	uiFormBase  *m_pParent;
 	uiFormStyle *m_pStyle;
 
 	list_head  m_ListChildren;
@@ -371,7 +372,7 @@ protected:
 	uiRect m_FrameRect, m_ClientRect;
 	INT m_minWidth, m_minHeight;
 
-	std::vector<UINT> m_IDList;
+	std::vector<UINT> m_IDList; // Don't access this member directly.
 
 	uiString m_strTitle;
 
@@ -422,6 +423,8 @@ public:
 		}
 	}
 
+	virtual FORM_CLASS GetClass() { return FC_CONTROL; }
+
 	BOOL Enable(BOOL bEnable)
 	{
 		if ((!m_bDisabled && !bEnable) || (m_bDisabled && bEnable))
@@ -469,6 +472,8 @@ public:
 	}
 	~uiButton() {}
 
+
+	virtual FORM_CLASS GetClass() { return FC_BUTTON; }
 
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -875,7 +880,6 @@ public:
 	{
 		m_ActiveIndex = -1;
 		m_HighlightIndex = -1;
-		m_PaneArraySize = 0;
 
 		m_ColorActive = RGB(255, 255, 255);
 		m_ColorHover = RGB(230, 230, 230);
@@ -913,10 +917,15 @@ public:
 			m_HighlightIndex = -1;
 		}
 	}
-
+	void OnMouseFocusLost()
+	{
+		printx("---> uiTabForm::OnMouseFocusLost\n");
+		m_bDraggingTab = false;
+	}
 
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
+	void GetBufferRect(const uiRect &OldRect, const uiRect &NewRect, uiRect &out);
 	void OnMouseMove(INT x, INT y, UINT mmd);
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
 	void OnPaint(uiDrawer* pDrawer);
@@ -951,10 +960,9 @@ protected:
 	UINT m_ColorActive, m_ColorHover, m_ColorDefault;
 	UINT16 m_TabWidth, m_TabHeight;
 
-	INT m_PaneArraySize;
 	std::vector<stPaneInfo> m_PaneInfoArray;
 
-	uiRect m_TabsRegion, m_PaneRegion;
+	uiRect m_TabsRegion, m_PaneRegion, m_OldTabRect;
 
 	bool m_bDraggingTab = false;
 

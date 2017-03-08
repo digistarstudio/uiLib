@@ -39,8 +39,6 @@ public:
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
-//	INLINE void SetUpdateRect(const uiRect &rect) { m_RenderUpdateRect = rect; }
-
 	INLINE void SetUpdateRect(const uiRect *pRect) { ASSERT(!m_OriginX && !m_OriginY); m_RenderDestRect = *pRect; }
 	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 
@@ -57,7 +55,7 @@ protected:
 		uiRect rect;
 	};
 
-	uiRect m_RenderDestRect, m_RenderUpdateRect;
+	uiRect m_RenderDestRect;
 	INT m_OriginX, m_OriginY;
 	TList<stRenderDestInfo> m_RectList;
 
@@ -83,21 +81,29 @@ public:
 
 	BOOL Attach(HDC hDC)
 	{
+		ASSERT(hDC != NULL);
 		ASSERT(m_hDC == NULL);
 		m_hDC = hDC;
-		m_hOldPen = (HPEN)::SelectObject(m_hDC, ::GetStockObject(WHITE_PEN));
-		m_hOldBrush = (HBRUSH)::SelectObject(m_hDC, ::GetStockObject(WHITE_BRUSH));
+		m_hOldPen = (HPEN)::GetCurrentObject(m_hDC, OBJ_PEN);
+		m_hOldBrush = (HBRUSH)::GetCurrentObject(m_hDC, OBJ_BRUSH);
 		m_hOldFont = (HFONT)::GetCurrentObject(m_hDC, OBJ_FONT);
-
 		return TRUE;
 	}
 	BOOL Detach()
 	{
 		if (m_hDC != NULL)
 		{
-			::SelectObject(m_hDC, m_hOldPen);
-			::SelectObject(m_hDC, m_hOldBrush);
-			::SelectObject(m_hDC, m_hOldFont);
+			HPEN hPen = (HPEN)::SelectObject(m_hDC, m_hOldPen);
+			HBRUSH hBrush = (HBRUSH)::SelectObject(m_hDC, m_hOldBrush);
+			HFONT hFont = (HFONT)::SelectObject(m_hDC, m_hOldFont);
+
+			if (hPen != m_hOldPen)
+				::DeleteObject(hPen);
+			if (hBrush != m_hOldBrush)
+				::DeleteObject(hBrush);
+			if (hFont != m_hOldFont)
+				::DeleteObject(hFont);
+
 			m_hDC = NULL;
 			return TRUE;
 		}
@@ -174,6 +180,11 @@ public:
 	{
 		if (m_MemDC != NULL)
 		{
+#ifdef _DEBUG
+			ASSERT(m_hOldPen == (HPEN)::GetCurrentObject(m_MemDC, OBJ_PEN));
+			ASSERT(m_hOldBrush == (HBRUSH)::GetCurrentObject(m_MemDC, OBJ_BRUSH));
+			ASSERT(m_hOldFont = (HFONT)::GetCurrentObject(m_MemDC, OBJ_FONT));
+#endif
 			::SelectObject(m_MemDC, m_hOldBmp); // This may not be necessary.
 			::DeleteDC(m_MemDC); // Delete memory dc first then delete bitmap.
 		}
@@ -191,7 +202,13 @@ public:
 		if (m_MemDC == NULL || m_hBmp == NULL)
 			return FALSE;
 		m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
-	
+
+#ifdef _DEBUG
+		m_hOldPen = (HPEN)::GetCurrentObject(m_MemDC, OBJ_PEN);
+		m_hOldBrush = (HBRUSH)::GetCurrentObject(m_MemDC, OBJ_BRUSH);
+		m_hOldFont = (HFONT)::GetCurrentObject(m_MemDC, OBJ_FONT);
+#endif
+
 		return TRUE;
 	}
 	BOOL Resize(HDC hDC, UINT NewWidth, UINT NewHeight)
@@ -215,6 +232,12 @@ protected:
 
 	HDC     m_MemDC;
 	HBITMAP m_hOldBmp, m_hBmp;
+
+#ifdef _DEBUG
+	HPEN   m_hOldPen;
+	HBRUSH m_hOldBrush;
+	HFONT  m_hOldFont;
+#endif
 
 
 };

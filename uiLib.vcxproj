@@ -146,6 +146,7 @@
   <ItemGroup>
     <ClInclude Include="source\external\Template.h" />
     <ClInclude Include="source\external\UTX.h" />
+    <ClInclude Include="source\FormStyle.h" />
     <ClInclude Include="source\Resource.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\targetver.h" />
@@ -162,6 +163,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="source\FormStyle.cpp" />
     <ClCompile Include="source\uiCommon.cpp" />
     <ClCompile Include="source\uiDrawer.cpp" />
     <ClCompile Include="source\uiForm.cpp" />
