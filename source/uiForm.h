@@ -16,7 +16,7 @@ class uiWindow;
 struct uiFormStyle;
 
 
-BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y);
+BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y); // Declare this for inline function.
 BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id);
 void uiMonitorEvent();
 
@@ -43,8 +43,6 @@ enum UI_WINDOW_TYPE
 enum FORM_CREATION_FLAG
 {
 	FCF_NONE = 0x00,
-//	FCF_TITLE,
-//	FCF_SIZE,
 
 	FCF_INVISIBLE   = 0x01,
 	FCF_TOOL        = 0x01 << 1,
@@ -53,10 +51,7 @@ enum FORM_CREATION_FLAG
 	FCF_CLIENT_RECT = 0x01 << 3, // Create form with specific client rectangle size.
 };
 
-inline FORM_CREATION_FLAG operator|(FORM_CREATION_FLAG a, FORM_CREATION_FLAG b)
-{
-	return static_cast<FORM_CREATION_FLAG>(static_cast<int>(a) | static_cast<int>(b));
-}
+IMPLEMENT_ENUM_FLAG(FORM_CREATION_FLAG)
 
 enum MOUSE_KEY_TYPE
 {
@@ -67,13 +62,16 @@ enum MOUSE_KEY_TYPE
 	MKT_TOTAL,
 };
 
-enum MOUSE_MOVE_DIRECTION
+enum MOVE_DIRECTION
 {
-	MMD_UP    = 0x01,
-	MMD_DOWN  = 0x01 << 1,
-	MMD_LEFT  = 0x01 << 2,
-	MMD_RIGHT = 0x01 << 3,
+	MOVE_NONE  = 0x00,
+	MOVE_UP    = 0x01,
+	MOVE_DOWN  = 0x01 << 1,
+	MOVE_LEFT  = 0x01 << 2,
+	MOVE_RIGHT = 0x01 << 3,
 };
+
+IMPLEMENT_ENUM_FLAG(MOVE_DIRECTION)
 
 enum FORM_CLASS
 {
@@ -100,6 +98,7 @@ enum FORM_DOCKING_FLAG
 	FDF_AUTO_SIZE = 0x01 << 5,
 };
 
+IMPLEMENT_ENUM_FLAG(FORM_DOCKING_FLAG)
 
 struct stFormSplitter
 {
@@ -140,11 +139,21 @@ public:
 		NCHT_RIGHT  = 0x01 << 3,
 	};
 
+	struct stFormMoveInfo
+	{
+		stFormMoveInfo()
+		:XOffset(0), YOffset(0), MDFlag(MOVE_NONE)
+		{
+		}
+		INT XOffset, YOffset;
+		MOVE_DIRECTION MDFlag;
+	};
+
 	uiFormBase();
 	virtual ~uiFormBase();
 
 //	BOOL Create(uiFormBase *parent, const RECT& rect, FORM_CREATION_FLAG cf);
-	BOOL Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, UINT fcf = FCF_NONE);
+	BOOL Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf = FCF_NONE);
 
 	void Bind(UINT CmdID);
 	void Close();
@@ -160,6 +169,10 @@ public:
 	uiFormBase* SetCapture();
 	BOOL ReleaseCapture();
 
+	BOOL CaretShow(BOOL bShow, INT x = -1, INT y = -1, INT width = -1, INT height = -1);
+	BOOL CaretMoveByOffset(INT OffsetX, INT OffsetY);
+	BOOL CaretMove(INT x, INT y);
+
 	void PopupMenu(INT x, INT y, uiMenu *pMenu);
 
 	virtual FORM_CLASS GetClass() { return FC_BASE; }
@@ -174,12 +187,17 @@ public:
 
 	void StartDragging(INT x, INT y);
 
-	void EntryOnCreate(BOOL bShow);
+	void EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight);
 	BOOL EntryOnClose();
 	void EntryOnDestroy(uiWindow *pWnd);
+	void EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo);
 	void EntryOnPaint(uiDrawer* pDrawer, INT depth);
 	void EntryOnSize(UINT nNewWidth, UINT nNewHeight);
-	
+
+	void EntryOnKBGetFocus();
+	void EntryOnKBLoseFocus();
+
+
 	virtual void EntryOnCommand(UINT id);
 
 	virtual uiSize GetMinSize() { return uiSize(-1, -1); }
@@ -201,8 +219,8 @@ public:
 	virtual void OnMouseEnter(INT x, INT y);
 	virtual void OnMouseLeave();
 	virtual void OnMouseFocusLost();
-	virtual void OnMouseMove(INT x, INT y, UINT mmd); // MOUSE_MOVE_DIRECTION.
-	virtual void OnMove(INT x, INT y);
+	virtual void OnMouseMove(INT x, INT y, UINT mmd);  // MOVE_DIRECTION
+	virtual void OnMove(INT x, INT y, const stFormMoveInfo *pInfo);
 	virtual INT  OnNCHitTest(INT x, INT y);
 	virtual void OnPaint(uiDrawer* pDrawer);
 	virtual void OnFramePaint(uiDrawer* pDrawer);
@@ -210,6 +228,9 @@ public:
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
 
 	virtual BOOL IsDockableForm() const { return FALSE; }
+
+	virtual void OnKBGetFocus() {}
+	virtual void OnKBLoseFocus() {}
 
 
 	INLINE uiFormBase* NextSibling()
@@ -257,11 +278,12 @@ public:
 		if (GetPlate() != nullptr)
 			GetPlate()->ToWindowSpace(this, rect, FALSE);
 	}
-
 	INLINE void ClientToScreen(INT &x, INT &y)
 	{
-		x += m_FrameRect.Left;
-		y += m_FrameRect.Top;
+		uiRect rect;
+		FrameToWindow(rect);
+		x += rect.Left;
+		y += rect.Top;
 		WndClientToScreen(GetBaseWnd(), x, y);
 	}
 
@@ -292,6 +314,7 @@ public:
 	INLINE BOOL IsPointIn(INT x, INT y) const { return m_FrameRect.IsPointIn(x, y); } // Parent space.
 	INLINE BOOL IsMouseHovering() const { return bMouseHover; }
 	INLINE BOOL IsVisible() const { return bShow; }
+	INLINE BOOL IsCreated() const { return bCreated; }
 
 	INLINE uiFormBase* GetParent() const { return m_pParent; }
 	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
@@ -378,12 +401,13 @@ protected:
 
 	BYTE m_DockFlag;
 
+	bool m_bActivated = false;
 	bool bCreated = false;
 	bool bShow = true;
 	bool bMouseHover = false;
+	bool bOwnCaret = false;
 
 	bool m_bSideDocked = false;
-	bool m_bActivated = false;
 
 	// Capabilities.
 //	bool bSizeable = false;
@@ -438,12 +462,12 @@ public:
 
 	INLINE void GenerateMessage()
 	{
-		ASSERT(bCreated);
+		ASSERT(IsCreated());
 		WndCreateMessage(GetBaseWnd(), this, m_ID);
 	}
 	INLINE UINT GetID()
 	{
-		ASSERT(bCreated);
+		ASSERT(IsCreated());
 		return m_ID;
 	}
 	INLINE void SetID(UINT id)
@@ -890,7 +914,7 @@ public:
 	}
 
 
-	BOOL Create(uiFormBase *pParent, UINT TAB_FORM_FLAGS);
+	BOOL Create(uiFormBase *pParent, TAB_FORM_FLAGS tff);
 	BOOL AddPane(uiFormBase *pForm, INT index, BOOL bActivate);
 
 	BOOL DeletePane(INT index);
@@ -913,7 +937,7 @@ public:
 		if (m_HighlightIndex != -1)
 		{
 			if (m_HighlightIndex != m_ActiveIndex)
-				RedrawForm(&GetPaneInfo(m_HighlightIndex)->Rect);
+				RedrawTabs(m_HighlightIndex);
 			m_HighlightIndex = -1;
 		}
 	}
@@ -996,5 +1020,8 @@ private:
 
 
 };
+
+
+IMPLEMENT_ENUM_FLAG(uiTabForm::TAB_FORM_FLAGS)
 
 

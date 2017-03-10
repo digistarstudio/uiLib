@@ -49,36 +49,27 @@ uiFormBase::~uiFormBase()
 }
 
 
-BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, UINT fcf)
+BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf)
 {
+	BOOL bResult = TRUE;
+
 	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
 		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
 	//	printx("CreateTemplateWindow completed!\n");
 
-		m_FrameRect.Init(nWidth, nHeight);
-		m_ClientRect = m_FrameRect;
-
+		bResult = (pWnd != nullptr);
 		if (pAppBaseForm == nullptr)
 			pAppBaseForm = this;
-
 		if (fcf & FCF_CENTER)
 			pWnd->MoveToCenter();
-
-		EntryOnCreate(!(fcf & FCF_INVISIBLE));
-
-		return (pWnd != nullptr);
 	}
-
-	if (fcf & FCF_TOOL)
+	else if (fcf & FCF_TOOL)
 	{
 		ASSERT(parent != nullptr);
 		uiWindow *pWnd = CreateTemplateWindow(UWT_TOOL, this, parent, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
 
-		m_FrameRect.Init(nWidth, nHeight);
-		m_ClientRect = m_FrameRect;
 		parent->AddChild(this);
-
 		if (fcf & FCF_CENTER)
 			pWnd->MoveToCenter();
 	}
@@ -86,7 +77,6 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	{
 		m_FrameRect.SetPos(x, y);
 		m_FrameRect.SetSize(nWidth, nHeight);
-		m_ClientRect.SetSize(nWidth, nHeight);
 		parent->AddChild(this);
 		m_pPlate = parent;
 
@@ -98,9 +88,9 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		ASSERT(0);
 	}
 
-	EntryOnCreate(!(fcf & FCF_INVISIBLE));
+	EntryOnCreate(!(fcf & FCF_INVISIBLE), nWidth, nHeight);
 
-	return TRUE;
+	return bResult;
 }
 
 void uiFormBase::Bind(UINT CmdID)
@@ -143,13 +133,13 @@ void uiFormBase::DePlate()
 
 void uiFormBase::Move(INT x, INT y)
 {
-	if (m_pWnd != nullptr)
+	if (IsRootForm())
 	{
 		m_pWnd->MoveImp(x, y);
 	}
 	else
 	{
-		m_FrameRect.Move(x - m_FrameRect.Left, y - m_FrameRect.Top);
+		MoveByOffset(x - m_FrameRect.Left, y - m_FrameRect.Top);
 	}
 }
 
@@ -174,10 +164,25 @@ void uiFormBase::MoveToCenter()
 
 void uiFormBase::MoveByOffset(INT x, INT y)
 {
-	if (m_pWnd != nullptr)
+	if (IsRootForm())
+	{
 		m_pWnd->MoveByOffsetImp(x, y);
-	else
-		m_FrameRect.Move(x, y);
+		return;
+	}
+
+	if (x == 0 && y == 0)
+		return;
+
+	m_FrameRect.Move(x, y);
+
+	uiFormBase::stFormMoveInfo fmi;
+	fmi.XOffset = x;
+	fmi.YOffset = y;
+	if (x)
+		fmi.MDFlag |= (x > 0) ? MOVE_RIGHT : MOVE_LEFT;
+	if (y)
+		fmi.MDFlag |= (y > 0) ? MOVE_DOWN : MOVE_UP;
+	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &fmi);
 }
 
 void uiFormBase::Show(FORM_SHOW_MODE sm)
@@ -286,6 +291,41 @@ BOOL uiFormBase::ReleaseCapture()
 	return GetBaseWnd()->ReleaseMouseFocus(this);
 }
 
+BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
+{
+	if (!bShow)
+	{
+		GetBaseWnd()->CaretHideImp(this);
+		bOwnCaret = false;
+	}
+	else
+	{
+		ASSERT(width != -1 && height != -1);
+		uiRect rect;
+		ClientToWindow(rect);
+		GetBaseWnd()->CaretShowImp(this, x + rect.Left, y + rect.Top, width, height);
+		bOwnCaret = true;
+	}
+
+	return FALSE;
+}
+
+BOOL uiFormBase::CaretMoveByOffset(INT OffsetX, INT OffsetY)
+{
+	if (!bOwnCaret)
+		return FALSE;
+	return GetBaseWnd()->CaretMoveByOffset(this, OffsetX, OffsetY);
+}
+
+BOOL uiFormBase::CaretMove(INT x, INT y)
+{
+	if (!bOwnCaret)
+		return FALSE;
+
+	uiRect rect;
+	ClientToWindow(rect);
+	return GetBaseWnd()->CaretMoveImp(this, x + rect.Left, y + rect.Top);
+}
 
 void uiFormBase::PopupMenu(INT x, INT y, uiMenu *pMenu)
 {
@@ -463,14 +503,20 @@ void uiFormBase::StartDragging(INT x, INT y)
 	pWnd->StartDraggingImp(this, x, y, rect);
 }
 
-void uiFormBase::EntryOnCreate(BOOL bShow)
+void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 {
 	ASSERT(!bCreated);
 
 	bCreated = true;
-	bShow = (bShow != 0);
+	bShow = (bShowIn != 0);
+
+	m_FrameRect.SetSize(nWidth, nHeight);
+	m_ClientRect.SetSize(nWidth, nHeight);
 	m_pStyle = GetDefaultStyleObject(this);
+
 	OnCreate();
+	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
+	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &stFormMoveInfo());
 }
 
 BOOL uiFormBase::EntryOnClose()
@@ -497,6 +543,14 @@ void uiFormBase::EntryOnDestroy(uiWindow *pWnd)
 	pWnd->OnFormDestroy(this);
 
 	delete this;
+}
+
+void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo)
+{
+	OnMove(x, y, pInfo);
+
+	if (bOwnCaret && !IsBaseForm())
+		CaretMoveByOffset(pInfo->XOffset, pInfo->YOffset);
 }
 
 void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
@@ -552,6 +606,19 @@ void uiFormBase::EntryOnSize(UINT nNewWidth, UINT nNewHeight)
 {
 	m_FrameRect.Resize(nNewWidth, nNewHeight);
 	OnFrameSize(nNewWidth, nNewHeight);
+}
+
+void uiFormBase::EntryOnKBGetFocus()
+{
+	OnKBGetFocus();
+}
+
+void uiFormBase::EntryOnKBLoseFocus()
+{
+	OnKBLoseFocus();
+
+	if (bOwnCaret)
+		CaretShow(FALSE);
 }
 
 void uiFormBase::EntryOnCommand(UINT id)
@@ -645,9 +712,9 @@ void uiFormBase::OnMouseMove(INT x, INT y, UINT mmd)
 {
 }
 
-void uiFormBase::OnMove(INT x, INT y)
+void uiFormBase::OnMove(INT x, INT y, const stFormMoveInfo *pInfo)
 {
-//	printx("---> uiFormBase::OnMove\n");
+//	printx("---> uiFormBase::OnMove x: %d, y: %d.\n", x, y);
 }
 
 INT uiFormBase::OnNCHitTest(INT x, INT y)
@@ -672,6 +739,7 @@ void uiFormBase::OnFramePaint(uiDrawer* pDrawer)
 
 void uiFormBase::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
+	OnSize(nNewWidth, nNewHeight);
 }
 
 void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -716,7 +784,7 @@ void uiHeaderForm::EntryOnCommand(UINT id)
 
 BOOL uiHeaderForm::ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose)
 {
-	ASSERT(bCreated);
+	ASSERT(IsCreated());
 	return TRUE;
 }
 
@@ -1038,7 +1106,7 @@ BOOL uiDockableForm::OnDeplate(INT iReason, uiFormBase *pDockingForm)
 }
 
 
-BOOL uiTabForm::Create(uiFormBase *pParent, UINT TAB_FORM_FLAGS)
+BOOL uiTabForm::Create(uiFormBase *pParent, TAB_FORM_FLAGS tff)
 {
 	uiRect rect;
 //	if (tff & TFF_FULL_FORM)
@@ -1049,7 +1117,7 @@ BOOL uiTabForm::Create(uiFormBase *pParent, UINT TAB_FORM_FLAGS)
 	INT height = rect.Height() - m_TopMargin - m_BottomMargin;
 	BOOL bResult = uiForm::Create(pParent, m_LeftMargin, m_TopMargin, width, height, FCF_NONE);
 
-	m_Flag = TAB_FORM_FLAGS;
+	m_Flag = tff;
 
 	if (m_Flag & TFF_TAB_TOP || m_Flag & TFF_TAB_BOTTOM)
 	{

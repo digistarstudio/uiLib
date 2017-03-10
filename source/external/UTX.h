@@ -30,6 +30,15 @@
 
 #define INLINE inline
 
+#define IMPLEMENT_ENUM_FLAG(ENUM_NAME) \
+INLINE ENUM_NAME operator|(ENUM_NAME a, ENUM_NAME b) \
+{ \
+	return static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
+} \
+INLINE ENUM_NAME& operator|=(ENUM_NAME& a, ENUM_NAME b) \
+{ \
+	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
+}
 
 typedef signed char      INT8, *PINT8;
 typedef signed short     INT16, *PINT16;

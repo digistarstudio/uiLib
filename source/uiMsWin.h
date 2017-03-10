@@ -9,7 +9,7 @@
 #include "uiForm.h"
 
 
-class uiFormBase;
+UINT uiWinGetCurrentMsg();
 
 
 class uiWindow
@@ -30,8 +30,9 @@ public:
 	void OnFormHide(uiFormBase *pForm);
 
 	void CloseImp();
-	BOOL MoveImp(INT x, INT y);
+	BOOL MoveImp(INT scX, INT scY);
 	BOOL MoveByOffsetImp(INT x, INT y);
+	void MoveToCenter();
 	void ShowImp(FORM_SHOW_MODE sm);
 	BOOL SizeImp(UINT nWidth, UINT nHeight);
 	void StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMoveRect);
@@ -39,24 +40,32 @@ public:
 	void ResizeImp(INT x, INT y);
 	void PostMsgHandler(UINT msg);
 	void FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect);
-	void MoveToCenter();
 
+	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
+	BOOL ReleaseMouseFocus(uiFormBase* pForm);
+
+	BOOL CaretShowImp(uiFormBase *pFormBase, INT x, INT y, INT width, INT height);
+	BOOL CaretHideImp(uiFormBase *pFormBase);
+	BOOL CaretMoveImp(uiFormBase *pFormBase, INT x, INT y);
+	BOOL CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY);
+
+	void OnActivate(WPARAM wParam, LPARAM LParam);
 	BOOL OnClose();
 	void OnCreate();
 	void OnDestroy();
 	void OnKeyDown(INT iKey);
 	void OnKeyUp(INT iKey);
-	void OnMove();
+	void OnMove(INT scx, INT scy);
 	void OnNCPaint(HWND hWnd, HRGN hRgn);
 	void OnPaint();
 	BOOL OnSetCursor();
+	void OnGetKBFocus(HWND hOldFocusWnd);
+	void OnLoseKBFocus();
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
 	void OnSizing(INT fwSide, RECT *pRect);
 
-	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
-	BOOL ReleaseMouseFocus(uiFormBase* pForm);
+	LRESULT OnNCHitTest(INT x, INT y);
 
-	INT64 OnNCHitTest(INT x, INT y);
 	BOOL OnLButtonDown(INT x, INT y);
 	BOOL OnLButtonUp(INT x, INT y);
 	void OnMouseCaptureLost();
@@ -71,15 +80,24 @@ public:
 	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
 
-	INLINE HWND GetHandle() const { return (HWND)m_Handle; }
-	INLINE void SetHandle(void *HandleIn) { m_Handle = HandleIn; }
-	INLINE void ClientToScreent(INT& x, INT& y) { POINT pt = { x, y }; ::ClientToScreen((HWND)m_Handle, &pt); x = pt.x; y = pt.y; }
-	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage((HWND)m_Handle, msg, wParam, lParam); }
-	INLINE BOOL UpdateWindow() { return ::UpdateWindow((HWND)m_Handle); }
-	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect((HWND)m_Handle, (LPRECT)&rect); }
-	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow((HWND)m_Handle, nCmdShow); }
-	INLINE HWND SetCapture() { return ::SetCapture((HWND)m_Handle); }
+	INLINE HWND GetHandle() const { return m_Handle; }
+	INLINE void SetHandle(HWND hWnd) { m_Handle = hWnd; }
+	INLINE void ClientToScreen(INT& x, INT& y) { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
+	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
+	INLINE BOOL UpdateWindow() { return ::UpdateWindow(m_Handle); }
+	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
+	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow(m_Handle, nCmdShow); }
+	INLINE HWND SetCapture() { return ::SetCapture(m_Handle); }
 	INLINE BOOL ReleaseCapture() { return ::ReleaseCapture(); }
+
+	// For debugging.
+	// Don't use SetWindowPos to show windows.
+	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { ASSERT(0); }
+	INLINE HWND SetActiveWindow()
+	{
+		ASSERT(uiWinGetCurrentMsg() != WM_KILLFOCUS);
+		return ::SetActiveWindow(m_Handle);
+	}
 
 
 protected:
@@ -100,7 +118,7 @@ protected:
 			tme.cbSize = sizeof(tme);
 			tme.dwFlags = TME_LEAVE; // TME_HOVER | TME_LEAVE
 			tme.dwHoverTime = HOVER_DEFAULT;
-			tme.hwndTrack = (HWND)m_Handle;
+			tme.hwndTrack = m_Handle;
 			VERIFY(::TrackMouseEvent(&tme) != 0);
 			m_bTrackMouseLeave = true;
 			return;
@@ -111,7 +129,7 @@ protected:
 			tme.cbSize = sizeof(tme);
 			tme.dwFlags = TME_LEAVE | TME_CANCEL;
 			tme.dwHoverTime = HOVER_DEFAULT;
-			tme.hwndTrack = (HWND)m_Handle;
+			tme.hwndTrack = m_Handle;
 			VERIFY(::TrackMouseEvent(&tme) != 0);
 			m_bTrackMouseLeave = true;
 		}
@@ -126,7 +144,7 @@ protected:
 	}
 
 
-	void *m_Handle;
+	HWND m_Handle;
 
 	uiFormBase *m_pForm;
 	uiFormBase *m_pHoverForm;
@@ -134,16 +152,17 @@ protected:
 	uiFormBase *m_pMouseFocusForm;
 	uiFormBase *m_pKeyboardFocusForm;
 
-	uiWndDrawer m_Drawer;
-
 	POINT m_LastMousePos;
 	UINT8 m_TrackMouseClick;
 
 	INT m_NonClientArea, m_SizingHitSide;
+	INT m_ScreenCoordinateX, m_ScreenCoordinateY;
 	INT m_MDPosX, m_MDPosY;
 
 	UINT64 m_MouseKeyDownTime[MKT_TOTAL], m_MouseClickTime[MKT_TOTAL];
 	uiFormBase *m_pFirstClickedForm[MKT_TOTAL];
+
+	uiWndDrawer m_Drawer;
 
 	bool m_bTrackMouseLeave = false;
 	bool m_bDragging = false;
@@ -151,7 +170,7 @@ protected:
 	bool bChangeCursor = false;
 	bool bRetrackMouse = false;
 	bool bMouseFocusCaptured = false;
-
+	bool bKBFocusCaptured = false;
 
 };
 
@@ -185,6 +204,59 @@ protected:
 
 	HMENU m_hMenu;
 
+
+};
+
+
+class uiWinCaret
+{
+public:
+
+	uiWinCaret()
+	:m_x(-1), m_y(-1)
+	{
+	}
+	~uiWinCaret() = default;
+
+	INLINE BOOL Destroy()
+	{
+		return ::DestroyCaret();
+	}
+	/*
+	INLINE BOOL Hide(HWND hWnd)
+	{
+		return ::HideCaret(hWnd);
+	}//*/
+	INLINE BOOL SetCaret(HWND hWnd, HBITMAP hBmp, INT width, INT height)
+	{
+		return ::CreateCaret(hWnd, hBmp, width, height);
+	}
+	INLINE BOOL SetPos(INT x, INT y)
+	{
+		if (::SetCaretPos(x, y))
+		{
+			m_x = x; m_y = y;
+			return TRUE;
+		}
+		return FALSE;
+	}
+	INLINE BOOL MoveByOffset(INT OffsetX, INT OffsetY)
+	{
+		return SetPos(OffsetX + m_x, OffsetY + m_y);
+	}
+	INLINE BOOL Show(HWND hWnd, INT x, INT y)
+	{
+		if (::SetCaretPos(x, y) && ::ShowCaret(hWnd))
+		{
+			m_x = x; m_y = y;
+			return TRUE;
+		}
+		return FALSE;
+	}
+
+protected:
+
+	INT m_x, m_y;
 
 };
 

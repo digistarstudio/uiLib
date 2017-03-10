@@ -9,34 +9,62 @@
 #define WM_CUSTOM   (WM_USER + 0x0001)
 #define WM_CTRL_MSG (WM_USER + 0x0002)
 
+#define WM_NOP      (WM_USER + 0x7FFF)
+
 
 std::map<void*, uiWindow*> GWindowsHandleMap;
 
 
-namespace UICore
+BEGIN_NAMESPACE(UICore)
+
+list_head RootList;
+BOOL bSilentMode = FALSE; // Don't create the window using os api if this is true.
+
+uiWindow *pGAppBaseWindow = nullptr;
+
+struct INIT_UI
 {
-	list_head RootList;
-	BOOL bSilentMode = FALSE; // Don't create the window using os api if this is true.
-
-	uiWindow *pGAppBaseWindow = nullptr;
-
-	struct INIT_UI
+	INIT_UI()
 	{
-		INIT_UI()
-		{
-			INIT_LIST_HEAD(&RootList);
-		}
-		~INIT_UI()
-		{
-			ASSERT(GWindowsHandleMap.size() == 0);
-		}
+		INIT_LIST_HEAD(&RootList);
+	}
+	~INIT_UI()
+	{
+		ASSERT(GWindowsHandleMap.size() == 0);
+	}
 
-	};
+};
 
-	INIT_UI init_ui;
-	uiWinCursor GCursor;
+INIT_UI init_ui;
+uiWinCursor GCursor;
+uiWinCaret GCaret;
 
+class WinMsgRecorder
+{
+public:
+
+	WinMsgRecorder() {}
+	~WinMsgRecorder() { m_CurrentMsg = WM_NOP; }
+
+	INLINE void Set(UINT msg) { ASSERT(m_CurrentMsg == WM_NOP); m_CurrentMsg = msg; }
+
+//protected:
+
+	friend UINT uiWinGetCurrentMsg();
+	static UINT m_CurrentMsg;
+
+};
+
+UINT WinMsgRecorder::m_CurrentMsg = WM_NOP; // Not work for recursive message handler currently.
+
+END_NAMESPACE
+
+
+UINT uiWinGetCurrentMsg()
+{
+	return UICore::WinMsgRecorder::m_CurrentMsg;
 }
+
 
 static uiWinCursor& uiGetCursor() { return UICore::GCursor; }
 
@@ -82,7 +110,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	BOOL bProcessed = FALSE;
 	uiWindow *pWnd = nullptr;
 	uiFormBase *pForm;
-	//	RECT rect;
+	UICore::WinMsgRecorder wmr;
 
 	switch (message)
 	{
@@ -90,7 +118,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		pWnd = (uiWindow*)((CREATESTRUCT*)lParam)->lpCreateParams;
 		pWnd->SetHandle(hWnd);
 		WndAddMap(hWnd, pWnd);
-		SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWnd);
+		::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWnd);
 		pWnd->OnCreate();
 		bProcessed = TRUE;
 		break;
@@ -110,6 +138,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	case WM_MOVE:
 	//	LogWndMsg("Msg: WM_MOVE Type:%d X:%d Y:%d\n", wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		bProcessed = TRUE;
 		break;
 
 	case WM_SIZE: // This is sent after size has changed.
@@ -121,14 +152,24 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	case WM_ACTIVATE:
 		LogWndMsg("Msg: WM_ACTIVATE 0x%p 0x%p\n", wParam, lParam);
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnActivate(wParam, lParam);
+		bProcessed = TRUE;
 		break;
 
 	case WM_SETFOCUS:
 	//	LogWndMsg("Msg: WM_SETFOCUS 0x%p 0x%p\n", wParam, lParam);
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnGetKBFocus((HWND)wParam);
+		bProcessed = TRUE;
 		break;
 
 	case WM_KILLFOCUS:
 	//	LogWndMsg("Msg: WM_KILLFOCUS 0x%p 0x%p\n", wParam, lParam);
+		wmr.Set(WM_KILLFOCUS);
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnLoseKBFocus();
+		bProcessed = TRUE;
 		break;
 
 	case WM_PAINT:
@@ -138,10 +179,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		break;
 
 	case WM_CLOSE:
-		LogWndMsg("Msg: WM_CLOSE\n");
-	//	pWnd = uiWindowGet(hWnd);
-	//	if (pWnd->OnClose())
-			DestroyWindow(hWnd);
+		//LogWndMsg("Msg: WM_CLOSE\n");
+		DestroyWindow(hWnd);
+		bProcessed = TRUE;
 		break;
 
 	case WM_ACTIVATEAPP:
@@ -153,17 +193,17 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		lRet = pWnd->OnSetCursor();
 		bProcessed = TRUE;
 		break;
-//*
+
 	case WM_NCHITTEST:
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		pWnd = uiWindowGet(hWnd);
 		pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
 		ScreenToClient(hWnd, &pt);
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", pt.x, pt.y);
-		lRet = (LRESULT)pWnd->OnNCHitTest(pt.x, pt.y);
+		lRet = pWnd->OnNCHitTest(pt.x, pt.y);
 		bProcessed = TRUE;
 		break;
-		//*/
+
 /*
 	case WM_NCPAINT:
 		pWnd = uiWindowGet(hWnd);
@@ -174,11 +214,13 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	case WM_KEYDOWN:
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnKeyDown(0);
+		bProcessed = TRUE;
 		break;
 
 	case WM_KEYUP:
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnKeyUp(0);
+		bProcessed = TRUE;
 		break;
 
 	case WM_COMMAND:
@@ -199,6 +241,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	//	LogWndMsg("Msg: WM_MOUSEMOVE x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		bProcessed = TRUE;
 		break;
 
 	case WM_LBUTTONDOWN:
@@ -251,6 +294,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		pForm = (uiFormBase*)wParam;
 		pWnd = pForm->GetBaseWnd();
 		pForm->EntryOnCommand(lParam); // pForm might be destroyed after calling this method.
+		bProcessed = TRUE;
 		break;
 	}
 
@@ -333,7 +377,7 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 
 BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y)
 {
-	pWnd->ClientToScreent(x, y);
+	pWnd->ClientToScreen(x, y);
 	return TRUE;
 }
 
@@ -373,7 +417,7 @@ uiWindow::~uiWindow()
 BOOL uiWindow::GetUiRect(uiRect &rect)
 {
 	RECT wrect;
-	if (GetClientRect((HWND)m_Handle, &wrect) != 0)
+	if (GetClientRect(m_Handle, &wrect) != 0)
 	{
 		rect.Left = wrect.left;
 		rect.Top = wrect.top;
@@ -386,16 +430,18 @@ BOOL uiWindow::GetUiRect(uiRect &rect)
 
 void uiWindow::OnFormDestroy(uiFormBase *pForm)
 {
-	if (m_pMouseFocusForm == pForm)
-	{
-		m_pMouseFocusForm = nullptr;
-		bRetrackMouse = true;
-	}
 	if (m_pHoverForm == pForm)
 	{
 		m_pHoverForm = nullptr;
 		bRetrackMouse = true;
 	}
+	if (m_pMouseFocusForm == pForm)
+	{
+		m_pMouseFocusForm = nullptr;
+		bRetrackMouse = true;
+	}
+	if (m_pKeyboardFocusForm == pForm)
+		m_pKeyboardFocusForm = nullptr;
 	if (m_pForm == pForm)
 	{
 		m_pForm = nullptr;
@@ -410,26 +456,43 @@ void uiWindow::OnFormHide(uiFormBase *pForm)
 void uiWindow::CloseImp()
 {
 //	TrackMouseLeave(FALSE);
-//	::DestroyWindow((HWND)m_Handle); // Don't call this here.
-	::PostMessage((HWND)m_Handle, WM_CLOSE, NULL, NULL);
-//	PostMessage((HWND)m_Handle, WM_DESTROY, NULL, NULL); // This won't work for tool windows.
+//	::DestroyWindow(m_Handle); // Don't call this here.
+	::PostMessage(m_Handle, WM_CLOSE, NULL, NULL);
+//	PostMessage(m_Handle, WM_DESTROY, NULL, NULL); // This won't work for tool windows.
 }
 
-BOOL uiWindow::MoveImp(INT x, INT y)
+BOOL uiWindow::MoveImp(INT scX, INT scY)
 {
-	return (SetWindowPos((HWND)m_Handle, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER) != 0);
+	if (scX == 0 && scY == 0)
+		return FALSE;
+	return ::SetWindowPos(m_Handle, NULL, scX, scY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
 BOOL uiWindow::MoveByOffsetImp(INT x, INT y)
 {
-	POINT pt = { 0, 0 };
-	::ClientToScreen((HWND)m_Handle, &pt);
-	return (SetWindowPos((HWND)m_Handle, NULL, pt.x + x, pt.y + y, 0, 0, SWP_NOSIZE | SWP_NOZORDER) != 0);
+	return MoveImp(m_ScreenCoordinateX + x, m_ScreenCoordinateY + y);
+}
+
+void uiWindow::MoveToCenter()
+{
+	RECT rect;
+	VERIFY(::SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0) != 0);
+
+	uiRect ur;
+	GetWindowRect(ur);
+	INT mx = (rect.left + rect.right - ur.Width()) / 2;
+	INT my = (rect.top + rect.bottom - ur.Height()) / 2;
+	MoveImp(mx, my);
 }
 
 void uiWindow::ShowImp(FORM_SHOW_MODE sm)
 {
 	INT iCmdShow = SW_SHOW;
+	if (sm != FSM_HIDE && uiWinGetCurrentMsg() == WM_KILLFOCUS)
+	{
+		ASSERT(0);
+		return;
+	}
 
 	switch (sm)
 	{
@@ -455,13 +518,13 @@ void uiWindow::ShowImp(FORM_SHOW_MODE sm)
 BOOL uiWindow::SizeImp(UINT nWidth, UINT nHeight)
 {
 	//	UINT Flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOREDRAW | SWP_NOACTIVATE;
-	return (SetWindowPos((HWND)m_Handle, NULL, 0, 0, nWidth, nHeight, SWP_NOMOVE | SWP_NOZORDER) != 0);
+	return (SetWindowPos(m_Handle, NULL, 0, 0, nWidth, nHeight, SWP_NOMOVE | SWP_NOZORDER) != 0);
 }
 
 void uiWindow::StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMoveRect)
 {
 	if (pForm == m_pForm)
-		::PostMessage((HWND)m_Handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(x, y));
+		::PostMessage(m_Handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(x, y));
 	else
 	{
 		m_bDragging = true;
@@ -469,9 +532,7 @@ void uiWindow::StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMov
 		m_MDPosX = x;
 		m_MDPosY = y;
 
-		POINT pt = { 0, 0 };
-		::ClientToScreen((HWND)m_Handle, &pt);
-		MouseMoveRect.Move(pt.x, pt.y);
+		MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
 		ClipCursor((RECT*)&MouseMoveRect);
 		SetCapture();
 	}
@@ -479,7 +540,7 @@ void uiWindow::StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMov
 
 void uiWindow::RedrawImp(const uiRect* pRect)
 {
-	InvalidateRect((HWND)m_Handle, (const RECT*)pRect, FALSE);
+	InvalidateRect(m_Handle, (const RECT*)pRect, FALSE);
 }
 
 void uiWindow::ResizeImp(INT x, INT y)
@@ -517,7 +578,7 @@ void uiWindow::ResizeImp(INT x, INT y)
 		break;
 	}
 
-	::PostMessage((HWND)m_Handle, WM_NCLBUTTONDOWN, iRegion, MAKELPARAM(x, y));
+	::PostMessage(m_Handle, WM_NCLBUTTONDOWN, iRegion, MAKELPARAM(x, y));
 }
 
 void uiWindow::PostMsgHandler(UINT msg)
@@ -525,8 +586,8 @@ void uiWindow::PostMsgHandler(UINT msg)
 	if (bRetrackMouse)
 	{
 		POINT pt;
-		GetCursorPos(&pt);
-		ScreenToClient((HWND)m_Handle, &pt);
+		::GetCursorPos(&pt);
+		::ScreenToClient(m_Handle, &pt);
 		INT DestX, DestY;
 
 		do
@@ -538,6 +599,28 @@ void uiWindow::PostMsgHandler(UINT msg)
 
 		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing this message.
 	}
+}
+
+void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
+{
+	HWND hActivated = NULL, hDeactivated = NULL;
+
+	switch (LOWORD(wParam))
+	{
+	case WA_INACTIVE:
+		hActivated = (HWND)lParam;
+		break;
+	case WA_ACTIVE:
+		hDeactivated = (HWND)lParam;
+		break;
+	case WA_CLICKACTIVE:
+		hDeactivated = (HWND)lParam;
+		break;
+	}
+//	BOOL bMinimized = HIWORD(wParam);
+
+	if (m_pKeyboardFocusForm == nullptr)
+		m_pKeyboardFocusForm = m_pForm;
 }
 
 BOOL uiWindow::OnClose()
@@ -555,11 +638,11 @@ BOOL uiWindow::OnClose()
 
 void uiWindow::OnCreate()
 {
-	//printx("---> uiWindow::OnCreate\n");
+	printx("---> uiWindow::OnCreate\n");
 
 	uiRect rect;
 	GetUiRect(rect);
-	m_Drawer.InitBackBuffer(2, (HWND)m_Handle, rect.Width(), rect.Height());
+	m_Drawer.InitBackBuffer(2, m_Handle, rect.Width(), rect.Height());
 }
 
 void uiWindow::OnDestroy()
@@ -577,13 +660,30 @@ void uiWindow::OnKeyUp(INT iKey)
 	//printx("---> uiWindow::OnKeyUp\n");
 }
 
-void uiWindow::OnMove()
+void uiWindow::OnMove(INT scx, INT scy)
 {
+	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
+
+	if (m_pForm->IsCreated())
+	{
+		uiFormBase::stFormMoveInfo fmi;
+		fmi.XOffset = scx - m_ScreenCoordinateX;
+		fmi.YOffset = scy - m_ScreenCoordinateY;
+		if (fmi.XOffset)
+			fmi.MDFlag |= (fmi.XOffset > 0) ? MOVE_RIGHT : MOVE_LEFT;
+		if (fmi.YOffset)
+			fmi.MDFlag |= (fmi.YOffset > 0) ? MOVE_DOWN : MOVE_UP;
+		m_pForm->EntryOnMove(scx, scy, &fmi);
+	}
+
+	m_ScreenCoordinateX = scx;
+	m_ScreenCoordinateY = scy;
 }
 
 void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 {
-	HDC hdc;
+	// This doesno't work totally.
+/*	HDC hdc;
 	RECT rect;
 	RGNDATA rdata;
 
@@ -603,6 +703,7 @@ void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 	FillRect(hdc, &rect, (HBRUSH)::GetStockObject(WHITE_BRUSH));
 
 	ReleaseDC(hWnd, hdc);
+	//*/
 }
 
 void uiWindow::OnPaint()
@@ -627,7 +728,7 @@ void uiWindow::OnPaint()
 
 BOOL uiWindow::OnSetCursor()
 {
-	//	printx("---> uiWindow::OnSetCursor.\n");
+	//printx("---> uiWindow::OnSetCursor.\n");
 
 	if (bChangeCursor)
 	{
@@ -638,9 +739,31 @@ BOOL uiWindow::OnSetCursor()
 	return FALSE;
 }
 
+void uiWindow::OnGetKBFocus(HWND hOldFocusWnd)
+{
+	printx("---> uiWindow::OnGetKBFocus. Old focus wnd: %p\n", hOldFocusWnd);
+	ASSERT(!bKBFocusCaptured);
+
+	if (m_pKeyboardFocusForm != nullptr)
+		m_pKeyboardFocusForm->EntryOnKBGetFocus();
+
+	bKBFocusCaptured = true;
+}
+
+void uiWindow::OnLoseKBFocus()
+{
+	printx("---> uiWindow::OnLoseKBFocus.\n");
+	ASSERT(bKBFocusCaptured);
+
+	if (m_pKeyboardFocusForm != nullptr)
+		m_pKeyboardFocusForm->EntryOnKBLoseFocus();
+
+	bKBFocusCaptured = false;
+}
+
 void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 {
-//	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
+	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
 	switch (nType)
 	{
@@ -657,7 +780,8 @@ void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 	}
 
 	m_Drawer.ResizeBackBuffer(nNewWidth, nNewHeight);
-	m_pForm->EntryOnSize(nNewWidth, nNewHeight);
+	if (m_pForm->IsCreated())
+		m_pForm->EntryOnSize(nNewWidth, nNewHeight);
 }
 
 void uiWindow::OnSizing(INT fwSide, RECT *pRect)
@@ -710,55 +834,14 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 	//	m_pForm->OnSizing((uiRect*)pRect);
 }
 
-uiFormBase* uiWindow::CaptureMouseFocus(uiFormBase* pForm)
-{
-	uiFormBase *pOriginalFocusForm = nullptr;
-
-	if (bMouseFocusCaptured)
-	{
-		if (pForm == m_pMouseFocusForm)
-			return m_pMouseFocusForm;
-
-		pOriginalFocusForm = m_pMouseFocusForm;
-		m_pMouseFocusForm->OnMouseFocusLost();
-		m_pMouseFocusForm = pForm;
-		return pOriginalFocusForm;
-	}
-
-	HWND hWnd = SetCapture();
-	if (hWnd != NULL && GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentProcessId())
-	{
-		uiWindow *pWnd = uiWindowGet(hWnd);
-		pOriginalFocusForm = pWnd->m_pMouseFocusForm;
-	}
-	m_pMouseFocusForm = pForm;
-	bMouseFocusCaptured = true;
-
-	return pOriginalFocusForm;
-}
-
-BOOL uiWindow::ReleaseMouseFocus(uiFormBase* pForm)
-{
-	if (!bMouseFocusCaptured)
-		return FALSE;
-
-	if (m_pMouseFocusForm == pForm)
-	{
-		ReleaseCapture();
-		bMouseFocusCaptured = false;
-		return TRUE;
-	}
-	return FALSE;
-}
-
-INT64 uiWindow::OnNCHitTest(INT x, INT y)
+LRESULT uiWindow::OnNCHitTest(INT x, INT y)
 {
 	//	printx("---> uiWindow::OnNCHitTest. X:%d Y:%d\n", x, y);
 
 	if (m_bDragging && !m_bSizing)
 		return HTCLIENT;
 
-	INT64 iRet = HTCLIENT;
+	LRESULT iRet = HTCLIENT;
 	INT iPos, destX, destY, fx = 0, fy = 0;
 	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
 	uiWinCursor &cursor = uiGetCursor();
@@ -819,9 +902,7 @@ BOOL uiWindow::OnLButtonDown(INT x, INT y)
 
 		uiRect MouseMoveRect;
 		m_pDraggingForm->GetPlate()->ClientToWindow(MouseMoveRect);
-		POINT pt = { 0, 0 };
-		::ClientToScreen((HWND)m_Handle, &pt);
-		MouseMoveRect.Move(pt.x, pt.y);
+		MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
 		ClipCursor((RECT*)&MouseMoveRect);
 
 		return TRUE;
@@ -881,7 +962,7 @@ void uiWindow::OnMouseCaptureLost()
 	POINT pt, cpt;
 	GetCursorPos(&pt);
 	cpt = pt;
-	ScreenToClient((HWND)m_Handle, &cpt);
+	ScreenToClient(m_Handle, &cpt);
 	uiRect WndRect;
 	GetWindowRect(WndRect);
 
@@ -917,16 +998,87 @@ void uiWindow::FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect)
 	}
 }
 
-void uiWindow::MoveToCenter()
+uiFormBase* uiWindow::CaptureMouseFocus(uiFormBase* pForm)
 {
-	RECT rect;
-	VERIFY(SystemParametersInfo(SPI_GETWORKAREA, 0, &rect, 0) != 0);
+	uiFormBase *pOriginalFocusForm = nullptr;
 
-	uiRect ur;
-	GetWindowRect(ur);
-	INT mx = (rect.left + rect.right - ur.Width()) / 2;
-	INT my = (rect.top + rect.bottom - ur.Height()) / 2;
-	MoveImp(mx, my);
+	if (bMouseFocusCaptured)
+	{
+		if (pForm == m_pMouseFocusForm)
+			return m_pMouseFocusForm;
+
+		pOriginalFocusForm = m_pMouseFocusForm;
+		m_pMouseFocusForm->OnMouseFocusLost();
+		m_pMouseFocusForm = pForm;
+		return pOriginalFocusForm;
+	}
+
+	HWND hWnd = SetCapture();
+	if (hWnd != NULL && GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentProcessId())
+	{
+		uiWindow *pWnd = uiWindowGet(hWnd);
+		pOriginalFocusForm = pWnd->m_pMouseFocusForm;
+	}
+	m_pMouseFocusForm = pForm;
+	bMouseFocusCaptured = true;
+
+	return pOriginalFocusForm;
+}
+
+BOOL uiWindow::ReleaseMouseFocus(uiFormBase* pForm)
+{
+	if (!bMouseFocusCaptured)
+		return FALSE;
+
+	if (m_pMouseFocusForm == pForm)
+	{
+		ReleaseCapture();
+		bMouseFocusCaptured = false;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+BOOL uiWindow::CaretShowImp(uiFormBase *pFormBase, INT x, INT y, INT width, INT height)
+{
+	if (!bKBFocusCaptured || pFormBase != m_pKeyboardFocusForm)
+	{
+	//	ASSERT(0);
+	//	return FALSE;
+	}
+	if (UICore::GCaret.SetCaret(m_Handle, NULL, width, height))
+		return UICore::GCaret.Show(m_Handle, x, y);
+	return FALSE;
+}
+
+BOOL uiWindow::CaretHideImp(uiFormBase *pFormBase)
+{
+	if (!bKBFocusCaptured || pFormBase != m_pKeyboardFocusForm)
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	return UICore::GCaret.Destroy();
+}
+
+BOOL uiWindow::CaretMoveImp(uiFormBase *pFormBase, INT x, INT y)
+{
+	if (!bKBFocusCaptured || pFormBase != m_pKeyboardFocusForm)
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	return UICore::GCaret.SetPos(x, y);
+}
+
+BOOL uiWindow::CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY)
+{
+	if (!bKBFocusCaptured || pFormBase != m_pKeyboardFocusForm)
+	{
+	//	ASSERT(0);
+	//	return FALSE;
+	}
+	return UICore::GCaret.MoveByOffset(OffsetX, OffsetY);
 }
 
 void uiWindow::OnDragging(INT x, INT y)
@@ -1013,9 +1165,9 @@ void uiWindow::OnMouseMove(UINT nType, INT x, INT y)
 
 	UINT MmdFlags = 0;
 	if (y != m_LastMousePos.y)
-		MmdFlags |= (y - m_LastMousePos.y > 0) ? MMD_DOWN : MMD_UP;
+		MmdFlags |= (y - m_LastMousePos.y > 0) ? MOVE_DOWN : MOVE_UP;
 	if (x != m_LastMousePos.x)
-		MmdFlags |= (x - m_LastMousePos.x > 0) ? MMD_RIGHT : MMD_LEFT;
+		MmdFlags |= (x - m_LastMousePos.x > 0) ? MOVE_RIGHT : MOVE_LEFT;
 	m_LastMousePos.x = x;
 	m_LastMousePos.y = y;
 	m_TrackMouseClick = 0;
