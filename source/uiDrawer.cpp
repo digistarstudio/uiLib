@@ -88,8 +88,12 @@ void uiWndDrawer::Begin(void *pCtx)
 	ASSERT(m_RectList.GetCounts() == 0);
 	ASSERT(m_PaintDC == NULL);
 
-	m_RenderDestRect.Init(m_nWidth, m_nHeight);
-	m_PaintDC = BeginPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
+	PAINTSTRUCT *ps = (PAINTSTRUCT*)pCtx;
+	m_PaintDC = BeginPaint(m_hWnd, ps);
+
+	//m_RenderDestRect.Init(m_nWidth, m_nHeight);
+	m_RenderDestRect = *(uiRect*)(&ps->rcPaint);
+	ASSERT(m_RenderDestRect.IsValidRect());
 
 	m_WndDrawDC.Attach((m_TotalBackBuffer == 0) ? m_PaintDC : m_BackBuffer[m_CurrentBackBufferIndex].GetMemDC());
 }

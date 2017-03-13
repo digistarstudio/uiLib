@@ -35,11 +35,12 @@ public:
 	void MoveToCenter();
 	void ShowImp(FORM_SHOW_MODE sm);
 	BOOL SizeImp(UINT nWidth, UINT nHeight);
-	void StartDraggingImp(uiFormBase *pForm, INT x, INT y, uiRect MouseMoveRect);
+	BOOL StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, INT y, uiRect MouseMoveRect);
 	void RedrawImp(const uiRect* pRect);
 	void ResizeImp(INT x, INT y);
 	void PostMsgHandler(UINT msg);
-	void FormSizing(uiFormBase *pForm, UINT nSide, uiRect *pRect);
+	void FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect);
+	void RetrackMouseCheck(uiFormBase *pFormBase);
 
 	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
 	BOOL ReleaseMouseFocus(uiFormBase* pForm);
@@ -66,23 +67,27 @@ public:
 
 	LRESULT OnNCHitTest(INT x, INT y);
 
-	BOOL OnLButtonDown(INT x, INT y);
-	BOOL OnLButtonUp(INT x, INT y);
+	BOOL DragSizingEventCheck(INT x, INT y);
+	BOOL DragEventForMouseBtnUp(INT wcX, INT wcY);
 	void OnMouseCaptureLost();
 	void OnDragging(INT x, INT y);
 
 	void OnMouseLeave();
-	void OnMouseMove(UINT nType, INT x, INT y);
-	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
-	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
-	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
+	void OnMouseMove(UINT nType, const INT x, const INT y);
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 
 	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
 
+
+	INLINE void RetrackMouse() { if (!m_bDragging) bRetrackMouse = true; }
+
 	INLINE HWND GetHandle() const { return m_Handle; }
 	INLINE void SetHandle(HWND hWnd) { m_Handle = hWnd; }
 	INLINE void ClientToScreen(INT& x, INT& y) { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
+	INLINE void ScreenToClient(INT& x, INT& y) { x -= m_ScreenCoordinateX; y -= m_ScreenCoordinateY; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
 	INLINE BOOL UpdateWindow() { return ::UpdateWindow(m_Handle); }
 	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
@@ -137,7 +142,7 @@ protected:
 
 	UINT64 GetTimeStamp()
 	{
-		//	return timeGetTime();
+		//return timeGetTime();
 		FILETIME filetime;
 		GetSystemTimeAsFileTime(&filetime);
 		return ((((UINT64)filetime.dwHighDateTime) << 32) + filetime.dwLowDateTime) / 10000; // Convert to millisecond.
@@ -159,7 +164,8 @@ protected:
 	INT m_ScreenCoordinateX, m_ScreenCoordinateY;
 	INT m_MDPosX, m_MDPosY;
 
-	UINT64 m_MouseKeyDownTime[MKT_TOTAL], m_MouseClickTime[MKT_TOTAL];
+	MOUSE_KEY_TYPE m_MouseDragKey;
+	UINT64 m_MouseKeyDownTime[MKT_TOTAL];
 	uiFormBase *m_pFirstClickedForm[MKT_TOTAL];
 
 	uiWndDrawer m_Drawer;
@@ -171,6 +177,7 @@ protected:
 	bool bRetrackMouse = false;
 	bool bMouseFocusCaptured = false;
 	bool bKBFocusCaptured = false;
+
 
 };
 
@@ -283,6 +290,8 @@ public:
 	void Set(CURSOR_TYPE type);
 	void Update();
 	void StartSizing(BOOL bComplete);
+
+	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }
 
 
 protected:

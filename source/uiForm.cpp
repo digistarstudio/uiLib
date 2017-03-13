@@ -36,6 +36,7 @@ uiFormBase::uiFormBase()
 	m_pWnd = nullptr;
 	m_pPlate = nullptr;
 	m_pParent = nullptr;
+	m_pStyle = nullptr;
 
 	INIT_LIST_HEAD(&m_ListChildren);
 	INIT_LIST_ENTRY(&m_ListChildrenEntry);
@@ -81,7 +82,12 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		m_pPlate = parent;
 
 		if (fcf & FCF_CENTER)
-			MoveToCenter();
+		{
+			if (parent->IsCreating())
+				parent->AddPostCreateEvent(this);
+			else
+				MoveToCenter();
+		}
 	}
 	else
 	{
@@ -154,7 +160,7 @@ void uiFormBase::MoveToCenter()
 		uiRect rect = m_pPlate->GetClientRect(), FrameRect = GetFrameRect();
 		INT mx = (rect.Width() - FrameRect.Width()) / 2;
 		INT my = (rect.Height() - FrameRect.Height()) / 2;
-		Move(mx, my);
+		MoveByOffset(mx - m_FrameRect.Left, my - m_FrameRect.Top);
 	}
 	else
 	{
@@ -162,27 +168,37 @@ void uiFormBase::MoveToCenter()
 	}
 }
 
-void uiFormBase::MoveByOffset(INT x, INT y)
+void uiFormBase::MoveByOffset(const INT OffsetX, const INT OffsetY, BOOL bForceRedraw)
 {
 	if (IsRootForm())
 	{
-		m_pWnd->MoveByOffsetImp(x, y);
+		m_pWnd->MoveByOffsetImp(OffsetX, OffsetY);
 		return;
 	}
 
-	if (x == 0 && y == 0)
+	if (OffsetX == 0 && OffsetY == 0)
 		return;
 
-	m_FrameRect.Move(x, y);
+	uiRect oldFrame = m_FrameRect;
+	m_FrameRect.Move(OffsetX, OffsetY);
 
 	uiFormBase::stFormMoveInfo fmi;
-	fmi.XOffset = x;
-	fmi.YOffset = y;
-	if (x)
-		fmi.MDFlag |= (x > 0) ? MOVE_RIGHT : MOVE_LEFT;
-	if (y)
-		fmi.MDFlag |= (y > 0) ? MOVE_DOWN : MOVE_UP;
+	fmi.XOffset = OffsetX;
+	fmi.YOffset = OffsetY;
+	if (OffsetX)
+		fmi.MDFlag |= (OffsetX > 0) ? MOVE_RIGHT : MOVE_LEFT;
+	if (OffsetY)
+		fmi.MDFlag |= (OffsetY > 0) ? MOVE_DOWN : MOVE_UP;
 	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &fmi);
+
+	GetBaseWnd()->RetrackMouseCheck(this); // Check after rectangle was updated.
+
+	if (bForceRedraw || CheckVisibility())
+	{
+	//	oldFrame.UnionWith(m_FrameRect); // Windows support multi-region clipping.
+		RedrawFrame(&oldFrame);
+		RedrawFrame(&m_FrameRect);
+	}
 }
 
 void uiFormBase::Show(FORM_SHOW_MODE sm)
@@ -215,26 +231,31 @@ void uiFormBase::Show(FORM_SHOW_MODE sm)
 	}
 }
 
-BOOL uiFormBase::Size(INT nWidth, INT nHeight)
+BOOL uiFormBase::Size(INT NewWidth, INT NewHeight)
 {
-	if (nWidth < 0 && nHeight < 0)
+	if (NewWidth < 0 && NewHeight < 0)
 		return FALSE;
 
-	if (nWidth < 0)
-		nWidth = m_FrameRect.Width();
-	if (nHeight < 0)
-		nHeight = m_FrameRect.Height();
+	if (NewWidth < 0)
+		NewWidth = m_FrameRect.Width();
+	if (NewHeight < 0)
+		NewHeight = m_FrameRect.Height();
 
 	if (m_pWnd != nullptr)
-		m_pWnd->SizeImp(nWidth, nHeight);
+		m_pWnd->SizeImp(NewWidth, NewHeight);
 
-	m_FrameRect.SetWidth(nWidth);
-	m_FrameRect.SetHeight(nHeight);
+	uiRect oldFrame = m_FrameRect;
+	m_FrameRect.SetSize(NewWidth, NewHeight);
+	OnFrameSize(NewWidth, NewHeight);
 
-	m_ClientRect.SetWidth(nWidth);
-	m_ClientRect.SetHeight(nHeight);
+	GetBaseWnd()->RetrackMouseCheck(this); // Check after rectangle was updated.
 
-	OnSize(nWidth, nHeight);
+	if (CheckVisibility())
+	{
+	//	oldFrame.UnionWith(m_FrameRect);
+		RedrawFrame(&oldFrame);
+		RedrawFrame(&m_FrameRect);
+	}
 
 	return TRUE;
 }
@@ -481,11 +502,11 @@ void uiFormBase::ToWindowSpace(uiFormBase *pForm, INT &x, INT &y)
 		y = y + m_FrameRect.Top + m_ClientRect.Top;
 	}
 
-	if (m_pPlate != nullptr)
-		m_pPlate->ToWindowSpace(this, x, y);
+	if (GetPlate() != nullptr)
+		GetPlate()->ToWindowSpace(this, x, y);
 }
 
-void uiFormBase::StartDragging(INT x, INT y)
+void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 {
 	uiRect rect;
 	if (GetPlate() != nullptr)
@@ -500,23 +521,38 @@ void uiFormBase::StartDragging(INT x, INT y)
 	}
 
 	uiWindow *pWnd = GetBaseWnd();
-	pWnd->StartDraggingImp(this, x, y, rect);
+	pWnd->StartDraggingImp(this, mkt, wcX, wcY, rect);
 }
 
 void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 {
-	ASSERT(!bCreated);
+	ASSERT(!bCreated && !bCreating);
 
-	bCreated = true;
-	bShow = (bShowIn != 0);
+	UTX::CSimpleList PostCreateList;
+	SetPostCreateList(&PostCreateList);
 
+	bCreating = true;
 	m_FrameRect.SetSize(nWidth, nHeight);
-	m_ClientRect.SetSize(nWidth, nHeight);
-	m_pStyle = GetDefaultStyleObject(this);
+	m_ClientRect.SetSize(nWidth, nHeight); // Must set the default size for the client rectangle.
 
 	OnCreate();
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
 	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &stFormMoveInfo());
+
+	uiFormBase* pFormBase;
+	for (; PostCreateList.size();)
+	{
+		pFormBase = (uiFormBase*)PostCreateList.pop_back();
+		pFormBase->MoveToCenter();
+	}
+	ASSERT(PostCreateList.size() == 0);
+
+	// CleanPostCreateList();
+	m_pStyle = GetDefaultStyleObject(this);
+
+	bCreated = true;
+	bCreating = false;
+	bShow = (bShowIn != 0); // Put this at last to prevent move and size functions calling RedrawForm.
 }
 
 BOOL uiFormBase::EntryOnClose()
@@ -573,9 +609,6 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 			}
 		}
 	}
-
-	if (m_ClientRect.Width() <= 0 || m_ClientRect.Height() <= 0)
-		return;
 
 	if (pDrawer->PushDestRect(m_ClientRect))
 	{
@@ -708,7 +741,7 @@ void uiFormBase::OnMouseFocusLost()
 {
 }
 
-void uiFormBase::OnMouseMove(INT x, INT y, UINT mmd)
+void uiFormBase::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 }
 
@@ -739,7 +772,7 @@ void uiFormBase::OnFramePaint(uiDrawer* pDrawer)
 
 void uiFormBase::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
-	OnSize(nNewWidth, nNewHeight);
+	SetClientRect(uiRect(nNewWidth, nNewHeight));
 }
 
 void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -749,6 +782,11 @@ void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
 //	printx("---> Frame x:%d y:%d x2:%d y2:%d (Width: %d Height: %d)\n",
 //		m_FrameRect.Left, m_FrameRect.Top, m_FrameRect.Right, m_FrameRect.Bottom, m_FrameRect.Width(), m_FrameRect.Height());
 }
+
+//void uiFormBase::AddPostCreate(uiFormBase* pFormBase)
+//{
+//	((UTX::CSimpleList*)m_pStyle)->push_front(pFormBase);
+//}
 
 
 BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
@@ -791,10 +829,20 @@ BOOL uiHeaderForm::ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose)
 void uiHeaderForm::OnMouseEnter(INT x, INT y)
 {
 	printx("---> uiHeaderForm::OnMouseEnter\n");
+//	ClientToWindow(x, y);
+//	GetParent()->StartDragging(MKT_LEFT, x, y);
+	if (GetKeyState(VK_F3) < 0)
+	//	GetParent()->Close();
+	//	GetParent()->MoveByOffset(0, -50);
+		GetParent()->Size(100, 50);
 }
+
 void uiHeaderForm::OnMouseLeave()
 {
 	printx("---> uiHeaderForm::OnMouseLeave\n");
+
+	if (GetKeyState(VK_F3) < 0)
+		GetParent()->MoveByOffset(0, 5);
 }
 
 void uiHeaderForm::OnCreate()
@@ -818,7 +866,7 @@ void uiHeaderForm::OnCreate()
 	UpdateLayout(rect.Width(), rect.Height());
 }
 
-void uiHeaderForm::OnMouseMove(INT x, INT y, UINT mmd)
+void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 }
 
@@ -826,19 +874,25 @@ void uiHeaderForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 {
 	printx("---> uiHeaderForm::OnMouseBtnDown\n");
 
-	if (KeyType == MKT_LEFT)
-	{
-		uiRect rect;
-		FrameToWindow(rect);
-		x = rect.Left + m_ClientRect.Left + x;
-		y = rect.Top + m_ClientRect.Top + y;
+	ClientToWindow(x, y);
 
-		GetParent()->StartDragging(x, y);
+	switch (KeyType)
+	{
+	case MKT_LEFT:
+		GetParent()->StartDragging(MKT_LEFT, x, y);
+		break;
+	case MKT_MIDDLE:
+	//	GetParent()->StartDragging(MKT_MIDDLE, x, y);
+		break;
+	case MKT_RIGHT:
+	//	GetParent()->StartDragging(MKT_RIGHT, x, y);
+		break;
 	}
 }
 
 void uiHeaderForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 {
+	//printx("---> uiHeaderForm::OnMouseBtnUp\n");
 }
 
 void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
@@ -855,6 +909,7 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 
 void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
 {
+//	printx("---> uiHeaderForm::OnSize. Width: %d, Height: %d\n", nNewWidth, nNewHeight);
 	UpdateLayout(nNewWidth, nNewHeight);
 }
 
@@ -874,10 +929,6 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 	}
 }
 
-
-void uiForm::OnSizing(uiRect* pRect)
-{
-}
 
 BOOL uiForm::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 {
@@ -904,14 +955,15 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 {
 	ASSERT(!pDockingForm->m_bSideDocked);
 
-	uiRect rect = m_ClientRect;
+	const uiRect& ClientRect = GetClientRectFS();
+	uiRect rect = ClientRect;
 
 	UINT DockingLocation = fdf & 0x0f;
 	switch (DockingLocation)
 	{
 	case FDF_TOP:
 		rect.Inflate(0, -pDockingForm->m_FrameRect.Height(), 0, 0);
-		pDockingForm->Move(m_ClientRect.Left, m_ClientRect.Top);
+		pDockingForm->Move(ClientRect.Left, ClientRect.Top);
 		if (fdf & FDF_AUTO_SIZE)
 			pDockingForm->Size(rect.Width(), -1);
 		break;
@@ -937,7 +989,7 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 	ASSERT(pDockingForm->GetParent() == this);
 	m_SideDockedFormList.push_back(pDockingForm);
 
-	m_ClientRect = rect;
+	SetClientRect(rect);
 	RedrawForm();
 
 	return TRUE;
@@ -945,7 +997,6 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 
 void uiForm::OnCreate()
 {
-	m_ClientRect.Inflate(-FRAME_WIDTH, -FRAME_WIDTH);
 }
 
 BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm)
@@ -961,7 +1012,7 @@ BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm)
 	m_minSize.iHeight = HeaderHeight + 2 * BorderWidth;
 	m_minSize.iWidth = 150;
 
-	SideDock(pHeaderForm, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
+	SideDock(pHeaderForm, FDF_TOP | FDF_AUTO_SIZE);
 
 	return FALSE;
 }
@@ -1034,9 +1085,12 @@ void uiForm::UpdataClientRect()
 		switch (DockingLocation)
 		{
 		case FDF_TOP:
-			rect.Inflate(0, -pForm->m_FrameRect.Height(), 0, 0);
 			if (pForm->m_DockFlag & FDF_AUTO_SIZE)
+			{
+				pForm->Move(rect.Left, rect.Top);
 				pForm->Size(rect.Width(), -1);
+			}
+			rect.Inflate(0, -pForm->m_FrameRect.Height(), 0, 0);
 			break;
 		case FDF_BOTTOM:
 			rect.Inflate(0, 0, 0, -pForm->m_FrameRect.Height());
@@ -1052,32 +1106,29 @@ void uiForm::UpdataClientRect()
 		}
 	}
 
-	if (rect != m_ClientRect)
-	{
-		m_ClientRect = rect;
-		OnSize(rect.Width(), rect.Height());
-	}
+	if (rect != GetClientRectFS())
+		SetClientRect(rect);
 }
 
 
 void uiFrame::OnCreate()
 {
 	//	m_ClientRect.Move(2, 2);
-	m_ClientRect.Inflate(-2, -2);
+	//m_ClientRect.Inflate(-2, -2);
 
 }
 
 void uiFrame::OnFramePaint(uiDrawer* pDrawer)
 {
-	uiRect rect = m_FrameRect;
+//	uiRect rect = m_FrameRect;
 
-	DWORD color = GetSysColor(COLOR_ACTIVECAPTION);
+//	DWORD color = GetSysColor(COLOR_ACTIVECAPTION);
 	//pDrawer->FillRect(rect, color);
-	pDrawer->FillRect(rect, RGB(GetRValue(color), GetGValue(color), GetBValue(color)));
+//	pDrawer->FillRect(rect, RGB(GetRValue(color), GetGValue(color), GetBValue(color)));
 	//	pDrawer->FillRect(rect, RGB(255, 255, 255));
 }
 
-void uiFrame::OnMouseMove(INT x, INT y, UINT mmd)
+void uiFrame::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 	printx("uiFrame::OnMouseMove x: %d, y: %d\n", x, y);
 
@@ -1413,7 +1464,7 @@ void uiTabForm::GetBufferRect(const uiRect &OldRect, const uiRect &NewRect, uiRe
 	}
 }
 
-void uiTabForm::OnMouseMove(INT x, INT y, UINT mmd)
+void uiTabForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 //	printx("---> uiTabForm::OnMouseMove client pos x:%d, y:%d.\n", x, y);
 	if (!m_TotalPane)

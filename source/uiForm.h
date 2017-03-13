@@ -21,7 +21,6 @@ BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id);
 void uiMonitorEvent();
 
 
-
 enum FORM_SHOW_MODE
 {
 	FSM_HIDE,
@@ -45,21 +44,23 @@ enum FORM_CREATION_FLAG
 	FCF_NONE = 0x00,
 
 	FCF_INVISIBLE   = 0x01,
-	FCF_TOOL        = 0x01 << 1,
+	FCF_POPUP       = 0x01 << 1,
+	FCF_TOOL        = 0x01 << 2,
 
-	FCF_CENTER      = 0x01 << 2,
-	FCF_CLIENT_RECT = 0x01 << 3, // Create form with specific client rectangle size.
+	FCF_CENTER      = 0x01 << 3,
+	FCF_CLIENT_RECT = 0x01 << 4, // Create form with specific client rectangle size.
 };
 
 IMPLEMENT_ENUM_FLAG(FORM_CREATION_FLAG)
 
 enum MOUSE_KEY_TYPE
 {
-	MKT_LEFT,
+	MKT_LEFT = 0,
 	MKT_MIDDLE,
 	MKT_RIGHT,
 
 	MKT_TOTAL,
+	MKT_NONE,
 };
 
 enum MOVE_DIRECTION
@@ -160,9 +161,9 @@ public:
 	void DePlate();
 	void Move(INT x, INT y);
 	void MoveToCenter();
-	void MoveByOffset(INT x, INT y);
+	void MoveByOffset(const INT OffsetX, const INT OffsetY, BOOL bForceRedraw = FALSE);
 	void Show(FORM_SHOW_MODE sm);
-	BOOL Size(INT nWidth, INT nHeight);
+	BOOL Size(INT NewWidth, INT NewHeight);
 	void RedrawForm(const uiRect *pUpdateRect = nullptr);
 	void RedrawFrame(const uiRect *pUpdateRect = nullptr);
 
@@ -185,7 +186,7 @@ public:
 	virtual void ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip);
 	virtual void ToWindowSpace(uiFormBase *pForm, INT &x, INT &y);
 
-	void StartDragging(INT x, INT y);
+	void StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY);
 
 	void EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight);
 	BOOL EntryOnClose();
@@ -219,7 +220,7 @@ public:
 	virtual void OnMouseEnter(INT x, INT y);
 	virtual void OnMouseLeave();
 	virtual void OnMouseFocusLost();
-	virtual void OnMouseMove(INT x, INT y, UINT mmd);  // MOVE_DIRECTION
+	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	virtual void OnMove(INT x, INT y, const stFormMoveInfo *pInfo);
 	virtual INT  OnNCHitTest(INT x, INT y);
 	virtual void OnPaint(uiDrawer* pDrawer);
@@ -278,26 +279,26 @@ public:
 		if (GetPlate() != nullptr)
 			GetPlate()->ToWindowSpace(this, rect, FALSE);
 	}
+	INLINE void ClientToWindow(INT& x, INT& y)
+	{
+		x += (m_ClientRect.Left + m_FrameRect.Left);
+		y += (m_ClientRect.Top + m_FrameRect.Top);
+		if (GetPlate() != nullptr)
+			GetPlate()->ToWindowSpace(this, x, y);
+	}
 	INLINE void ClientToScreen(INT &x, INT &y)
 	{
-		uiRect rect;
-		FrameToWindow(rect);
-		x += rect.Left;
-		y += rect.Top;
+		ClientToWindow(x, y);
 		WndClientToScreen(GetBaseWnd(), x, y);
 	}
-
-	INLINE BOOL WindowToFrame(INT &x, INT &y) // return TRUE if point is in the frame rectangle.
+	INLINE void WindowToClient(INT& x, INT& y)
 	{
-		INT tx = 0, ty = 0;
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, tx, ty);
-		x -= tx;
-		y -= ty;
-		BOOL bResult = m_FrameRect.IsPointIn(x, y);
-		ParentToFrameSpace(x, y);
-		return bResult;
+		INT cx = 0, cy = 0;
+		ClientToWindow(cx, cy);
+		x -= cx;
+		y -= cy;
 	}
+
 
 	INLINE void ParentToFrameSpace(INT &x, INT &y) { x -= m_FrameRect.Left; y -= m_FrameRect.Top; }
 	INLINE void FrameToParentSpace(INT &x, INT &y) { x += m_FrameRect.Left; y += m_FrameRect.Top; }
@@ -315,6 +316,7 @@ public:
 	INLINE BOOL IsMouseHovering() const { return bMouseHover; }
 	INLINE BOOL IsVisible() const { return bShow; }
 	INLINE BOOL IsCreated() const { return bCreated; }
+	INLINE BOOL IsCreating() const { return bCreating; }
 
 	INLINE uiFormBase* GetParent() const { return m_pParent; }
 	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
@@ -335,6 +337,15 @@ public:
 		}
 		return FALSE;
 	}
+
+	BOOL CheckVisibility()
+	{
+		for (uiFormBase *pPlate = this; pPlate != nullptr; pPlate = pPlate->GetPlate())
+			if (!pPlate->IsVisible())
+				return FALSE;
+		return TRUE;
+	}
+
 
 	enum CAP_TYPE
 	{
@@ -361,6 +372,19 @@ public:
 
 protected:
 
+	uiWindow* GetBaseWnd()
+	{
+		uiFormBase *pPlate = GetPlate();
+		if (pPlate == nullptr)
+			return m_pWnd;
+		for (; pPlate->GetPlate() != nullptr; pPlate = pPlate->GetPlate());
+		return pPlate->m_pWnd;
+	}
+	const uiRect& GetClientRectFS() const { return m_ClientRect; }
+
+
+private:
+
 	static uiFormBase* pAppBaseForm;
 
 //	friend uiFormBase* FindFromSplitter(stFormSplitter *pSplitter, INT x, INT y);
@@ -372,16 +396,21 @@ protected:
 	friend class uiForm;
 	friend class uiWindow;
 
-	uiWindow* GetBaseWnd()
-	{
-		uiFormBase *pPlate = GetPlate();
-		if (pPlate == nullptr)
-			return m_pWnd;
-		for (; pPlate->GetPlate() != nullptr; pPlate = pPlate->GetPlate());
-		return pPlate->m_pWnd;
-	}
 
+	void SetClientRect(uiRect& NewRect)
+	{
+		if (NewRect != m_ClientRect)
+		{
+			if (NewRect.Width() != m_ClientRect.Width() || NewRect.Height() != m_ClientRect.Height())
+				OnSize(NewRect.Width(), NewRect.Height());
+			m_ClientRect = NewRect;
+		}
+	}
 	INLINE std::vector<UINT>& GetIDList() { return m_IDList; }
+
+	INLINE void SetPostCreateList(void *pList) { ASSERT(m_pStyle == nullptr); m_pStyle = (uiFormStyle*)pList; }
+	INLINE void CleanPostCreateList() { m_pStyle = nullptr; }
+	INLINE void AddPostCreateEvent(uiFormBase* pFormBase) { ((UTX::CSimpleList*)m_pStyle)->push_front(pFormBase); }
 
 
 	uiWindow    *m_pWnd;
@@ -402,11 +431,11 @@ protected:
 	BYTE m_DockFlag;
 
 	bool m_bActivated = false;
+	bool bCreating = false;
 	bool bCreated = false;
-	bool bShow = true;
+	bool bShow = false;
 	bool bMouseHover = false;
 	bool bOwnCaret = false;
-
 	bool m_bSideDocked = false;
 
 	// Capabilities.
@@ -506,16 +535,17 @@ public:
 	}
 	void OnMouseLeave()
 	{
-	//	printx("---> uiButton::OnMouseLeave\n");
+		printx("---> uiButton::OnMouseLeave\n");
 		RedrawForm();
 	}
-	void OnMouseMove(INT x, INT y, UINT mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
 		//	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y);
 	}
 
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	{
+		printx("---> uiButton::OnMouseBtnDown. Client pos x:%d, y:%d\n", x, y);
 		if (KeyType == MKT_LEFT)
 			m_bMouseDown = true;
 	}
@@ -560,7 +590,7 @@ public:
 
 protected:
 
-	bool m_bMouseDown;
+	bool m_bMouseDown = false;
 
 
 };
@@ -617,7 +647,7 @@ public:
 				pDrawer->FillRect(m_RectArray[i], RGB(220, 220, 220));
 		}
 	}
-	virtual void OnMouseMove(INT x, INT y, UINT mmd)
+	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
 	//	printx("---> uiMenuBar::OnMouseMove\n");
 		if (m_Count == 0)
@@ -678,13 +708,23 @@ public:
 	void OnMouseLeave();
 
 	void OnCreate();
-	void OnMouseMove(INT x, INT y, UINT mmd);
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 
+	//void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	//{
+	//	printx("---> uiHeaderForm::OnMouseBtnClk\n");
+
+	//}
+	//void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	//{
+	//	printx("---> uiHeaderForm::OnMouseBtnDbClk\n");
+	//}
+
+
 	void OnPaint(uiDrawer* pDrawer);
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
-
 
 
 protected:
@@ -741,7 +781,7 @@ public:
 	virtual void OnPaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
-	virtual void OnSizing(uiRect* pRect);
+
 
 	virtual uiSize GetMinSize() { return m_minSize; }
 	virtual uiSize GetMaxSize() { return m_maxSize; }
@@ -752,7 +792,6 @@ public:
 protected:
 
 	uiFormBase *m_pDockingPlate;
-	uiFormStyle *m_pStyle;
 	stFormSplitter *m_pFormSplitter;
 
 	UTX::CSimpleList m_SideDockedFormList;
@@ -774,7 +813,7 @@ public:
 
 	void OnCreate();
 	void OnFramePaint(uiDrawer* pDrawer);
-	void OnMouseMove(INT x, INT y, UINT mmd);
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	void OnPaint(uiDrawer* pDrawer);
 
 
@@ -797,7 +836,7 @@ public:
 	{
 	}
 
-	void OnMouseMove(INT x, INT y, UINT mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
 		INT sx = x, sy = y;
 		ClientToScreen(sx, sy);
@@ -823,7 +862,7 @@ public:
 
 	void OnPaint(uiDrawer* pDrawer)
 	{
-		printx("---> uiButton2::OnPaint\n");
+	//	printx("---> uiButton2::OnPaint\n");
 		uiRect rect = GetClientRect();
 		const INT size = 3;
 
@@ -947,10 +986,15 @@ public:
 		m_bDraggingTab = false;
 	}
 
+	void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	{
+		printx("---> uiTabForm::OnMouseBtnClk x: %d, y: %d\n", x, y);
+	}
+
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void GetBufferRect(const uiRect &OldRect, const uiRect &NewRect, uiRect &out);
-	void OnMouseMove(INT x, INT y, UINT mmd);
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
 	void OnPaint(uiDrawer* pDrawer);
 

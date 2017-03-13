@@ -236,23 +236,25 @@ public:
 		SetHeaderBar(_T("test"));
 	//	SetMenuBar(nullptr);
 
+//*
 		m_pButton = new uiButton;
-		m_pButton->Create(this, 60, 60, 50, 50);
+		m_pButton->Create(this, 150, 60, 50, 50);
 
 		m_pButton2 = new uiButton2;
-		m_pButton2->Create(this, 60, 120, 50, 50);
-
-		m_pButton3 = new uiButton;
-		m_pButton3->Create(this, 250, 120, 50, 50);
+		m_pButton2->Create(this, 150, 120, 50, 50);
 
 		m_pSubForm = new CFormEx;
 		m_pSubForm->Create(this, 150, 150, 170, 200);
 		//m_pSubForm->MoveToCenter();
 
+		m_pButton3 = new uiButton;
+	//	m_pButton3->Create(this, 250, 120, 50, 50);
+		m_pButton3->Create(this, 150, 120, 50, 50);
+
 		Bind(m_pButton->GetID());
 		Bind(m_pButton2->GetID());
 		Bind(m_pButton3->GetID());
-		Bind(uiID_CLOSE);
+		Bind(uiID_CLOSE); //*/
 
 		VERIFY(m_menu.CreatePopupMenu());
 		VERIFY(m_menu.InsertItem(_T("Test item 1"), 2, 1));
@@ -312,8 +314,8 @@ public:
 		{
 			printx("Button 3 was clicked!\n");
 
-		//	MoveByOffset(20, -20);
-			CaretShow(TRUE, 0, 0, 5, 15);
+			m_pButton3->MoveByOffset(60, 60);
+		//	CaretShow(TRUE, 0, 0, 5, 15);
 		}
 
 		if (id == uiID_CLOSE)

@@ -28,6 +28,7 @@ struct uiSize
 
 struct uiPoint
 {
+	uiPoint() = default;
 	uiPoint(INT ix, INT iy):x(ix), y(iy) {}
 	INT x, y;
 };
@@ -41,6 +42,12 @@ struct uiRect
 		Top = top;
 		Right = right;
 		Bottom = bottom;
+	}
+	uiRect(INT width, INT height)
+	{
+		Left = Top = 0;
+		Right = width;
+		Bottom = height;
 	}
 	uiRect(const uiRect& rectIn) = default;
 
@@ -67,6 +74,7 @@ struct uiRect
 	INLINE void Move(INT x, INT y) { Left += x; Right += x; Top += y; Bottom += y; }
 
 	INLINE BOOL IsPointIn(INT x, INT y) const { return (Left <= x && x < Right) && (Top <= y && y < Bottom); }
+	INLINE BOOL IsPointIn(const uiPoint& pt) const { return (Left <= pt.x && pt.x < Right) && (Top <= pt.y && pt.y < Bottom); }
 	INLINE BOOL IsEmpty() const { return (!Left && !Right && !Top && !Bottom); }
 
 	INLINE uiPoint GetLeftTop() const { return uiPoint(Left, Top); }

@@ -17,6 +17,19 @@ enum SYS_COLOR_NAME
 UINT32 uiGetSysColor(INT index);
 
 
+class uiImage
+{
+public:
+
+	uiImage() = default;
+	~uiImage() = default;
+
+
+
+
+};
+
+
 class uiDrawer
 {
 public:
@@ -39,8 +52,7 @@ public:
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
-	INLINE void SetUpdateRect(const uiRect *pRect) { ASSERT(!m_OriginX && !m_OriginY); m_RenderDestRect = *pRect; }
-	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
+//	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 
 
 protected:
