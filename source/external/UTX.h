@@ -40,6 +40,10 @@ INLINE ENUM_NAME& operator|=(ENUM_NAME& a, ENUM_NAME b) \
 	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
 }
 
+#define TYPE_MAX_VALUE(variable) (std::numeric_limits<typeid(variable)>::max())
+#define TYPE_MIN_VALUE(variable) (std::numeric_limits<typeid(variable)>::lowest())
+
+
 typedef signed char      INT8, *PINT8;
 typedef signed short     INT16, *PINT16;
 typedef signed int       INT32, *PINT32;
@@ -830,7 +834,7 @@ public:
 				return pOut;
 			}
 		}
-		return 0;
+		return nullptr;
 	}
 	void DeleteObj(T* pObj)
 	{

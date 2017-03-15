@@ -12,6 +12,29 @@
 UINT uiWinGetCurrentMsg();
 
 
+
+struct stWndTimerInfo
+{
+	stWndTimerInfo()
+	:pFormBase(nullptr), TimerHandle(0)
+	{
+		id = 0;
+		msElapsedTime = 0;
+		pCtx = nullptr;
+		nRunCount = 0;
+	}
+
+	// Data matchs uiFormBase::stTimerInfo.
+	UINT  id;
+	UINT  msElapsedTime;
+	void* pCtx;
+	INT   nRunCount;
+
+	uiFormBase* pFormBase;
+	UINT_PTR    TimerHandle;
+
+};
+
 class uiWindow
 {
 public:
@@ -50,6 +73,10 @@ public:
 	BOOL CaretMoveImp(uiFormBase *pFormBase, INT x, INT y);
 	BOOL CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY);
 
+	BOOL TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx);
+	void TimerClose(uiFormBase *pFormBase, UINT id);
+	void TimerRemoveAll(uiFormBase* const pFormBase);
+
 	void OnActivate(WPARAM wParam, LPARAM LParam);
 	BOOL OnClose();
 	void OnCreate();
@@ -64,6 +91,7 @@ public:
 	void OnLoseKBFocus();
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
 	void OnSizing(INT fwSide, RECT *pRect);
+	void OnTimer(const UINT_PTR TimerID, LPARAM lParam);
 
 	LRESULT OnNCHitTest(INT x, INT y);
 
@@ -74,9 +102,9 @@ public:
 
 	void OnMouseLeave();
 	void OnMouseMove(UINT nType, const INT x, const INT y);
-	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
-	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
-	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 
 	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
@@ -167,6 +195,9 @@ protected:
 	MOUSE_KEY_TYPE m_MouseDragKey;
 	UINT64 m_MouseKeyDownTime[MKT_TOTAL];
 	uiFormBase *m_pFirstClickedForm[MKT_TOTAL];
+
+	UINT m_TotalWorkingTimer;
+	std::vector<stWndTimerInfo> m_TimerTable;
 
 	uiWndDrawer m_Drawer;
 

@@ -150,6 +150,17 @@ public:
 		MOVE_DIRECTION MDFlag;
 	};
 
+	struct stTimerInfo
+	{
+		const UINT id;
+		const UINT msElapsedTime;
+
+		// Changeable for message handler.
+		void* pCtx;
+		INT   nRunCount;
+	};
+
+
 	uiFormBase();
 	virtual ~uiFormBase();
 
@@ -162,6 +173,7 @@ public:
 	void Move(INT x, INT y);
 	void MoveToCenter();
 	void MoveByOffset(const INT OffsetX, const INT OffsetY, BOOL bForceRedraw = FALSE);
+	BOOL SetTimer(UINT id, UINT msElapsedTime, INT nRundCount, void* pCtx);
 	void Show(FORM_SHOW_MODE sm);
 	BOOL Size(INT NewWidth, INT NewHeight);
 	void RedrawForm(const uiRect *pUpdateRect = nullptr);
@@ -227,11 +239,13 @@ public:
 	virtual void OnFramePaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
+	virtual void OnTimer(stTimerInfo* ti);
 
 	virtual BOOL IsDockableForm() const { return FALSE; }
 
 	virtual void OnKBGetFocus() {}
 	virtual void OnKBLoseFocus() {}
+
 
 
 	INLINE uiFormBase* NextSibling()
@@ -360,8 +374,8 @@ public:
 		{
 	//	case CT_SIZEABLE:
 	//		return bSizeable;
-		case CT_ALLOWSIDEDOCK:
-			return bAllowSideDock;
+	//	case CT_ALLOWSIDEDOCK:
+	//		return bAllowSideDock;
 		case CT_ALLOWCLIENTDOCK:
 			return bAllowClientDock;
 		}
@@ -397,16 +411,19 @@ private:
 	friend class uiWindow;
 
 
-	void SetClientRect(uiRect& NewRect)
+	void SetClientRect(const uiRect& NewRect)
 	{
 		if (NewRect != m_ClientRect)
 		{
-			if (NewRect.Width() != m_ClientRect.Width() || NewRect.Height() != m_ClientRect.Height())
-				OnSize(NewRect.Width(), NewRect.Height());
-			m_ClientRect = NewRect;
+			if (NewRect.Width() == m_ClientRect.Width() && NewRect.Height() == m_ClientRect.Height())
+				return;
+			m_ClientRect = NewRect; // Must update original data first.
+			OnSize(NewRect.Width(), NewRect.Height());
 		}
 	}
 	INLINE std::vector<UINT>& GetIDList() { return m_IDList; }
+	INLINE UINT GetTimerCount() const { return m_TimerCount; }
+	INLINE void SetTimerCount(BOOL bInc) { m_TimerCount = (bInc) ? m_TimerCount + 1 : m_TimerCount - 1; } // Don't use ++lvalue here.
 
 	INLINE void SetPostCreateList(void *pList) { ASSERT(m_pStyle == nullptr); m_pStyle = (uiFormStyle*)pList; }
 	INLINE void CleanPostCreateList() { m_pStyle = nullptr; }
@@ -429,10 +446,12 @@ private:
 	uiString m_strTitle;
 
 	BYTE m_DockFlag;
+	BYTE m_TimerCount;
 
 	bool m_bActivated = false;
 	bool bCreating = false;
 	bool bCreated = false;
+	bool bIsDestroying = false;
 	bool bShow = false;
 	bool bMouseHover = false;
 	bool bOwnCaret = false;
@@ -441,7 +460,7 @@ private:
 	// Capabilities.
 //	bool bSizeable = false;
 	bool bNoBorder = false;
-	bool bAllowSideDock = false;
+//	bool bAllowSideDock = false;
 	bool bAllowClientDock = false;
 
 
@@ -762,7 +781,12 @@ public:
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 	BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 
-	virtual UTX::CSimpleList* GetSideDockedFormList() { return &m_SideDockedFormList; }
+	virtual UTX::CSimpleList* GetSideDockedFormList()
+	{
+		if (bIsDestroying)
+			return nullptr;
+		return &m_SideDockedFormList;
+	}
 
 
 	virtual void OnCreate();
@@ -953,7 +977,7 @@ public:
 	}
 
 
-	BOOL Create(uiFormBase *pParent, TAB_FORM_FLAGS tff);
+	BOOL SetProperty(TAB_FORM_FLAGS tff);
 	BOOL AddPane(uiFormBase *pForm, INT index, BOOL bActivate);
 
 	BOOL DeletePane(INT index);

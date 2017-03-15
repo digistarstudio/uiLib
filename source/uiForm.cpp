@@ -42,11 +42,13 @@ uiFormBase::uiFormBase()
 	INIT_LIST_ENTRY(&m_ListChildrenEntry);
 
 	m_DockFlag = 0;
+	m_TimerCount = 0;
 }
 
 uiFormBase::~uiFormBase()
 {
 	printx("---> uiFormBase::~uiFormBase\n");
+	ASSERT(!m_TimerCount);
 }
 
 
@@ -122,7 +124,11 @@ void uiFormBase::Close()
 		if (GetParent() != nullptr)
 			GetParent()->DetachChild(this);
 		if (GetPlate() != nullptr)
+		{
+
+
 			RedrawForm();
+		}
 
 		uiWindow *pWnd = m_pWnd; // Cache this first.
 
@@ -229,6 +235,16 @@ void uiFormBase::Show(FORM_SHOW_MODE sm)
 			break;
 		}
 	}
+}
+
+BOOL uiFormBase::SetTimer(UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
+{
+	if (m_TimerCount == 255)
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	return GetBaseWnd()->TimerAdd(this, id, msElapsedTime, nRunCount, pCtx);
 }
 
 BOOL uiFormBase::Size(INT NewWidth, INT NewHeight)
@@ -783,10 +799,12 @@ void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
 //		m_FrameRect.Left, m_FrameRect.Top, m_FrameRect.Right, m_FrameRect.Bottom, m_FrameRect.Width(), m_FrameRect.Height());
 }
 
-//void uiFormBase::AddPostCreate(uiFormBase* pFormBase)
-//{
-//	((UTX::CSimpleList*)m_pStyle)->push_front(pFormBase);
-//}
+void uiFormBase::OnTimer(stTimerInfo* ti)
+{
+//	printx("---> uiFormBase::OnTimer\n");
+	printx("Warning: Unhandled timer found!\n");
+	ti->nRunCount = 0;
+}
 
 
 BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
@@ -868,6 +886,8 @@ void uiHeaderForm::OnCreate()
 
 void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
+//	if (GetKeyState(VK_F2) < 0)
+//		Close();
 }
 
 void uiHeaderForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
@@ -1058,7 +1078,6 @@ void uiForm::OnPaint(uiDrawer* pDrawer)
 
 void uiForm::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
-	uiFormBase::OnFrameSize(nNewWidth, nNewHeight);
 	UpdataClientRect();
 }
 
@@ -1157,19 +1176,9 @@ BOOL uiDockableForm::OnDeplate(INT iReason, uiFormBase *pDockingForm)
 }
 
 
-BOOL uiTabForm::Create(uiFormBase *pParent, TAB_FORM_FLAGS tff)
+BOOL uiTabForm::SetProperty(TAB_FORM_FLAGS tff)
 {
-	uiRect rect;
-//	if (tff & TFF_FULL_FORM)
-	{
-		rect = pParent->GetClientRect();
-	}
-	INT width = rect.Width() - m_LeftMargin - m_RightMargin;
-	INT height = rect.Height() - m_TopMargin - m_BottomMargin;
-	BOOL bResult = uiForm::Create(pParent, m_LeftMargin, m_TopMargin, width, height, FCF_NONE);
-
 	m_Flag = tff;
-
 	if (m_Flag & TFF_TAB_TOP || m_Flag & TFF_TAB_BOTTOM)
 	{
 		m_TabHeight = DEFAULT_TAB_HEIGHT;
@@ -1178,7 +1187,6 @@ BOOL uiTabForm::Create(uiFormBase *pParent, TAB_FORM_FLAGS tff)
 	{
 		m_TabWidth = DEFAULT_TAB_HEIGHT;
 	}
-
 	return TRUE;
 }
 

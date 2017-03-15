@@ -233,6 +233,13 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		}
 		break;
 
+	case WM_TIMER:
+	//	LogWndMsg("Msg: WM_TIMER ID:%d Callback: 0x%p\n", wParam, lParam);
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnTimer(wParam, lParam);
+		bProcessed = TRUE;
+		break;
+
 	case WM_MENUCOMMAND:
 		printx("menu handle: %p, index\n", lParam, wParam);
 		break;
@@ -404,12 +411,15 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 	m_MouseDragKey = MKT_NONE;
 	ZeroMemory(m_MouseKeyDownTime, sizeof(m_MouseKeyDownTime));
 	ZeroMemory(m_pFirstClickedForm, sizeof(m_pFirstClickedForm));
+
+	m_TotalWorkingTimer = 0;
 }
 
 uiWindow::~uiWindow()
 {
 	ASSERT(m_Handle == NULL);
 	ASSERT(m_pForm == nullptr);
+	ASSERT(m_TotalWorkingTimer == 0);
 }
 
 BOOL uiWindow::GetUiRect(uiRect &rect)
@@ -428,6 +438,9 @@ BOOL uiWindow::GetUiRect(uiRect &rect)
 
 void uiWindow::OnFormDestroy(uiFormBase *pForm)
 {
+	if (pForm->GetTimerCount() != 0)
+		TimerRemoveAll(pForm);
+
 	if (m_pHoverForm == pForm)
 	{
 		m_pHoverForm = nullptr;
@@ -757,6 +770,68 @@ BOOL uiWindow::CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY
 	return UICore::GCaret.MoveByOffset(OffsetX, OffsetY);
 }
 
+BOOL uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
+{
+	ASSERT(m_TotalWorkingTimer <= m_TimerTable.size());
+
+	INT index = 0;
+	if (m_TotalWorkingTimer == m_TimerTable.size())
+		index = m_TimerTable.size();
+	else
+	{
+		INT ArraySize = (INT)m_TimerTable.size();
+		for (; index < ArraySize; ++index)
+			if (m_TimerTable[index].TimerHandle == 0)
+				break;
+		ASSERT(index < ArraySize);
+	}
+
+	UINT_PTR TimerHandle;
+	if ((TimerHandle = ::SetTimer(m_Handle, index + 1, msElapsedTime, nullptr)) == 0)
+		return FALSE;
+
+	stWndTimerInfo wti;
+	wti.id = id;
+	wti.msElapsedTime = msElapsedTime;
+	wti.nRunCount = nRunCount;
+	wti.pCtx = pCtx;
+	wti.pFormBase = pFormBase;
+	wti.TimerHandle = TimerHandle;
+
+	if (index == m_TimerTable.size())
+		m_TimerTable.push_back(wti);
+	else
+		m_TimerTable[index] = wti;
+
+	++m_TotalWorkingTimer;
+	pFormBase->SetTimerCount(TRUE);
+
+	return TRUE;
+}
+
+void uiWindow::TimerClose(uiFormBase *pFormBase, UINT id)
+{
+}
+
+void uiWindow::TimerRemoveAll(uiFormBase* const pFormBase)
+{
+	INT iTableSize = m_TimerTable.size();
+	for (INT i = 0; i < iTableSize; ++i)
+	{
+		stWndTimerInfo &wti = m_TimerTable[i];
+		if (wti.TimerHandle == 0 || wti.pFormBase != pFormBase)
+			continue;
+
+		VERIFY(::KillTimer(m_Handle, i + 1));
+
+		wti.TimerHandle = 0; // Lazy clean.
+		wti.pFormBase->SetTimerCount(FALSE);
+		--m_TotalWorkingTimer;
+	}
+
+	ASSERT(pFormBase->GetTimerCount() == 0);
+}
+
 void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
 {
 	HWND hActivated = NULL, hDeactivated = NULL;
@@ -987,6 +1062,32 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 	}
 
 	//	m_pForm->OnSizing((uiRect*)pRect);
+}
+
+void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
+{
+	printx("---> uiWindow::OnTimer. ID: %p Callback: 0x%p\n", TimerID, lParam);
+	UINT index = TimerID - 1;
+	ASSERT(index < m_TimerTable.size());
+
+	stWndTimerInfo &wti = m_TimerTable[index];
+
+	if (wti.TimerHandle == 0)
+	{
+	//	printx("Old Timer triggered!\n");
+		return;
+	}
+	if (wti.nRunCount > 0)
+		--wti.nRunCount;
+	wti.pFormBase->OnTimer((uiFormBase::stTimerInfo*)&wti);
+
+	if (wti.nRunCount == 0)
+	{
+		VERIFY(::KillTimer(m_Handle, TimerID));
+		wti.TimerHandle = 0;
+		wti.pFormBase->SetTimerCount(FALSE);
+		--m_TotalWorkingTimer;
+	}
 }
 
 LRESULT uiWindow::OnNCHitTest(INT x, INT y)
@@ -1227,7 +1328,7 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 	}
 
 	INT destX, destY;
-	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY), *pOldHoverForm;
+	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
 	ASSERT(!bRetrackMouse);
 	if (m_pHoverForm != pForm)
 	{
@@ -1239,7 +1340,7 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 		m_pHoverForm->OnMouseMove(destX, destY, MmdFlags);
 }
 
-void uiWindow::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
+void uiWindow::OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
 	//	printx("---> uiWindow::OnMouseBtnDown Type:%d x:%d y:%d\n", KeyType, x, y);
 
@@ -1279,7 +1380,7 @@ void uiWindow::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 	}
 }
 
-void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
+void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
 	printx("---> uiWindow::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
 
@@ -1342,7 +1443,7 @@ void uiWindow::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 	}
 }
 
-void uiWindow::OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
+void uiWindow::OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
 	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm == nullptr)
@@ -1370,7 +1471,11 @@ void uiWindow::OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 	if (bDBClick)
 		pDestForm->OnMouseBtnDbClk(KeyType, x, y);
 	else
+	{
+		pDestForm->OnMouseBtnDown(KeyType, x, y); 
+		pDestForm->OnMouseBtnUp(KeyType, x, y);    // Todo: not safe here.
 		pDestForm->OnMouseBtnClk(KeyType, x, y);
+	}
 }
 
 void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)

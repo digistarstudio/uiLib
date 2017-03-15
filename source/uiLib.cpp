@@ -147,11 +147,13 @@ public:
 		printx("---> CFormEx2::OnCreate\n");
 
 		m_pTabForm = new uiTabForm;
+	
+		m_pTabForm->Create(this, 5, 5, 100, 150, FCF_CENTER);
 		m_pTabForm->SetMargin(3, 3, 3, 3);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB); // uiTabForm::TFF_FORCE_SHOW_TAB
-		m_pTabForm->Create(this, uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_LEFT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
-	//	m_pTabForm->Create(this, uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+		m_pTabForm->SetProperty(uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+	//	m_pTabForm->SetProperty(uiTabForm::TFF_TAB_BOTTOM | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+	//	m_pTabForm->SetProperty(uiTabForm::TFF_TAB_LEFT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+	//	m_pTabForm->SetProperty(uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
 
 		m_pTabForm->SetHeaderBar(_T("test child form"));
 
@@ -165,6 +167,18 @@ public:
 		m_pButton2 = new uiButton2;
 		m_pButton2->Create(this, 125, 400, 50, 50);
 		Bind(m_pButton2->GetID());
+
+		VERIFY(SetTimer(0, 1000, 3, nullptr));
+		VERIFY(SetTimer(1, 2000, 3, nullptr));
+	}
+
+	void OnTimer(stTimerInfo* ti)
+	{
+		printx("---> CFormEx2::OnTimer ID: %d\n", ti->id);
+		if (ti->id == 0)
+			MoveByOffset(-1, 20);
+		else if (ti->id == 1)
+			MoveByOffset(20, -1);
 	}
 
 	virtual void OnCommand(INT id, BOOL &bDone)
@@ -337,12 +351,28 @@ protected:
 };
 
 
+template<class T>
+constexpr T MAX_VALUE(T var)
+{
+	return (std::is_signed<T> ? T(-1) : T(-1));
+}
+
+
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
 	UTXLibraryInit();
 
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
+
+	BYTE by;
+
+	
+
+
+//	const INT i = TYPE_MAX_VALUE(INT);
+	const INT i = (std::numeric_limits<INT>::max());
+
 
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 //	void *pAddr = new int[30];
@@ -359,12 +389,14 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	uiString a, b;
 	a = _T("Unicode string\n");
-	
+
+	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
 	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
 	printx("sizeof uiWindow: %d Bytes\n", sizeof uiWindow);
 	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
 	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
+
 
 	BASE_FRAME *pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
