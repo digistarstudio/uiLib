@@ -72,7 +72,7 @@ void uiDrawer::PopDestRect()
 }
 
 
-void uiWndDrawer::Begin(void *pCtx)
+BOOL uiWndDrawer::Begin(void *pCtx)
 {
 #ifdef _DEBUG
 	RECT rect;
@@ -89,13 +89,20 @@ void uiWndDrawer::Begin(void *pCtx)
 	ASSERT(m_PaintDC == NULL);
 
 	PAINTSTRUCT *ps = (PAINTSTRUCT*)pCtx;
-	m_PaintDC = BeginPaint(m_hWnd, ps);
+	if ((m_PaintDC = BeginPaint(m_hWnd, ps)) == NULL)
+		return FALSE;
 
-	//m_RenderDestRect.Init(m_nWidth, m_nHeight);
 	m_RenderDestRect = *(uiRect*)(&ps->rcPaint);
-	ASSERT(m_RenderDestRect.IsValidRect());
+	if (!m_RenderDestRect.IsValidRect())
+	{
+		EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
+		m_PaintDC = NULL;
+		return FALSE;
+	}
 
 	m_WndDrawDC.Attach((m_TotalBackBuffer == 0) ? m_PaintDC : m_BackBuffer[m_CurrentBackBufferIndex].GetMemDC());
+
+	return TRUE;
 }
 
 void uiWndDrawer::End(void *pCtx)

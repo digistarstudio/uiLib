@@ -41,6 +41,7 @@ uiFormBase::uiFormBase()
 	INIT_LIST_HEAD(&m_ListChildren);
 	INIT_LIST_ENTRY(&m_ListChildrenEntry);
 
+	m_Flag = FBF_NONE;
 	m_DockFlag = 0;
 	m_TimerCount = 0;
 }
@@ -161,7 +162,7 @@ void uiFormBase::MoveToCenter()
 	{
 		m_pWnd->MoveToCenter();
 	}
-	else if (!m_bSideDocked)
+	else if (!FBTestFlag(FBF_SIDE_DOCKED))
 	{
 		uiRect rect = m_pPlate->GetClientRect(), FrameRect = GetFrameRect();
 		INT mx = (rect.Width() - FrameRect.Width()) / 2;
@@ -211,40 +212,31 @@ void uiFormBase::Show(FORM_SHOW_MODE sm)
 {
 	if (m_pWnd != nullptr)
 		m_pWnd->ShowImp(sm);
-	else
+
+	switch (sm)
 	{
-		switch (sm)
-		{
-		case FSM_HIDE:
-			bShow = false;
-			RedrawForm();
-			break;
+	case FSM_HIDE:
+		FBCleanFlag(FBF_SHOW);
+		break;
 
-		case FSM_SHOW:
-			bShow = true;
-			RedrawForm();
-			break;
+	case FSM_SHOW:
+		FBSetFlag(FBF_SHOW);
+		break;
 
-		case FSM_RESTORE:
-			break;
+	case FSM_RESTORE:
+		FBSetFlag(FBF_SHOW);
+		break;
 
-		case FSM_MINIMIZE:
-			break;
+	case FSM_MINIMIZE:
+		FBCleanFlag(FBF_SHOW);
+		break;
 
-		case FSM_MAXIMIZE:
-			break;
-		}
+	case FSM_MAXIMIZE:
+		break;
 	}
-}
 
-BOOL uiFormBase::SetTimer(UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
-{
-	if (m_TimerCount == 255)
-	{
-		ASSERT(0);
-		return FALSE;
-	}
-	return GetBaseWnd()->TimerAdd(this, id, msElapsedTime, nRunCount, pCtx);
+	if (!IsRootForm())
+		RedrawForm();
 }
 
 BOOL uiFormBase::Size(INT NewWidth, INT NewHeight)
@@ -274,6 +266,21 @@ BOOL uiFormBase::Size(INT NewWidth, INT NewHeight)
 	}
 
 	return TRUE;
+}
+
+UINT uiFormBase::TimerStart(UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
+{
+	if (m_TimerCount == VAR_MAX_VALUE(m_TimerCount))
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+	return GetBaseWnd()->TimerAdd(this, id, msElapsedTime, nRunCount, pCtx);
+}
+
+BOOL uiFormBase::TimerStop(UINT key, BOOL bByID)
+{
+	return GetBaseWnd()->TimerClose(this, key, bByID);
 }
 
 void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
@@ -333,7 +340,7 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 	if (!bShow)
 	{
 		GetBaseWnd()->CaretHideImp(this);
-		bOwnCaret = false;
+		FBCleanFlag(FBF_OWN_CARET);
 	}
 	else
 	{
@@ -341,7 +348,7 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 		uiRect rect;
 		ClientToWindow(rect);
 		GetBaseWnd()->CaretShowImp(this, x + rect.Left, y + rect.Top, width, height);
-		bOwnCaret = true;
+		FBSetFlag(FBF_OWN_CARET);
 	}
 
 	return FALSE;
@@ -349,14 +356,14 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 
 BOOL uiFormBase::CaretMoveByOffset(INT OffsetX, INT OffsetY)
 {
-	if (!bOwnCaret)
+	if (!FBTestFlag(FBF_OWN_CARET))
 		return FALSE;
 	return GetBaseWnd()->CaretMoveByOffset(this, OffsetX, OffsetY);
 }
 
 BOOL uiFormBase::CaretMove(INT x, INT y)
 {
-	if (!bOwnCaret)
+	if (!FBTestFlag(FBF_OWN_CARET))
 		return FALSE;
 
 	uiRect rect;
@@ -452,7 +459,7 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 		{
 			uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pNext);
 			ASSERT(pForm->GetPlate() == this);
-			if (!pForm->bShow)
+			if (!pForm->IsVisible())
 				continue;
 			if (pForm->IsPointIn(x, y))
 				return pForm->FindByPos(x - pForm->m_FrameRect.Left, y - pForm->m_FrameRect.Top, DestX, DestY);
@@ -471,7 +478,7 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
 		pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-		if (!pSubForm->bShow || pSubForm->m_bSideDocked)
+		if (!pSubForm->IsVisible() || pSubForm->IsSideDocked())
 			continue;
 		if (pSubForm->GetPlate() != this)
 			continue;
@@ -486,7 +493,7 @@ uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
 
 void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip)
 {
-	if (pForm->m_bSideDocked)
+	if (pForm->IsSideDocked())
 	{
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 
@@ -507,7 +514,7 @@ void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip)
 
 void uiFormBase::ToWindowSpace(uiFormBase *pForm, INT &x, INT &y)
 {
-	if (pForm->m_bSideDocked)
+	if (pForm->IsSideDocked())
 	{
 		x += m_FrameRect.Left;
 		y += m_FrameRect.Top;
@@ -527,8 +534,9 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 	uiRect rect;
 	if (GetPlate() != nullptr)
 	{
-		if (this->m_bSideDocked)
+		if (IsSideDocked())
 		{
+			ASSERT(0); // No implementation now.
 		}
 		else
 		{
@@ -542,12 +550,12 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 
 void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 {
-	ASSERT(!bCreated && !bCreating);
+	ASSERT(!IsCreated() && !IsCreating() && !IsVisible());
 
 	UTX::CSimpleList PostCreateList;
 	SetPostCreateList(&PostCreateList);
 
-	bCreating = true;
+	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
 	m_ClientRect.SetSize(nWidth, nHeight); // Must set the default size for the client rectangle.
 
@@ -566,9 +574,10 @@ void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 	// CleanPostCreateList();
 	m_pStyle = GetDefaultStyleObject(this);
 
-	bCreated = true;
-	bCreating = false;
-	bShow = (bShowIn != 0); // Put this at last to prevent move and size functions calling RedrawForm.
+	FBSetFlag(FBF_CREATED);
+	FBCleanFlag(FBF_CREATING);
+	if (bShowIn)
+		FBSetFlag(FBF_SHOW); // Put this at last to prevent move and size functions from calling RedrawForm.
 }
 
 BOOL uiFormBase::EntryOnClose()
@@ -601,7 +610,7 @@ void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo)
 {
 	OnMove(x, y, pInfo);
 
-	if (bOwnCaret && !IsBaseForm())
+	if (FBTestFlag(FBF_OWN_CARET) && !IsBaseForm())
 		CaretMoveByOffset(pInfo->XOffset, pInfo->YOffset);
 }
 
@@ -634,7 +643,7 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 		{
 			uiFormBase *pChild = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
 
-			if (!pChild->bShow || pChild->m_bSideDocked)
+			if (!pChild->IsVisible() || pChild->IsSideDocked())
 				continue;
 			if (pChild->GetPlate() != this)
 				continue;
@@ -666,7 +675,7 @@ void uiFormBase::EntryOnKBLoseFocus()
 {
 	OnKBLoseFocus();
 
-	if (bOwnCaret)
+	if (FBTestFlag(FBF_OWN_CARET))
 		CaretShow(FALSE);
 }
 
@@ -973,7 +982,7 @@ BOOL uiForm::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 
 BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 {
-	ASSERT(!pDockingForm->m_bSideDocked);
+	ASSERT(!pDockingForm->IsSideDocked());
 
 	const uiRect& ClientRect = GetClientRectFS();
 	uiRect rect = ClientRect;
@@ -1004,7 +1013,7 @@ BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 		break;
 	}
 
-	pDockingForm->m_bSideDocked = true;
+	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
 	pDockingForm->m_DockFlag = fdf;
 	ASSERT(pDockingForm->GetParent() == this);
 	m_SideDockedFormList.push_back(pDockingForm);
@@ -1056,7 +1065,7 @@ INT uiForm::OnNCHitTest(INT x, INT y)
 
 	INT iRet = NCHT_CLIENT, nBorderWidth = 3;
 
-	if (!bNoBorder)
+//	if (!bNoBorder)
 	{
 		if (x < nBorderWidth)
 			iRet |= NCHT_LEFT;
@@ -1090,7 +1099,7 @@ void uiForm::UpdataClientRect()
 {
 	uiRect rect = GetFrameRect();
 
-	if (!bNoBorder)
+//	if (!bNoBorder)
 	{
 		INT BorderWidth = -3;
 		rect.Inflate(BorderWidth, BorderWidth, BorderWidth, BorderWidth);

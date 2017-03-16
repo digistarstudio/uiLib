@@ -140,6 +140,20 @@ public:
 		NCHT_RIGHT  = 0x01 << 3,
 	};
 
+	enum FORM_BASE_FLAGS
+	{
+		FBF_NONE,
+
+		FBF_ACTIVATED = 0x01,
+		FBF_CREATING = 0x01 << 1,
+		FBF_CREATED = 0x01 << 2,
+		FBF_IS_DESTROYING = 0x01 << 3,
+		FBF_SHOW = 0x01 << 4,
+		FBF_MOUSE_HOVER = 0x01 << 5,
+		FBF_OWN_CARET = 0x01 << 6,
+		FBF_SIDE_DOCKED = 0x01 << 7,
+	};
+
 	struct stFormMoveInfo
 	{
 		stFormMoveInfo()
@@ -173,9 +187,11 @@ public:
 	void Move(INT x, INT y);
 	void MoveToCenter();
 	void MoveByOffset(const INT OffsetX, const INT OffsetY, BOOL bForceRedraw = FALSE);
-	BOOL SetTimer(UINT id, UINT msElapsedTime, INT nRundCount, void* pCtx);
 	void Show(FORM_SHOW_MODE sm);
 	BOOL Size(INT NewWidth, INT NewHeight);
+	UINT TimerStart(UINT id, UINT msElapsedTime, INT nRundCount, void* pCtx); // Return timer handle.
+	BOOL TimerStop(UINT key, BOOL bByID = TRUE);
+
 	void RedrawForm(const uiRect *pUpdateRect = nullptr);
 	void RedrawFrame(const uiRect *pUpdateRect = nullptr);
 
@@ -245,7 +261,6 @@ public:
 
 	virtual void OnKBGetFocus() {}
 	virtual void OnKBLoseFocus() {}
-
 
 
 	INLINE uiFormBase* NextSibling()
@@ -327,10 +342,13 @@ public:
 	INLINE BOOL HasChildrenForm() const { return IS_VALID_ENTRY(m_ListChildren.next, m_ListChildren); }
 //	INLINE BOOL HasDockedForm() const { return (m_pFormSplitter != nullptr); }
 	INLINE BOOL IsPointIn(INT x, INT y) const { return m_FrameRect.IsPointIn(x, y); } // Parent space.
-	INLINE BOOL IsMouseHovering() const { return bMouseHover; }
-	INLINE BOOL IsVisible() const { return bShow; }
-	INLINE BOOL IsCreated() const { return bCreated; }
-	INLINE BOOL IsCreating() const { return bCreating; }
+
+	INLINE BOOL IsMouseHovering() const { return FBTestFlag(FBF_MOUSE_HOVER); }
+	INLINE BOOL IsVisible() const { return FBTestFlag(FBF_SHOW); }
+	INLINE BOOL IsCreated() const { return FBTestFlag(FBF_CREATED); }
+	INLINE BOOL IsCreating() const { return FBTestFlag(FBF_CREATING); }
+	INLINE BOOL IsSideDocked() const { return FBTestFlag(FBF_SIDE_DOCKED); }
+	INLINE BOOL IsDestroying() const { return FBTestFlag(FBF_IS_DESTROYING); }
 
 	INLINE uiFormBase* GetParent() const { return m_pParent; }
 	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
@@ -361,29 +379,6 @@ public:
 	}
 
 
-	enum CAP_TYPE
-	{
-		CT_SIZEABLE,
-		CT_ALLOWSIDEDOCK,
-		CT_ALLOWCLIENTDOCK,
-	};
-
-	BOOL GetCapability(CAP_TYPE ct)
-	{
-		switch (CT_SIZEABLE)
-		{
-	//	case CT_SIZEABLE:
-	//		return bSizeable;
-	//	case CT_ALLOWSIDEDOCK:
-	//		return bAllowSideDock;
-		case CT_ALLOWCLIENTDOCK:
-			return bAllowClientDock;
-		}
-		ASSERT(0);
-		return FALSE;
-	}
-
-
 protected:
 
 	uiWindow* GetBaseWnd()
@@ -396,10 +391,14 @@ protected:
 	}
 	const uiRect& GetClientRectFS() const { return m_ClientRect; }
 
+	INLINE BOOL FBTestFlag(FORM_BASE_FLAGS flag) const;
+	INLINE void FBSetFlag(FORM_BASE_FLAGS flag);
+	INLINE void FBCleanFlag(FORM_BASE_FLAGS flag);
+
 
 private:
 
-	static uiFormBase* pAppBaseForm;
+	static uiFormBase* pAppBaseForm; // Todo: remove this stupid thing.
 
 //	friend uiFormBase* FindFromSplitter(stFormSplitter *pSplitter, INT x, INT y);
 //	friend uiFormBase* FindByPosImp(uiFormBase *pForm, INT x, INT y);
@@ -445,26 +444,20 @@ private:
 
 	uiString m_strTitle;
 
+	FORM_BASE_FLAGS m_Flag;
+
 	BYTE m_DockFlag;
-	BYTE m_TimerCount;
-
-	bool m_bActivated = false;
-	bool bCreating = false;
-	bool bCreated = false;
-	bool bIsDestroying = false;
-	bool bShow = false;
-	bool bMouseHover = false;
-	bool bOwnCaret = false;
-	bool m_bSideDocked = false;
-
-	// Capabilities.
-//	bool bSizeable = false;
-	bool bNoBorder = false;
-//	bool bAllowSideDock = false;
-	bool bAllowClientDock = false;
+	BYTE m_TimerCount; // It's safe to change type of the data directly.
 
 
 };
+
+
+IMPLEMENT_ENUM_FLAG(uiFormBase::FORM_BASE_FLAGS)
+
+INLINE BOOL uiFormBase::FBTestFlag(uiFormBase::FORM_BASE_FLAGS flag) const { return m_Flag & flag; }
+INLINE void uiFormBase::FBSetFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag |= flag; }
+INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
 
 
 class uiControl : public uiFormBase
@@ -783,8 +776,7 @@ public:
 
 	virtual UTX::CSimpleList* GetSideDockedFormList()
 	{
-		if (bIsDestroying)
-			return nullptr;
+		ASSERT(!IsDestroying());
 		return &m_SideDockedFormList;
 	}
 

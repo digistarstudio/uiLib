@@ -134,6 +134,40 @@ protected:
 
 };
 
+class CTimerTestForm : public uiForm
+{
+public:
+
+	CTimerTestForm() = default;
+	~CTimerTestForm() = default;
+
+	void OnCreate()
+	{
+		m_pButton = new uiButton;
+		m_pButton->Create(this, 30, 100, 120, 30);
+
+		Bind(m_pButton->GetID());
+
+		TimerStart(555, 1000, -1, nullptr);
+	}
+
+	void OnCommand(INT id, BOOL &bDone)
+	{
+		TimerStop(555);
+	}
+	void OnTimer(stTimerInfo* ti)
+	{
+		printx("---> CTimerTestForm::OnTimer ID: %d\n", ti->id);
+		if (ti->id == 0)
+			MoveByOffset(0, -20);
+		else if (ti->id == 1)
+			MoveByOffset(20, 0);
+	}
+
+	uiButton *m_pButton, *m_pButton2;
+
+};
+
 class CFormEx2 : public uiForm
 {
 public:
@@ -168,17 +202,17 @@ public:
 		m_pButton2->Create(this, 125, 400, 50, 50);
 		Bind(m_pButton2->GetID());
 
-		VERIFY(SetTimer(0, 1000, 3, nullptr));
-		VERIFY(SetTimer(1, 2000, 3, nullptr));
+		VERIFY(SetTimer(0, 1000, -1, nullptr));
+	//	VERIFY(SetTimer(1, 2000, 3, nullptr));
 	}
 
 	void OnTimer(stTimerInfo* ti)
 	{
 		printx("---> CFormEx2::OnTimer ID: %d\n", ti->id);
 		if (ti->id == 0)
-			MoveByOffset(-1, 20);
+			MoveByOffset(0, -20);
 		else if (ti->id == 1)
-			MoveByOffset(20, -1);
+			MoveByOffset(20, 0);
 	}
 
 	virtual void OnCommand(INT id, BOOL &bDone)
@@ -231,10 +265,7 @@ protected:
 };
 
 
-#define BASE_FRAME uiForm
-
-
-class CMyForm : public BASE_FRAME
+class CMyForm : public uiForm
 {
 public:
 
@@ -243,7 +274,7 @@ public:
 
 	void OnCreate()
 	{
-		BASE_FRAME::OnCreate();
+		uiForm::OnCreate();
 
 		printx("---> CMyForm::OnCreate\n");
 
@@ -265,10 +296,16 @@ public:
 	//	m_pButton3->Create(this, 250, 120, 50, 50);
 		m_pButton3->Create(this, 150, 120, 50, 50);
 
+		m_pButton4 = new uiButton;
+		m_pButton4->Create(this, 150, 200, 50, 50);
+
 		Bind(m_pButton->GetID());
 		Bind(m_pButton2->GetID());
 		Bind(m_pButton3->GetID());
+		Bind(m_pButton4->GetID());
 		Bind(uiID_CLOSE); //*/
+
+	//	SetTimer(0, 1000, -1, nullptr);
 
 		VERIFY(m_menu.CreatePopupMenu());
 		VERIFY(m_menu.InsertItem(_T("Test item 1"), 2, 1));
@@ -306,6 +343,13 @@ public:
 		}
 	}
 
+	void OnTimer(stTimerInfo* ti)
+	{
+	//	printx("---> CMyForm::OnTimer ID: %d\n", ti->id);
+	//	RedrawForm();
+		MoveByOffset(-1, 20);
+	}
+
 	virtual void OnCommand(INT id, BOOL &bDone)
 	{
 		printx("---> CMyForm::OnCommand ID: %d\n", id);
@@ -331,6 +375,14 @@ public:
 			m_pButton3->MoveByOffset(60, 60);
 		//	CaretShow(TRUE, 0, 0, 5, 15);
 		}
+		else if (id == m_pButton4->GetID())
+		{
+			printx("Button 4 was clicked!\n");
+
+			uiForm *pForm = new CTimerTestForm;
+			pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER);
+			pForm->SetHeaderBar(_T("test"));
+		}
 
 		if (id == uiID_CLOSE)
 		{
@@ -342,7 +394,7 @@ public:
 
 protected:
 
-	uiButton *m_pButton, *m_pButton2, *m_pButton3;
+	uiButton *m_pButton, *m_pButton2, *m_pButton3, *m_pButton4;
 	uiForm *m_pSubForm;
 
 	uiWinMenu m_menu;
@@ -351,28 +403,12 @@ protected:
 };
 
 
-template<class T>
-constexpr T MAX_VALUE(T var)
-{
-	return (std::is_signed<T> ? T(-1) : T(-1));
-}
-
-
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
 	UTXLibraryInit();
 
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
-
-	BYTE by;
-
-	
-
-
-//	const INT i = TYPE_MAX_VALUE(INT);
-	const INT i = (std::numeric_limits<INT>::max());
-
 
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 //	void *pAddr = new int[30];
@@ -398,7 +434,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
 
 
-	BASE_FRAME *pForm = new CMyForm;
+	CMyForm* pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
 //	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
 

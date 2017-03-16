@@ -38,10 +38,28 @@ INLINE ENUM_NAME operator|(ENUM_NAME a, ENUM_NAME b) \
 INLINE ENUM_NAME& operator|=(ENUM_NAME& a, ENUM_NAME b) \
 { \
 	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
+} \
+INLINE ENUM_NAME& operator&=(ENUM_NAME& a, ENUM_NAME b) \
+{ \
+	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) & static_cast<INT>(b)); \
+}\
+INLINE ENUM_NAME operator~(ENUM_NAME a) \
+{ \
+	return static_cast<ENUM_NAME>(~static_cast<INT>(a)); \
 }
 
-#define TYPE_MAX_VALUE(variable) (std::numeric_limits<typeid(variable)>::max())
-#define TYPE_MIN_VALUE(variable) (std::numeric_limits<typeid(variable)>::lowest())
+
+template<class T>
+constexpr T VAR_MAX_VALUE(T var)
+{
+	return (std::numeric_limits<T>::max)();
+}
+
+template<class T>
+constexpr T VAR_MIN_VALUE(T var)
+{
+	return (std::numeric_limits<T>::min)();
+}
 
 
 typedef signed char      INT8, *PINT8;

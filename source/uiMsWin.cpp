@@ -422,19 +422,6 @@ uiWindow::~uiWindow()
 	ASSERT(m_TotalWorkingTimer == 0);
 }
 
-BOOL uiWindow::GetUiRect(uiRect &rect)
-{
-	RECT wrect;
-	if (GetClientRect(m_Handle, &wrect) != 0)
-	{
-		rect.Left = wrect.left;
-		rect.Top = wrect.top;
-		rect.Right = wrect.right;
-		rect.Bottom = wrect.bottom;
-		return TRUE;
-	}
-	return FALSE;
-}
 
 void uiWindow::OnFormDestroy(uiFormBase *pForm)
 {
@@ -676,7 +663,7 @@ void uiWindow::RetrackMouseCheck(uiFormBase *pFormBase) // For form size and mov
 	if (bRetrackMouse || m_bDragging || m_pHoverForm == nullptr)
 		return;
 
-	if (pFormBase->bMouseHover)
+	if (pFormBase->FBTestFlag(uiFormBase::FBF_MOUSE_HOVER))
 		bRetrackMouse = true;
 	else
 		for (uiFormBase *pBase = m_pHoverForm; pBase != nullptr; pBase = pBase->GetPlate())
@@ -770,7 +757,7 @@ BOOL uiWindow::CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY
 	return UICore::GCaret.MoveByOffset(OffsetX, OffsetY);
 }
 
-BOOL uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
+UINT uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
 {
 	ASSERT(m_TotalWorkingTimer <= m_TimerTable.size());
 
@@ -788,7 +775,7 @@ BOOL uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT 
 
 	UINT_PTR TimerHandle;
 	if ((TimerHandle = ::SetTimer(m_Handle, index + 1, msElapsedTime, nullptr)) == 0)
-		return FALSE;
+		return 0;
 
 	stWndTimerInfo wti;
 	wti.id = id;
@@ -806,11 +793,44 @@ BOOL uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT 
 	++m_TotalWorkingTimer;
 	pFormBase->SetTimerCount(TRUE);
 
-	return TRUE;
+	return index + 1;
 }
 
-void uiWindow::TimerClose(uiFormBase *pFormBase, UINT id)
+BOOL uiWindow::TimerClose(uiFormBase *pFormBase, UINT key, BOOL bByID)
 {
+	UINT nIndex;
+
+	if (!bByID)
+	{
+		nIndex = key - 1;
+		if (nIndex >= m_TimerTable.size() || m_TimerTable[nIndex].TimerHandle == 0 || m_TimerTable[nIndex].pFormBase != pFormBase)
+		{
+			printx("Warning: TimerClose failed! Handle: %d\n", key);
+			return FALSE;
+		}
+	}
+	else
+	{
+		for (nIndex = 0; nIndex < m_TimerTable.size(); ++nIndex)
+			if (m_TimerTable[nIndex].TimerHandle == 0 || m_TimerTable[nIndex].pFormBase != pFormBase || m_TimerTable[nIndex].id != key)
+				continue;
+			else
+				break;
+
+		if (nIndex == m_TimerTable.size())
+		{
+			printx("Warning: TimerClose failed! ID: %d\n", key);
+			return FALSE;
+		}
+	}
+
+	stWndTimerInfo &wti = m_TimerTable[nIndex];
+	VERIFY(::KillTimer(m_Handle, nIndex + 1));
+	wti.TimerHandle = 0; // Lazy clean.
+	wti.pFormBase->SetTimerCount(FALSE);
+	--m_TotalWorkingTimer;
+
+	return TRUE;
 }
 
 void uiWindow::TimerRemoveAll(uiFormBase* const pFormBase)
@@ -872,7 +892,7 @@ void uiWindow::OnCreate()
 	printx("---> uiWindow::OnCreate\n");
 
 	uiRect rect;
-	GetUiRect(rect);
+	GetClientRect(rect);
 	m_Drawer.InitBackBuffer(2, m_Handle, rect.Width(), rect.Height());
 }
 
@@ -893,7 +913,7 @@ void uiWindow::OnKeyUp(INT iKey)
 
 void uiWindow::OnMove(INT scx, INT scy)
 {
-	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
+//	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
 
 	if (m_pForm->IsCreated())
 	{
@@ -940,26 +960,34 @@ void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 void uiWindow::OnPaint()
 {
 	PAINTSTRUCT ps;
-	m_Drawer.Begin(&ps);
-
-	if (GetKeyState(VK_F2) < 0)
+	if (m_Drawer.Begin(&ps))
 	{
-		uiRect rect;
-		memcpy(&rect, &ps.rcPaint, sizeof(rect));
-		m_Drawer.FillRect(rect, RGB(rand() % 256, rand() % 256, rand() % 256));
-	//	printx("---> uiWindow::OnPaint\n");
+		if (GetKeyState(VK_F2) < 0)
+		{
+			uiRect rect;
+			memcpy(&rect, &ps.rcPaint, sizeof(rect));
+			m_Drawer.FillRect(rect, RGB(rand() % 256, rand() % 256, rand() % 256));
+			//	printx("---> uiWindow::OnPaint\n");
+		}
+		else
+		{
+			m_pForm->EntryOnPaint(&m_Drawer, 1);
+		}
+		m_Drawer.End(&ps);
 	}
 	else
 	{
-		m_pForm->EntryOnPaint(&m_Drawer, 1);
+		uiRect rect;
+		if (GetClientRect(rect) && rect.IsEmpty()) // This happens when tool window is minimized.
+			return;
+		printx("Warning! ---> uiWindow::OnPaint. Failed to draw!\n");
+		ASSERT(0);
 	}
-	m_Drawer.End(&ps);
 }
 
 BOOL uiWindow::OnSetCursor()
 {
 	//printx("---> uiWindow::OnSetCursor.\n");
-
 	if (bChangeCursor)
 	{
 		uiGetCursor().Update();
@@ -993,7 +1021,7 @@ void uiWindow::OnLoseKBFocus()
 
 void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 {
-	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
+//	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
 	switch (nType)
 	{
@@ -1480,15 +1508,15 @@ void uiWindow::OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const 
 
 void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)
 {
-	ASSERT(!pForm->bMouseHover);
-	pForm->bMouseHover = true; // Must set this flag first.
+	ASSERT(!pForm->IsMouseHovering());
+	pForm->FBSetFlag(uiFormBase::FBF_MOUSE_HOVER); // Must set this flag first.
 	pForm->OnMouseEnter(x, y);
 }
 
 void uiWindow::MouseLeaveForm(uiFormBase *pForm)
 {
-	ASSERT(pForm->bMouseHover);
-	pForm->bMouseHover = false; // Must set this flag first.
+	ASSERT(pForm->IsMouseHovering());
+	pForm->FBCleanFlag(uiFormBase::FBF_MOUSE_HOVER); // Must set this flag first.
 	pForm->OnMouseLeave();
 }
 

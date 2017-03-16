@@ -38,7 +38,7 @@ public:
 	virtual ~uiDrawer();
 
 
-	virtual void Begin(void *pCtx) = 0;
+	virtual BOOL Begin(void *pCtx) = 0;
 	virtual void End(void *pCtx) = 0;
 
 	virtual void ResizeBackBuffer(UINT nWidth, UINT nHeight) {}
@@ -275,7 +275,7 @@ public:
 		ASSERT(m_hRgn == NULL);
 	}
 
-	void Begin(void *pCtx);
+	BOOL Begin(void *pCtx);
 	void End(void *pCtx);
 
 	BOOL InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight);

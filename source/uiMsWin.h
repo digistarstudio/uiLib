@@ -48,7 +48,6 @@ public:
 	virtual ~uiWindow();
 
 	BOOL DockForm(uiFormBase *pForm);
-	BOOL GetUiRect(uiRect &rect);
 	void OnFormDestroy(uiFormBase *pForm);
 	void OnFormHide(uiFormBase *pForm);
 
@@ -73,8 +72,8 @@ public:
 	BOOL CaretMoveImp(uiFormBase *pFormBase, INT x, INT y);
 	BOOL CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY);
 
-	BOOL TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx);
-	void TimerClose(uiFormBase *pFormBase, UINT id);
+	UINT TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx);
+	BOOL TimerClose(uiFormBase *pFormBase, UINT key, BOOL bByID);
 	void TimerRemoveAll(uiFormBase* const pFormBase);
 
 	void OnActivate(WPARAM wParam, LPARAM LParam);
@@ -119,6 +118,7 @@ public:
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
 	INLINE BOOL UpdateWindow() { return ::UpdateWindow(m_Handle); }
 	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
+	INLINE BOOL GetClientRect(uiRect &rect) { return ::GetClientRect(m_Handle, (LPRECT)&rect); }
 	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow(m_Handle, nCmdShow); }
 	INLINE HWND SetCapture() { return ::SetCapture(m_Handle); }
 	INLINE BOOL ReleaseCapture() { return ::ReleaseCapture(); }
