@@ -9,8 +9,10 @@
 #include "uiForm.h"
 
 
-UINT uiWinGetCurrentMsg();
+#define DEFAULT_BACKBUFFER_COUNT 0
 
+
+UINT uiWinGetCurrentMsg();
 
 
 struct stWndTimerInfo

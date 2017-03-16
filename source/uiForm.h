@@ -144,14 +144,14 @@ public:
 	{
 		FBF_NONE,
 
-		FBF_ACTIVATED = 0x01,
-		FBF_CREATING = 0x01 << 1,
-		FBF_CREATED = 0x01 << 2,
+		FBF_ACTIVATED     = 0x01,
+		FBF_CREATING      = 0x01 << 1,
+		FBF_CREATED       = 0x01 << 2,
 		FBF_IS_DESTROYING = 0x01 << 3,
-		FBF_SHOW = 0x01 << 4,
-		FBF_MOUSE_HOVER = 0x01 << 5,
-		FBF_OWN_CARET = 0x01 << 6,
-		FBF_SIDE_DOCKED = 0x01 << 7,
+		FBF_SHOW          = 0x01 << 4,
+		FBF_MOUSE_HOVER   = 0x01 << 5,
+		FBF_OWN_CARET     = 0x01 << 6,
+		FBF_SIDE_DOCKED   = 0x01 << 7,
 	};
 
 	struct stFormMoveInfo
@@ -209,10 +209,14 @@ public:
 	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
-	virtual UTX::CSimpleList* GetSideDockedFormList() { return nullptr; }
-	virtual uiFormBase* FindByPos(INT x, INT y, INT *DestX, INT *DestY); // x and y are in frame space.
-	virtual void ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip);
-	virtual void ToWindowSpace(uiFormBase *pForm, INT &x, INT &y);
+	virtual uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY); // x and y are in frame space.
+
+	void ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip);
+	void ToWindowSpace(INT &x, INT &y);
+
+	virtual void ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const;
+	virtual void ToPlateSpace(uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
+	virtual uiRect GetClientRectFS() const { return m_FrameRect; }
 
 	void StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY);
 
@@ -220,14 +224,13 @@ public:
 	BOOL EntryOnClose();
 	void EntryOnDestroy(uiWindow *pWnd);
 	void EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo);
-	void EntryOnPaint(uiDrawer* pDrawer, INT depth);
 	void EntryOnSize(UINT nNewWidth, UINT nNewHeight);
 
 	void EntryOnKBGetFocus();
 	void EntryOnKBLoseFocus();
 
-
 	virtual void EntryOnCommand(UINT id);
+	virtual void EntryOnPaint(uiDrawer* pDrawer, INT depth);
 
 	virtual uiSize GetMinSize() { return uiSize(-1, -1); }
 	virtual uiSize GetMaxSize() { return uiSize(-1, -1); }
@@ -252,7 +255,6 @@ public:
 	virtual void OnMove(INT x, INT y, const stFormMoveInfo *pInfo);
 	virtual INT  OnNCHitTest(INT x, INT y);
 	virtual void OnPaint(uiDrawer* pDrawer);
-	virtual void OnFramePaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnTimer(stTimerInfo* ti);
@@ -298,22 +300,20 @@ public:
 	INLINE void FrameToWindow(uiRect &rect)
 	{
 		rect = m_FrameRect;
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, rect, FALSE);
+		ToWindowSpace(this, rect, FALSE);
 	}
 	INLINE void ClientToWindow(uiRect &rect)
 	{
-		rect = m_ClientRect;
+		rect = GetClientRectFS();
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, rect, FALSE);
+		ToWindowSpace(this, rect, FALSE);
 	}
 	INLINE void ClientToWindow(INT& x, INT& y)
 	{
-		x += (m_ClientRect.Left + m_FrameRect.Left);
-		y += (m_ClientRect.Top + m_FrameRect.Top);
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, x, y);
+		uiRect rect = GetClientRectFS();
+		x += m_FrameRect.Left;
+		y += m_FrameRect.Top;
+		ToWindowSpace(x, y);
 	}
 	INLINE void ClientToScreen(INT &x, INT &y)
 	{
@@ -328,10 +328,18 @@ public:
 		y -= cy;
 	}
 
+	virtual void FrameToClientSpace(INT &x, INT &y) const {}
 
-	INLINE void ParentToFrameSpace(INT &x, INT &y) { x -= m_FrameRect.Left; y -= m_FrameRect.Top; }
+
+//	INLINE void ParentToFrameSpace(INT &x, INT &y) { x -= m_FrameRect.Left; y -= m_FrameRect.Top; }
 	INLINE void FrameToParentSpace(INT &x, INT &y) { x += m_FrameRect.Left; y += m_FrameRect.Top; }
-	INLINE void FrameToClientSpace(INT &x, INT &y) { x -= m_ClientRect.Left; y -= m_ClientRect.Top; }
+	INLINE void ClientToFrameSpace(INT &x, INT &y)
+	{
+		INT fx = 0, fy = 0;
+		FrameToClientSpace(fx, fy);
+		x -= fx;
+		y -= fy;
+	}
 
 	INLINE BOOL IsRootForm() const { return (m_pWnd != nullptr); }
 	INLINE BOOL IsBaseForm() const { return (this == pAppBaseForm); }
@@ -353,11 +361,11 @@ public:
 	INLINE uiFormBase* GetParent() const { return m_pParent; }
 	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
 
-	INLINE uiRect GetFrameRect() const { return uiRect(0, 0, m_FrameRect.Width(), m_FrameRect.Height()); }
-	INLINE uiRect GetClientRect() const { return uiRect(0, 0, m_ClientRect.Width(), m_ClientRect.Height()); }
+	INLINE uiRect GetFrameRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
+	INLINE uiRect GetClientRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
 
-	INLINE const uiString& GetTitle() const { return m_strTitle; }
-	INLINE void SetTitle(const TCHAR* pStrName) { m_strTitle = pStrName; }
+	INLINE const uiString& GetName() const { return m_strName; }
+	INLINE void SetName(const TCHAR* pStrName) { m_strName = pStrName; }
 
 	BOOL IsDirectChildForm(uiFormBase *pForm)
 	{
@@ -389,7 +397,6 @@ protected:
 		for (; pPlate->GetPlate() != nullptr; pPlate = pPlate->GetPlate());
 		return pPlate->m_pWnd;
 	}
-	const uiRect& GetClientRectFS() const { return m_ClientRect; }
 
 	INLINE BOOL FBTestFlag(FORM_BASE_FLAGS flag) const;
 	INLINE void FBSetFlag(FORM_BASE_FLAGS flag);
@@ -406,20 +413,11 @@ private:
 	friend uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
 	friend LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+	friend class ISideDockable;
 	friend class uiForm;
 	friend class uiWindow;
 
 
-	void SetClientRect(const uiRect& NewRect)
-	{
-		if (NewRect != m_ClientRect)
-		{
-			if (NewRect.Width() == m_ClientRect.Width() && NewRect.Height() == m_ClientRect.Height())
-				return;
-			m_ClientRect = NewRect; // Must update original data first.
-			OnSize(NewRect.Width(), NewRect.Height());
-		}
-	}
 	INLINE std::vector<UINT>& GetIDList() { return m_IDList; }
 	INLINE UINT GetTimerCount() const { return m_TimerCount; }
 	INLINE void SetTimerCount(BOOL bInc) { m_TimerCount = (bInc) ? m_TimerCount + 1 : m_TimerCount - 1; } // Don't use ++lvalue here.
@@ -437,12 +435,11 @@ private:
 	list_head  m_ListChildren;
 	list_entry m_ListChildrenEntry;
 
-	uiRect m_FrameRect, m_ClientRect;
-	INT m_minWidth, m_minHeight;
+	uiRect m_FrameRect;
 
 	std::vector<UINT> m_IDList; // Don't access this member directly.
 
-	uiString m_strTitle;
+	uiString m_strName;
 
 	FORM_BASE_FLAGS m_Flag;
 
@@ -458,6 +455,131 @@ IMPLEMENT_ENUM_FLAG(uiFormBase::FORM_BASE_FLAGS)
 INLINE BOOL uiFormBase::FBTestFlag(uiFormBase::FORM_BASE_FLAGS flag) const { return m_Flag & flag; }
 INLINE void uiFormBase::FBSetFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag |= flag; }
 INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
+
+
+class ISideDockable : virtual public uiFormBase
+{
+public:
+
+	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override {}
+
+	uiRect GetClientRectFS() const override { return m_ClientRect; }
+
+	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override
+	{
+		OnFramePaint(pDrawer);
+
+		const list_head &head = m_SideDockedFormList.GetListHead();
+		for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
+		{
+			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
+
+			if (!pForm->IsVisible())
+				continue;
+
+			if (pDrawer->PushDestRect(pForm->m_FrameRect))
+			{
+				ASSERT(pForm->m_FrameRect.IsValidRect());
+				pForm->EntryOnPaint(pDrawer, depth + 1);
+				pDrawer->PopDestRect();
+			}
+		}
+
+		if (pDrawer->PushDestRect(m_ClientRect))
+		{
+			uiFormBase::EntryOnPaint(pDrawer, depth);
+			pDrawer->PopDestRect();
+		}
+	}
+
+	uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY) override
+	{
+		if (m_ClientRect.IsPointIn(fcX, fcY))
+			return uiFormBase::FindByPos(fcX - m_ClientRect.Left + m_FrameRect.Left, fcY - m_ClientRect.Top + m_FrameRect.Top, DestX, DestY);
+		else
+		{
+			const list_head &head = m_SideDockedFormList.GetListHead();
+			for (list_entry *pNext = LIST_GET_HEAD(head); IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
+			{
+				uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pNext);
+				ASSERT(pForm->GetPlate() == this);
+				if (!pForm->IsVisible())
+					continue;
+				if (pForm->IsPointIn(fcX, fcY))
+					return pForm->FindByPos(fcX - pForm->m_FrameRect.Left, fcY - pForm->m_FrameRect.Top, DestX, DestY);
+		
+			}
+
+			*DestX = fcX - m_ClientRect.Left;
+			*DestY = fcY - m_ClientRect.Top;
+			return this;
+		}
+	}
+	void ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const override
+	{
+		ASSERT(pForm->GetPlate() == this);
+		if (!pForm->IsSideDocked())
+		{
+			x += m_ClientRect.Left;
+			y += m_ClientRect.Top;
+		}
+		uiFormBase::ToPlateSpace(pForm, x, y);
+	}
+	void ToPlateSpace(uiFormBase *pForm, uiRect& rect, BOOL bClip) const override
+	{
+		ASSERT(pForm->GetPlate() == this);
+		if (!pForm->IsSideDocked())
+		{
+			rect.Move(m_ClientRect.Left, m_ClientRect.Top);
+			if (bClip)
+				rect.IntersectWith(m_ClientRect);
+		}
+		uiFormBase::ToPlateSpace(pForm, rect, bClip);
+	}
+
+	void FrameToClientSpace(INT &x, INT &y) const override
+	{
+		x -= m_ClientRect.Left;
+		y -= m_ClientRect.Top;
+	}
+
+	virtual void OnFramePaint(uiDrawer* pDrawer) {}
+
+	void SetClientRect(const uiRect& NewRect)
+	{
+		if (NewRect != m_ClientRect)
+		{
+			if (NewRect.Width() == m_ClientRect.Width() && NewRect.Height() == m_ClientRect.Height())
+				m_ClientRect = NewRect;
+			else
+			{
+				m_ClientRect = NewRect; // Must update original data first.
+				OnSize(NewRect.Width(), NewRect.Height());
+			}
+		}
+	}
+
+
+protected:
+
+	uiRect m_ClientRect;
+	UTX::CSimpleList m_SideDockedFormList;
+
+
+};
+
+
+class IMessageHandler : virtual public uiFormBase
+{
+public:
+
+	void EntryOnCommand(UINT id) override
+	{
+	}
+
+
+
+};
 
 
 class uiControl : public uiFormBase
@@ -579,7 +701,7 @@ public:
 	void OnPaint(uiDrawer* pDrawer)
 	{
 		//	printx("---> uiButton::OnPaint\n");
-		uiRect rect = GetClientRect();
+		uiRect rect = GetFrameRect();
 
 		if (IsMouseHovering())
 			pDrawer->FillRect(rect, RGB(230, 200, 230));
@@ -608,20 +730,7 @@ protected:
 };
 
 
-class uiDockableToolForm : public uiFormBase
-{
-public:
-
-	uiDockableToolForm();
-	virtual ~uiDockableToolForm();
-
-
-};
-
-
-
-
-class uiMenuBar : public uiFormBase
+class uiMenuBar : virtual public uiFormBase
 {
 public:
 
@@ -648,7 +757,7 @@ public:
 
 	virtual void OnPaint(uiDrawer* pDrawer)
 	{
-		uiRect rect = GetClientRect();
+		uiRect rect = GetFrameRect();
 		pDrawer->FillRect(rect, RGB(200, 200, 200));
 
 		for (INT i = 0; i < m_Count; ++i)
@@ -752,7 +861,7 @@ protected:
 };
 
 
-class uiForm : public uiFormBase
+class uiForm : public ISideDockable//, public IMessageHandler
 {
 public:
 
@@ -765,7 +874,6 @@ public:
 	uiForm()
 	:m_minSize(-1, -1), m_maxSize(-1, -1)
 	{
-		m_pDockingPlate = nullptr;
 		m_pFormSplitter = nullptr;
 	}
 	~uiForm() {}
@@ -774,29 +882,22 @@ public:
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 	BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 
-	virtual UTX::CSimpleList* GetSideDockedFormList()
-	{
-		ASSERT(!IsDestroying());
-		return &m_SideDockedFormList;
-	}
-
-
 	virtual void OnCreate();
 //	virtual uiFormBase* FindByPos(INT x, INT y);
 	virtual BOOL SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm = nullptr);
 	virtual BOOL SetMenuBar(uiMenu* pMenu);
 
-	void OnFramePaint(uiDrawer* pDrawer)
+	void OnFramePaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetFrameRect();
 		DWORD color = uiGetSysColor(SCN_FRAME);
 		pDrawer->FillRect(rect, color);
 	}
 
-	virtual INT  OnNCHitTest(INT x, INT y);
-	virtual void OnPaint(uiDrawer* pDrawer);
-	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
-	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
+	INT  OnNCHitTest(INT x, INT y);
+	void OnPaint(uiDrawer* pDrawer);
+	void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
+	void OnSize(UINT nNewWidth, UINT nNewHeight);
 
 
 	virtual uiSize GetMinSize() { return m_minSize; }
@@ -807,35 +908,9 @@ public:
 
 protected:
 
-	uiFormBase *m_pDockingPlate;
 	stFormSplitter *m_pFormSplitter;
 
-	UTX::CSimpleList m_SideDockedFormList;
-
 	uiSize m_minSize, m_maxSize;
-
-
-};
-
-
-class uiFrame : public uiFormBase
-{
-public:
-
-	uiFrame()
-	{
-	}
-	~uiFrame() {}
-
-	void OnCreate();
-	void OnFramePaint(uiDrawer* pDrawer);
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
-	void OnPaint(uiDrawer* pDrawer);
-
-
-protected:
-
-	uiRect m_Header;
 
 
 };
@@ -879,7 +954,7 @@ public:
 	void OnPaint(uiDrawer* pDrawer)
 	{
 	//	printx("---> uiButton2::OnPaint\n");
-		uiRect rect = GetClientRect();
+		uiRect rect = GetFrameRect();
 		const INT size = 3;
 
 		if (IsMouseHovering())

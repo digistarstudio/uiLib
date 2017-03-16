@@ -338,7 +338,7 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 	}
 
 	HWND hParent = (ParentForm == nullptr) ? NULL : (HWND)ParentForm->GetBaseWnd()->GetHandle();
-	RECT r = { x, y, (LONG)(x + nWidth), (LONG)(x + nHeight) };
+	RECT r = { x, y, (LONG)(x + nWidth), (LONG)(y + nHeight) };
 	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX | WS_MAXIMIZEBOX*/;
 	// DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU;
 
@@ -395,6 +395,7 @@ BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id)
 
 
 uiWindow::uiWindow(uiFormBase *pFormIn)
+:m_pFirstClickedForm()
 {
 	m_Handle = NULL;
 	m_pForm = pFormIn;
@@ -410,7 +411,6 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 
 	m_MouseDragKey = MKT_NONE;
 	ZeroMemory(m_MouseKeyDownTime, sizeof(m_MouseKeyDownTime));
-	ZeroMemory(m_pFirstClickedForm, sizeof(m_pFirstClickedForm));
 
 	m_TotalWorkingTimer = 0;
 }
@@ -893,7 +893,7 @@ void uiWindow::OnCreate()
 
 	uiRect rect;
 	GetClientRect(rect);
-	m_Drawer.InitBackBuffer(2, m_Handle, rect.Width(), rect.Height());
+	m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, rect.Width(), rect.Height());
 }
 
 void uiWindow::OnDestroy()
@@ -913,7 +913,7 @@ void uiWindow::OnKeyUp(INT iKey)
 
 void uiWindow::OnMove(INT scx, INT scy)
 {
-//	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
+	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
 
 	if (m_pForm->IsCreated())
 	{
@@ -1021,7 +1021,7 @@ void uiWindow::OnLoseKBFocus()
 
 void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 {
-//	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
+	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
 	switch (nType)
 	{
@@ -1126,14 +1126,12 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y)
 		return HTCLIENT;
 
 	LRESULT iRet = HTCLIENT;
-	INT iPos, destX, destY, fx = 0, fy = 0;
+	INT iPos, destX, destY;
 	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
 	uiWinCursor &cursor = uiGetCursor();
 	ASSERT(pForm != nullptr);
 
-	pForm->FrameToClientSpace(fx, fy);
-	destX -= fx;
-	destY -= fy;
+	pForm->ClientToFrameSpace(destX, destY);
 	m_NonClientArea = iPos = pForm->OnNCHitTest(destX, destY);
 
 	switch (iPos)
@@ -1370,7 +1368,7 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 
 void uiWindow::OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
-	//	printx("---> uiWindow::OnMouseBtnDown Type:%d x:%d y:%d\n", KeyType, x, y);
+	printx("---> uiWindow::OnMouseBtnDown Type:%d x:%d y:%d\n", KeyType, x, y);
 
 	switch (KeyType)
 	{

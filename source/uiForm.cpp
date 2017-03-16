@@ -288,25 +288,17 @@ void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
 	if (!IsVisible())
 		return;
 
-	uiRect dest, temp;
+	uiRect dest;
 
 	if (pUpdateRect == nullptr)
-	{
 		dest = m_FrameRect;
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, dest, TRUE);
-	}
 	else
 	{
-		temp = m_ClientRect;
-		temp.Move(m_FrameRect.Left, m_FrameRect.Top);
-		if (GetPlate() != nullptr)
-			GetPlate()->ToWindowSpace(this, temp, TRUE);
-
 		dest = *pUpdateRect;
-		dest.Move(temp.Left, temp.Top);
-		dest.IntersectWith(temp);
+		dest.Move(m_FrameRect.Left, m_FrameRect.Top);
 	}
+
+	ToWindowSpace(this, dest, TRUE);
 
 	if (dest.IsValidRect())
 		GetBaseWnd()->RedrawImp(&dest);
@@ -318,8 +310,7 @@ void uiFormBase::RedrawFrame(const uiRect *pUpdateRect)
 		return;
 
 	uiRect dest = (pUpdateRect == nullptr) ? m_FrameRect : *pUpdateRect;
-	if (GetPlate() != nullptr)
-		GetPlate()->ToWindowSpace(this, dest, TRUE);
+	ToWindowSpace(this, dest, TRUE);
 
 	if (dest.IsValidRect())
 		GetBaseWnd()->RedrawImp(&dest);
@@ -434,7 +425,7 @@ void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingB
 		splitter.pTopLeftForm = pDocking;
 		splitter.pBottomRightForm = pPlate;
 
-		pPlate->m_ClientRect = CurrentRect;
+	//	pPlate->m_ClientRect = CurrentRect;
 	}
 	else if (df & FDF_BOTTOM)
 	{
@@ -449,84 +440,74 @@ void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingB
 	}
 }
 
-uiFormBase* uiFormBase::FindByPos(INT x, INT y, INT *DestX, INT *DestY)
+uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY)
 {
-	UTX::CSimpleList *pSideDockedFormList = GetSideDockedFormList();
-	if (pSideDockedFormList != nullptr)
-	{
-		const list_head &head = pSideDockedFormList->GetListHead();
-		for (list_entry *pNext = head.next; IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
-		{
-			uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pNext);
-			ASSERT(pForm->GetPlate() == this);
-			if (!pForm->IsVisible())
-				continue;
-			if (pForm->IsPointIn(x, y))
-				return pForm->FindByPos(x - pForm->m_FrameRect.Left, y - pForm->m_FrameRect.Top, DestX, DestY);
-		}
-	}
+	//UTX::CSimpleList *pSideDockedFormList = GetSideDockedFormList();
+	//if (pSideDockedFormList != nullptr)
+	//{
+	//	const list_head &head = pSideDockedFormList->GetListHead();
+	//	for (list_entry *pNext = head.next; IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
+	//	{
+	//		uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pNext);
+	//		ASSERT(pForm->GetPlate() == this);
+	//		if (!pForm->IsVisible())
+	//			continue;
+	//		if (pForm->IsPointIn(x, y))
+	//			return pForm->FindByPos(x - pForm->m_FrameRect.Left, y - pForm->m_FrameRect.Top, DestX, DestY);
+	//	}
+	//}
 
-	if (!m_ClientRect.IsPointIn(x, y))
-	{
-		*DestX = x - m_ClientRect.Left;
-		*DestY = y - m_ClientRect.Top;
-		return this;
-	}
+	//if (!m_ClientRect.IsPointIn(x, y))
+	//{
+	//	*DestX = x - m_ClientRect.Left;
+	//	*DestY = y - m_ClientRect.Top;
+	//	return this;
+	//}
 
-	INT cx = x - m_ClientRect.Left, cy = y - m_ClientRect.Top;
+	INT cx = fcX - m_FrameRect.Left, cy = fcY - m_FrameRect.Top;
 	uiFormBase *pSubForm = this;
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
 		pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-		if (!pSubForm->IsVisible() || pSubForm->IsSideDocked())
-			continue;
-		if (pSubForm->GetPlate() != this)
+		if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this)
 			continue;
 		if (pSubForm->IsPointIn(cx, cy))
 			return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY);
 	}
 
-	*DestX = x - m_ClientRect.Left;
-	*DestY = y - m_ClientRect.Top;
+	*DestX = fcX - m_FrameRect.Left;
+	*DestY = fcY - m_FrameRect.Top;
 	return this;
 }
 
 void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip)
 {
-	if (pForm->IsSideDocked())
-	{
-		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
+//	rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 
-		if (bClip)
-			rect.IntersectWith(m_FrameRect);
-	}
-	else
-	{
-		rect.Move(m_ClientRect.Left, m_ClientRect.Top);
-		if (bClip)
-			rect.IntersectWith(m_ClientRect);
-		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
-	}
-
-	if (GetPlate() != nullptr)
-		GetPlate()->ToWindowSpace(this, rect, bClip);
+	for (uiFormBase *pPlate = GetPlate(), *pForm = this; pPlate != nullptr; pForm = pPlate, pPlate = pPlate->GetPlate())
+		pPlate->ToPlateSpace(pForm, rect, bClip);
 }
 
-void uiFormBase::ToWindowSpace(uiFormBase *pForm, INT &x, INT &y)
+void uiFormBase::ToWindowSpace(INT &x, INT &y)
 {
-	if (pForm->IsSideDocked())
-	{
-		x += m_FrameRect.Left;
-		y += m_FrameRect.Top;
-	}
-	else
-	{
-		x = x + m_FrameRect.Left + m_ClientRect.Left;
-		y = y + m_FrameRect.Top + m_ClientRect.Top;
-	}
+//	x += m_FrameRect.Left;
+//	y += m_FrameRect.Top;
 
-	if (GetPlate() != nullptr)
-		GetPlate()->ToWindowSpace(this, x, y);
+	for (uiFormBase *pPlate = GetPlate(), *pForm = this; pPlate != nullptr; pForm = pPlate, pPlate = pPlate->GetPlate())
+		pPlate->ToPlateSpace(pForm, x, y);
+}
+
+void uiFormBase::ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const
+{
+	x += m_FrameRect.Left;
+	y += m_FrameRect.Top;
+}
+
+void uiFormBase::ToPlateSpace(uiFormBase *pForm, uiRect& rect, BOOL bClip) const
+{
+	rect.Move(m_FrameRect.Left, m_FrameRect.Top);
+	if (bClip)
+		rect.IntersectWith(m_FrameRect);
 }
 
 void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
@@ -557,7 +538,7 @@ void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 
 	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
-	m_ClientRect.SetSize(nWidth, nHeight); // Must set the default size for the client rectangle.
+//	m_ClientRect.SetSize(nWidth, nHeight); // Must set the default size for the client rectangle.
 
 	OnCreate();
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
@@ -614,52 +595,6 @@ void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo)
 		CaretMoveByOffset(pInfo->XOffset, pInfo->YOffset);
 }
 
-void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
-{
-	OnFramePaint(pDrawer);
-
-	UTX::CSimpleList *pSideDockedFormList = GetSideDockedFormList();
-	if (pSideDockedFormList != nullptr)
-	{
-		const list_head &head = pSideDockedFormList->GetListHead();
-		for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
-		{
-			uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pEntry);
-
-			if (pDrawer->PushDestRect(pForm->m_FrameRect))
-			{
-				ASSERT(pForm->m_FrameRect.IsValidRect());
-				pForm->EntryOnPaint(pDrawer, depth + 1);
-				pDrawer->PopDestRect();
-			}
-		}
-	}
-
-	if (pDrawer->PushDestRect(m_ClientRect))
-	{
-		OnPaint(pDrawer);
-
-		for (list_entry *pEntry = LIST_GET_HEAD(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->next)
-		{
-			uiFormBase *pChild = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-
-			if (!pChild->IsVisible() || pChild->IsSideDocked())
-				continue;
-			if (pChild->GetPlate() != this)
-				continue;
-
-			if (pDrawer->PushDestRect(pChild->m_FrameRect))
-			{
-				ASSERT(pChild->m_FrameRect.IsValidRect());
-				pChild->EntryOnPaint(pDrawer, depth + 1);
-				pDrawer->PopDestRect();
-			}
-		}
-
-		pDrawer->PopDestRect();
-	}
-}
-
 void uiFormBase::EntryOnSize(UINT nNewWidth, UINT nNewHeight)
 {
 	m_FrameRect.Resize(nNewWidth, nNewHeight);
@@ -700,6 +635,28 @@ void uiFormBase::EntryOnCommand(UINT id)
 		else
 		{
 			printx("No handler for command ID: %d\n", id);
+		}
+	}
+}
+
+void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
+{
+	OnPaint(pDrawer);
+
+	for (list_entry *pEntry = LIST_GET_HEAD(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->next)
+	{
+		uiFormBase *pChild = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
+
+		if (!pChild->IsVisible() || pChild->GetPlate() != this)
+			continue;
+		if (pChild->IsSideDocked())
+			continue;
+
+		if (pDrawer->PushDestRect(pChild->m_FrameRect))
+		{
+			ASSERT(pChild->m_FrameRect.IsValidRect());
+			pChild->EntryOnPaint(pDrawer, depth + 1);
+			pDrawer->PopDestRect();
 		}
 	}
 }
@@ -788,16 +745,12 @@ void uiFormBase::OnPaint(uiDrawer* pDrawer)
 	{
 	}
 
-	pDrawer->FillRect(GetClientRect(), RGB(60, 80, 60));
-}
-
-void uiFormBase::OnFramePaint(uiDrawer* pDrawer)
-{
+	pDrawer->FillRect(GetFrameRect(), RGB(60, 80, 60));
 }
 
 void uiFormBase::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
-	SetClientRect(uiRect(nNewWidth, nNewHeight));
+	OnSize(nNewWidth, nNewHeight);
 }
 
 void uiFormBase::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -826,7 +779,7 @@ BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 	m_Count = 3;
 	m_RectArray = new uiRect[3];
 
-	INT height = GetClientRect().Bottom, width = 60, right = 0;
+	INT height = GetFrameRect().Bottom, width = 60, right = 0;
 
 	for (INT i = 0; i < m_Count; ++i)
 	{
@@ -877,7 +830,7 @@ void uiHeaderForm::OnCreate()
 	//	printx("---> uiHeaderForm::OnCreate\n");
 	ASSERT(m_pCloseBtn == nullptr);
 
-	uiRect rect = GetClientRect();
+	uiRect rect = GetFrameRect();
 	if ((m_pCloseBtn = new uiButton) != nullptr)
 	{
 		m_pCloseBtn->SetID(uiID_CLOSE);
@@ -928,12 +881,12 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 {
 //	printx("---> uiHeaderForm::OnPaint\n");
 
-	uiRect rect = GetClientRect();
+	uiRect rect = GetFrameRect();
 	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
-	pDrawer->FillRect(rect, color);
-//	pDrawer->FillRect(rect, RGB(255, 255, 255));
+//	pDrawer->FillRect(rect, color);
+	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
-	pDrawer->DrawText(GetParent()->GetTitle(), rect, DT_CENTER);
+	pDrawer->DrawText(GetParent()->GetName(), rect, DT_CENTER);
 }
 
 void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -944,7 +897,7 @@ void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
 
 void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 {
-	INT ButtonHeight = (GetClientRect().Height() - 1 * 2);
+	INT ButtonHeight = (GetFrameRect().Height() - 1 * 2);
 
 	if (m_pCloseBtn != nullptr)
 	{
@@ -1136,37 +1089,6 @@ void uiForm::UpdataClientRect()
 
 	if (rect != GetClientRectFS())
 		SetClientRect(rect);
-}
-
-
-void uiFrame::OnCreate()
-{
-	//	m_ClientRect.Move(2, 2);
-	//m_ClientRect.Inflate(-2, -2);
-
-}
-
-void uiFrame::OnFramePaint(uiDrawer* pDrawer)
-{
-//	uiRect rect = m_FrameRect;
-
-//	DWORD color = GetSysColor(COLOR_ACTIVECAPTION);
-	//pDrawer->FillRect(rect, color);
-//	pDrawer->FillRect(rect, RGB(GetRValue(color), GetGValue(color), GetBValue(color)));
-	//	pDrawer->FillRect(rect, RGB(255, 255, 255));
-}
-
-void uiFrame::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
-{
-	printx("uiFrame::OnMouseMove x: %d, y: %d\n", x, y);
-
-
-}
-
-void uiFrame::OnPaint(uiDrawer* pDrawer)
-{
-	uiRect rect = GetClientRect();
-	pDrawer->FillRect(rect, RGB(128, 128, 128));
 }
 
 
@@ -1577,7 +1499,7 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 		else
 			pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? m_ColorHover : m_ColorDefault);
 
-		pDrawer->DrawText(pPaneInfo->pForm->GetTitle(), tRect, DT_CENTER);
+		pDrawer->DrawText(pPaneInfo->pForm->GetName(), tRect, DT_CENTER);
 	}
 }
 

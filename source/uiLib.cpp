@@ -22,7 +22,7 @@ public:
 
 	void OnCreate()
 	{
-		SetTitle(_T("Tab Pane No. 1"));
+		SetName(_T("Tab Pane No. 1"));
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -47,7 +47,7 @@ public:
 
 	void OnCreate()
 	{
-		SetTitle(_T("Tab Pane No. 2"));
+		SetName(_T("Tab Pane No. 2"));
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -72,7 +72,7 @@ public:
 
 	void OnCreate()
 	{
-		SetTitle(_T("Tab Pane No. 3"));
+		SetName(_T("Tab Pane No. 3"));
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -399,7 +399,6 @@ protected:
 
 	uiWinMenu m_menu;
 
-
 };
 
 
@@ -426,7 +425,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	uiString a, b;
 	a = _T("Unicode string\n");
 
-	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
+	printx("sizeof ISideDockable: %d Bytes\n", sizeof ISideDockable);
+	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
 	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
 	printx("sizeof uiWindow: %d Bytes\n", sizeof uiWindow);

@@ -275,22 +275,22 @@ public:
 		ASSERT(m_hRgn == NULL);
 	}
 
-	BOOL Begin(void *pCtx);
-	void End(void *pCtx);
+	BOOL Begin(void *pCtx) override;
+	void End(void *pCtx) override;
 
 	BOOL InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight);
-	void ResizeBackBuffer(UINT nWidth, UINT nHeight);
+	void ResizeBackBuffer(UINT nWidth, UINT nHeight) override;
 
-	void FillRect(uiRect rect, UINT32 color);
-	void RoundRect(uiRect rect, UINT32 color, INT width, INT height);
-	void DrawEdge(uiRect &rect, UINT color);
-	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth);
-	void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag);
+	void FillRect(uiRect rect, UINT32 color) override;
+	void RoundRect(uiRect rect, UINT32 color, INT width, INT height) override;
+	void DrawEdge(uiRect &rect, UINT color) override;
+	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) override;
+	void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) override;
 
 
 protected:
 
-	virtual void OnDestRectChanged(BOOL bRestore)
+	void OnDestRectChanged(BOOL bRestore) override
 	{
 		HDC hMemDC = m_WndDrawDC.GetDC();
 		if (m_hRgn != NULL)
