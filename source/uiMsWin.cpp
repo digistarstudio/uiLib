@@ -39,30 +39,51 @@ INIT_UI init_ui;
 uiWinCursor GCursor;
 uiWinCaret GCaret;
 
-class WinMsgRecorder
+class MsgRecorder
 {
 public:
 
-	WinMsgRecorder() {}
-	~WinMsgRecorder() { m_CurrentMsg = WM_NOP; }
+	struct msWinMessage
+	{
+		msWinMessage(HWND hWndIn, UINT MsgIn, LPARAM lParamIn, WPARAM wParamIn)
+		:hWnd(hWndIn), Msg(MsgIn), lParam(lParamIn), wParam(wParamIn)
+		{
+		}
 
-	INLINE void Set(UINT msg) { ASSERT(m_CurrentMsg == WM_NOP); m_CurrentMsg = msg; }
+		HWND hWnd;
+		UINT Msg;
+		LPARAM lParam;
+		WPARAM wParam;
+	};
 
-//protected:
+#ifdef _DEBUG
+	MsgRecorder(HWND hWnd, UINT Msg, LPARAM lParam, WPARAM wParam)
+	{
+		msWinMessage msg(hWnd, Msg, lParam, wParam);
+		MsgStack.push_back(msg);
+	}
+	~MsgRecorder()
+	{
+		MsgStack.pop_back();
+	}
+#endif
 
-	friend UINT uiWinGetCurrentMsg();
-	static UINT m_CurrentMsg;
+	static std::vector<msWinMessage> MsgStack;
 
 };
 
-UINT WinMsgRecorder::m_CurrentMsg = WM_NOP; // Not work for recursive message handler currently.
+std::vector<MsgRecorder::msWinMessage> MsgRecorder::MsgStack;
+
 
 END_NAMESPACE
 
 
-UINT uiWinGetCurrentMsg()
+BOOL uiMessageLookUp(UINT message)
 {
-	return UICore::WinMsgRecorder::m_CurrentMsg;
+	for (auto it = UICore::MsgRecorder::MsgStack.begin(); it != UICore::MsgRecorder::MsgStack.end(); ++it)
+		if (it->Msg == message)
+			return TRUE;
+	return FALSE;
 }
 
 
@@ -110,7 +131,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	BOOL bProcessed = FALSE;
 	uiWindow *pWnd = nullptr;
 	uiFormBase *pForm;
-	UICore::WinMsgRecorder wmr;
+	UICore::MsgRecorder wmr(hWnd, message, wParam, lParam);
 
 	switch (message)
 	{
@@ -166,7 +187,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	case WM_KILLFOCUS:
 	//	LogWndMsg("Msg: WM_KILLFOCUS 0x%p 0x%p\n", wParam, lParam);
-		wmr.Set(WM_KILLFOCUS);
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnLoseKBFocus();
 		bProcessed = TRUE;
@@ -486,7 +506,7 @@ void uiWindow::MoveToCenter()
 void uiWindow::ShowImp(FORM_SHOW_MODE sm)
 {
 	INT iCmdShow = SW_SHOW;
-	if (sm != FSM_HIDE && uiWinGetCurrentMsg() == WM_KILLFOCUS)
+	if (sm != FSM_HIDE && uiMessageLookUp(WM_KILLFOCUS))
 	{
 		ASSERT(0);
 		return;
@@ -617,7 +637,7 @@ void uiWindow::PostMsgHandler(UINT msg)
 			bRetrackMouse = false;
 		//	printx("Start tracking: %d\n", ++TrackCount);
 			pOldHoverForm = m_pHoverForm;
-			m_pHoverForm = m_pForm->FindByPos(pt.x, pt.y, &DestX, &DestY);
+			m_pHoverForm = m_pForm->FindByPos(pt.x, pt.y, &DestX, &DestY, 0);
 
 			if (m_pHoverForm == pOldHoverForm)
 				break;
@@ -1125,9 +1145,12 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y)
 	if (m_bDragging && !m_bSizing)
 		return HTCLIENT;
 
+	if (GetKeyState(VK_F2) < 0)
+		m_pHoverForm->RedrawForm();
+
 	LRESULT iRet = HTCLIENT;
 	INT iPos, destX, destY;
-	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
+	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY, 0);
 	uiWinCursor &cursor = uiGetCursor();
 	ASSERT(pForm != nullptr);
 
@@ -1226,6 +1249,7 @@ void uiWindow::OnMouseCaptureLost()
 
 		if (m_pDraggingForm != m_pForm)
 			ClipCursor(NULL);
+		m_MouseDragKey = MKT_NONE;
 		m_bDragging = false;
 
 		if (m_bSizing)
@@ -1315,6 +1339,7 @@ void uiWindow::OnMouseLeave()
 {
 	m_bTrackMouseLeave = false;
 	m_bDragging = false;
+	m_MouseDragKey = MKT_NONE;
 
 	m_LastMousePos.x = m_LastMousePos.y = -1;
 
@@ -1354,13 +1379,16 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 	}
 
 	INT destX, destY;
-	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY);
+	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY, 0);
 	ASSERT(!bRetrackMouse);
 	if (m_pHoverForm != pForm)
 	{
 		bRetrackMouse = true;
 		return;
 	}
+
+	if (GetKeyState(VK_F2) < 0 && m_pHoverForm != nullptr)
+		m_pHoverForm->RedrawForm();
 
 	if (m_pHoverForm != nullptr)
 		m_pHoverForm->OnMouseMove(destX, destY, MmdFlags);

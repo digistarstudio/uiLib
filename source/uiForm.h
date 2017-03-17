@@ -209,14 +209,16 @@ public:
 	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
-	virtual uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY); // x and y are in frame space.
+	virtual uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth); // x and y are in frame space.
 
 	void ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip);
 	void ToWindowSpace(INT &x, INT &y);
 
+	virtual void FrameToClientSpace(INT &x, INT &y) const {}
 	virtual void ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const;
 	virtual void ToPlateSpace(uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
-	virtual uiRect GetClientRectFS() const { return m_FrameRect; }
+	virtual uiRect GetClientRectFS() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
+	virtual uiRect GetClientRect() const { return GetFrameRect(); }
 
 	void StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY);
 
@@ -258,8 +260,6 @@ public:
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnTimer(stTimerInfo* ti);
-
-	virtual BOOL IsDockableForm() const { return FALSE; }
 
 	virtual void OnKBGetFocus() {}
 	virtual void OnKBLoseFocus() {}
@@ -311,8 +311,8 @@ public:
 	INLINE void ClientToWindow(INT& x, INT& y)
 	{
 		uiRect rect = GetClientRectFS();
-		x += m_FrameRect.Left;
-		y += m_FrameRect.Top;
+		x += (rect.Left + m_FrameRect.Left);
+		y += (rect.Top + m_FrameRect.Top);
 		ToWindowSpace(x, y);
 	}
 	INLINE void ClientToScreen(INT &x, INT &y)
@@ -328,11 +328,9 @@ public:
 		y -= cy;
 	}
 
-	virtual void FrameToClientSpace(INT &x, INT &y) const {}
-
 
 //	INLINE void ParentToFrameSpace(INT &x, INT &y) { x -= m_FrameRect.Left; y -= m_FrameRect.Top; }
-	INLINE void FrameToParentSpace(INT &x, INT &y) { x += m_FrameRect.Left; y += m_FrameRect.Top; }
+//	INLINE void FrameToParentSpace(INT &x, INT &y) { x += m_FrameRect.Left; y += m_FrameRect.Top; }
 	INLINE void ClientToFrameSpace(INT &x, INT &y)
 	{
 		INT fx = 0, fy = 0;
@@ -362,7 +360,6 @@ public:
 	INLINE uiFormBase* GetPlate() const { return m_pPlate; }
 
 	INLINE uiRect GetFrameRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
-	INLINE uiRect GetClientRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
 
 	INLINE const uiString& GetName() const { return m_strName; }
 	INLINE void SetName(const TCHAR* pStrName) { m_strName = pStrName; }
@@ -461,60 +458,15 @@ class ISideDockable : virtual public uiFormBase
 {
 public:
 
-	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override {}
+	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override { if (FBTestFlag(FBF_CREATING)) m_ClientRect = GetFrameRect(); }
 
 	uiRect GetClientRectFS() const override { return m_ClientRect; }
+	uiRect GetClientRect() const override { return uiRect(m_ClientRect.Width(), m_ClientRect.Height()); }
 
-	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override
-	{
-		OnFramePaint(pDrawer);
+	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override;
 
-		const list_head &head = m_SideDockedFormList.GetListHead();
-		for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
-		{
-			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
+	uiFormBase* FindByPos(const INT pcX, const INT pcY, INT *DestX, INT *DestY, INT depth) override;
 
-			if (!pForm->IsVisible())
-				continue;
-
-			if (pDrawer->PushDestRect(pForm->m_FrameRect))
-			{
-				ASSERT(pForm->m_FrameRect.IsValidRect());
-				pForm->EntryOnPaint(pDrawer, depth + 1);
-				pDrawer->PopDestRect();
-			}
-		}
-
-		if (pDrawer->PushDestRect(m_ClientRect))
-		{
-			uiFormBase::EntryOnPaint(pDrawer, depth);
-			pDrawer->PopDestRect();
-		}
-	}
-
-	uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY) override
-	{
-		if (m_ClientRect.IsPointIn(fcX, fcY))
-			return uiFormBase::FindByPos(fcX - m_ClientRect.Left + m_FrameRect.Left, fcY - m_ClientRect.Top + m_FrameRect.Top, DestX, DestY);
-		else
-		{
-			const list_head &head = m_SideDockedFormList.GetListHead();
-			for (list_entry *pNext = LIST_GET_HEAD(head); IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
-			{
-				uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pNext);
-				ASSERT(pForm->GetPlate() == this);
-				if (!pForm->IsVisible())
-					continue;
-				if (pForm->IsPointIn(fcX, fcY))
-					return pForm->FindByPos(fcX - pForm->m_FrameRect.Left, fcY - pForm->m_FrameRect.Top, DestX, DestY);
-		
-			}
-
-			*DestX = fcX - m_ClientRect.Left;
-			*DestY = fcY - m_ClientRect.Top;
-			return this;
-		}
-	}
 	void ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const override
 	{
 		ASSERT(pForm->GetPlate() == this);
@@ -708,7 +660,7 @@ public:
 		else
 			pDrawer->FillRect(rect, RGB(155, 200, 155));
 
-		rect.Inflate(-1, -1, -1, -1);
+		rect.Inflate(-2, -2, -2, -2);
 		pDrawer->FillRect(rect, RGB(30, 50, 30));
 	}
 
@@ -836,13 +788,11 @@ public:
 	//void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//{
 	//	printx("---> uiHeaderForm::OnMouseBtnClk\n");
-
 	//}
 	//void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//{
 	//	printx("---> uiHeaderForm::OnMouseBtnDbClk\n");
 	//}
-
 
 	void OnPaint(uiDrawer* pDrawer);
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
@@ -932,11 +882,9 @@ public:
 		INT sx = x, sy = y;
 		ClientToScreen(sx, sy);
 		printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, sx, sy);
-
 		POINT p;
-		if (GetCursorPos(&p))
+		if (::GetCursorPos(&p))
 			printx("Real screen pos - x:%d, y:%d\n", p.x, p.y);
-
 	//	RedrawForm();
 	}
 

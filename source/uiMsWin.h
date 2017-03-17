@@ -12,7 +12,7 @@
 #define DEFAULT_BACKBUFFER_COUNT 0
 
 
-UINT uiWinGetCurrentMsg();
+BOOL uiMessageLookUp(UINT message);
 
 
 struct stWndTimerInfo
@@ -130,7 +130,7 @@ public:
 	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { ASSERT(0); }
 	INLINE HWND SetActiveWindow()
 	{
-		ASSERT(uiWinGetCurrentMsg() != WM_KILLFOCUS);
+		ASSERT(!uiMessageLookUp(WM_KILLFOCUS));
 		return ::SetActiveWindow(m_Handle);
 	}
 

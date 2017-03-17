@@ -16,6 +16,39 @@ WCHAR szTitle[MAX_LOADSTRING];                  // The title bar text
 WCHAR szWindowClass[MAX_LOADSTRING];            // the main window class name
 
 
+class uiDraggableButton : public uiButton
+{
+public:
+
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> uiDraggableButton::OnMouseBtnDown: %d\n", KeyType);
+
+		INT wx = x, wy = y;
+		ClientToWindow(wx, wy);
+		switch(KeyType)
+		{
+		case MKT_MIDDLE:
+			StartDragging(MKT_MIDDLE, wx, wy);
+			break;
+		case MKT_RIGHT:
+			StartDragging(MKT_RIGHT, wx, wy);
+			break;
+		}
+	}
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		switch (KeyType)
+		{
+		case MKT_MIDDLE:
+			break;
+		case MKT_RIGHT:
+			break;
+		}
+	}
+
+};
+
 class CTabFormContext1 : public uiFormBase
 {
 public:
@@ -39,6 +72,11 @@ public:
 	{
 		printx("---> CTabFormContext1::OnMouseLeave\n");
 	}
+	void OnSize(UINT nw, UINT nh) override
+	{
+		printx("---> CTabFormContext1::OnSize nw: %d, nh: %d\n", nw, nh);
+	}
+
 };
 
 class CTabFormContext2 : public uiFormBase
@@ -73,6 +111,13 @@ public:
 	void OnCreate()
 	{
 		SetName(_T("Tab Pane No. 3"));
+
+		uiButton *pButton = new uiDraggableButton;
+		pButton->Create(this, 10, 10, 80, 80);
+
+		uiButton *pButton2 = new uiDraggableButton;
+		pButton2->Create(pButton, 10, 10, 30, 30);
+
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -391,6 +436,14 @@ public:
 		}
 	}
 
+	void OnSize(UINT nw, UINT nh) override
+	{
+		printx("---> CMyForm::OnSize nw: %d, nh: %d\n", nw, nh);
+
+		uiRect rect1 = GetFrameRect();
+		uiRect rect2 = GetClientRect();
+		printx("---> CMyForm::OnSize nw: %d, nh: %d\n", nw, nh);
+	}
 
 protected:
 

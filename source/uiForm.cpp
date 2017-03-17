@@ -295,6 +295,7 @@ void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
 	else
 	{
 		dest = *pUpdateRect;
+		dest.Move(GetClientRectFS().Left, GetClientRectFS().Top); // Todo.
 		dest.Move(m_FrameRect.Left, m_FrameRect.Top);
 	}
 
@@ -440,43 +441,22 @@ void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingB
 	}
 }
 
-uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY)
+uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
 {
-	//UTX::CSimpleList *pSideDockedFormList = GetSideDockedFormList();
-	//if (pSideDockedFormList != nullptr)
-	//{
-	//	const list_head &head = pSideDockedFormList->GetListHead();
-	//	for (list_entry *pNext = head.next; IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
-	//	{
-	//		uiFormBase *pForm = (uiFormBase*)pSideDockedFormList->GetAt(pNext);
-	//		ASSERT(pForm->GetPlate() == this);
-	//		if (!pForm->IsVisible())
-	//			continue;
-	//		if (pForm->IsPointIn(x, y))
-	//			return pForm->FindByPos(x - pForm->m_FrameRect.Left, y - pForm->m_FrameRect.Top, DestX, DestY);
-	//	}
-	//}
+	++depth;
 
-	//if (!m_ClientRect.IsPointIn(x, y))
-	//{
-	//	*DestX = x - m_ClientRect.Left;
-	//	*DestY = y - m_ClientRect.Top;
-	//	return this;
-	//}
-
-	INT cx = fcX - m_FrameRect.Left, cy = fcY - m_FrameRect.Top;
 	uiFormBase *pSubForm = this;
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
 		pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
 		if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this)
 			continue;
-		if (pSubForm->IsPointIn(cx, cy))
-			return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY);
+		if (pSubForm->IsPointIn(fcX, fcY))
+			return pSubForm->FindByPos(fcX - pSubForm->m_FrameRect.Left, fcY - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
 	}
 
-	*DestX = fcX - m_FrameRect.Left;
-	*DestY = fcY - m_FrameRect.Top;
+	*DestX = fcX;
+	*DestY = fcY;
 	return this;
 }
 
@@ -769,6 +749,83 @@ void uiFormBase::OnTimer(stTimerInfo* ti)
 }
 
 
+void ISideDockable::EntryOnPaint(uiDrawer* pDrawer, INT depth)
+{
+	OnFramePaint(pDrawer);
+
+	const list_head &head = m_SideDockedFormList.GetListHead();
+	for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
+	{
+		uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
+
+		if (!pForm->IsVisible())
+			continue;
+
+		if (pDrawer->PushDestRect(pForm->m_FrameRect))
+		{
+			ASSERT(pForm->m_FrameRect.IsValidRect());
+			pForm->EntryOnPaint(pDrawer, depth + 1);
+			pDrawer->PopDestRect();
+		}
+	}
+
+	if (pDrawer->PushDestRect(m_ClientRect))
+	{
+		uiFormBase::EntryOnPaint(pDrawer, depth);
+		pDrawer->PopDestRect();
+	}
+}
+
+uiFormBase* ISideDockable::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
+{
+	++depth;
+
+//	INT fx = pcX - m_FrameRect.Left, fy = pcY - m_FrameRect.Top;
+	INT cx = fcX - m_ClientRect.Left, cy = fcY - m_ClientRect.Top;
+
+	if (m_ClientRect.IsPointIn(fcX, fcY)) // Make sure client rectangle is always in frame rectangle. This doesn't check that case.
+	{
+		/*
+		return uiFormBase::FindByPos(cx, cy, DestX, DestY);
+		/*/
+
+		for (list_entry* pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
+		{
+			uiFormBase *pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
+			if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this)
+				continue;
+			if (pSubForm->IsSideDocked())
+				continue;
+			if (pSubForm->IsPointIn(cx, cy))
+				return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
+		}
+
+		*DestX = cx;
+		*DestY = cy;
+		return this;
+		//*/
+	}
+	else
+	{
+		const list_head &head = m_SideDockedFormList.GetListHead();
+		for (list_entry *pNext = LIST_GET_HEAD(head); IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
+		{
+			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pNext);
+			ASSERT(pForm->GetPlate() == this);
+			if (!pForm->IsVisible())
+				continue;
+
+			if (pForm->IsPointIn(fcX, fcY))
+				return pForm->FindByPos(fcX - pForm->m_FrameRect.Left, fcY - pForm->m_FrameRect.Top, DestX, DestY, depth);
+		}
+
+		*DestX = cx;
+		*DestY = cy;
+		return this;
+	}
+}
+
+
 BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 {
 	ASSERT(pMenu != nullptr);
@@ -850,6 +907,14 @@ void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 //	if (GetKeyState(VK_F2) < 0)
 //		Close();
+
+/*
+	INT sx = x, sy = y;
+	ClientToScreen(sx, sy);
+	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, sx, sy);
+	POINT p;
+	if (::GetCursorPos(&p))
+		printx("Real screen pos - x:%d, y:%d\n", p.x, p.y); //*/
 }
 
 void uiHeaderForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
@@ -1040,6 +1105,7 @@ void uiForm::OnPaint(uiDrawer* pDrawer)
 
 void uiForm::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
+	ISideDockable::OnFrameSize(nNewWidth, nNewHeight);
 	UpdataClientRect();
 }
 
@@ -1457,6 +1523,9 @@ void uiTabForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 
 void uiTabForm::OnSize(UINT nNewWidth, UINT nNewHeight)
 {
+	printx("---> uiTabForm::OnSize. New width: %d, New height: %d\n", nNewWidth, nNewHeight);
+	printx("Frame width: %d, Frame height: %d\n", GetClientRect().Width(), GetClientRect().Height());
+
 	Layout();
 	BOOL bHide = !m_PaneRegion.IsValidRect();
 
