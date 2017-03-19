@@ -229,14 +229,10 @@ public:
 		uiRect rect = GetClientRect();
 		const INT size = 3;
 
-		if (IsMouseHovering())
-			pDrawer->RoundRect(rect, RGB(230, 200, 230), size, size);
-		else
-			pDrawer->RoundRect(rect, RGB(155, 200, 155), size, size);
 
 		rect.Inflate(-1, -1, -1, -1);
 		//	rect.Inflate(10, 10);
-		pDrawer->FillRect(rect, RGB(30, 50, 30));
+	//	pDrawer->DrawText(GetName(), rect, );
 	}
 
 

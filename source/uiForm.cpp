@@ -942,7 +942,7 @@ void ISideDockableFrame::SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags)
 	if (IsCreated())
 	{
 		UpdataClientRect();
-		RedrawForm();
+		RedrawFrame();
 	}
 }
 

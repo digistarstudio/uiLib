@@ -485,6 +485,13 @@ protected:
 };
 
 
+
+void FontTest()
+{
+	uiFont font;
+	font.Create(_T("Arial"), 20, 10);
+}
+
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
 	UTXLibraryInit();
@@ -504,6 +511,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	m_bHasConsole = AllocConsole();
 	printx("Console initialized!\n");
 #endif
+
+	FontTest();
+	const int i = _countof(LOGFONT::lfFaceName);
 
 	uiString a, b;
 	a = _T("Unicode string\n");

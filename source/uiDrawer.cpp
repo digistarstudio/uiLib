@@ -4,6 +4,9 @@
 #include "uiDrawer.h"
 
 
+std::unordered_map<UINT, std::weak_ptr<stFontHandleWrapper>> GFontHandleMap;
+
+
 UINT32 uiGetSysColor(INT index)
 {
 	UINT32 color = GetSysColor(COLOR_ACTIVECAPTION);
@@ -162,19 +165,13 @@ void uiWndDrawer::ResizeBackBuffer(UINT nWidth, UINT nHeight)
 	m_nWidth = nWidth;
 	m_nHeight = nHeight;
 
-	/*
-	if (m_hRgn != NULL)
-	{
-		SelectClipRgn(m_MemDC, NULL);
-		DeleteObject(m_hRgn);
-	}
-	m_hRgn = CreateRectRgn(0, 0, nWidth, nHeight);
-	//*/
+	ASSERT(m_hRgn == NULL);
 }
 
 void uiWndDrawer::FillRect(uiRect rect, UINT32 color)
 {
-	rect.Move(m_OriginX, m_OriginY);
+	//rect.Move(m_OriginX, m_OriginY);
+	UpdateCoordinate(rect);
 
 	m_WndDrawDC.SetBrush(color, FALSE);
 	m_WndDrawDC.FillRect((RECT*)&rect);
@@ -182,7 +179,8 @@ void uiWndDrawer::FillRect(uiRect rect, UINT32 color)
 
 void uiWndDrawer::RoundRect(uiRect rect, UINT32 color, INT width, INT height)
 {
-	rect.Move(m_OriginX, m_OriginY);
+	//rect.Move(m_OriginX, m_OriginY);
+	UpdateCoordinate(rect);
 
 	m_WndDrawDC.SetPen(1, color);
 	m_WndDrawDC.SetBrush(0, TRUE);
@@ -194,7 +192,7 @@ void uiWndDrawer::DrawEdge(uiRect &rect, UINT color)
 //	HPEN hPen = CreatePen(PS_SOLID, LineWidth, color);
 //	HPEN *hOldPen = (HPEN*)SelectObject(m_WndDrawDC.GetDC(), hPen);
 
-	::DrawEdge(m_WndDrawDC.GetDC(), (RECT*)&rect, EDGE_ETCHED, BF_RECT | BF_ADJUST);
+//	::DrawEdge(m_WndDrawDC.GetDC(), (RECT*)&rect, EDGE_ETCHED, BF_RECT | BF_ADJUST);
 }
 
 void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth)
@@ -209,6 +207,9 @@ void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWi
 
 void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
 {
+	uiRect temp = rect;
+	UpdateCoordinate(temp);
+
 	HDC hMemDC = m_WndDrawDC.GetDC();
 	SetBkMode(hMemDC, TRANSPARENT);
 	SetTextColor(hMemDC, RGB(128, 128, 128));
@@ -216,13 +217,9 @@ void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
 	HFONT hFont, hOldFont;
 	// Retrieve a handle to the variable stock font.  
 	hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT); // DEFAULT_GUI_FONT SYSTEM_FONT
-
+/*
 	if (hOldFont = (HFONT)SelectObject(hMemDC, hFont))
 	{
-		uiRect temp = rect;
-		temp.Move(m_OriginX, m_OriginY);
-
-
 		uiWndFont ftOld(hOldFont), ftSystem(hFont);
 		LOGFONT old, sys;
 		VERIFY(ftOld.GetLogFont(&old));
@@ -233,7 +230,7 @@ void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
 		::TextOut(hMemDC, temp.Left, temp.Top, pText, _tcslen(pText));
 		// Restore the original font.        
 		SelectObject(hMemDC, hOldFont);
-	}
+	} //*/
 
 }
 

@@ -196,8 +196,9 @@ class uiString
 {
 public:
 
-	uiString():m_pStr(nullptr) {}
-	uiString(const uiString &src) { StoreString(src.m_pStr, src.Length()); }
+	uiString() :m_pStr(nullptr) {}
+	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, _tcslen(pstrIn)); }
+	uiString(const uiString &src) :m_pStr(nullptr) { StoreString(src.m_pStr, src.Length()); }
 
 	uiString(uiString &&rvalue)
 	{
@@ -214,10 +215,31 @@ public:
 
 	INT Format()
 	{
-
-
-
 	}
+
+	void MakeLower()
+	{
+		for (INT i = 0; i < m_len; ++i)
+			if ('A' <= m_pStr[i] && m_pStr[i] <= 'Z')
+				m_pStr[i] += ('a' - 'A');
+	}
+	UINT CopyTo(TCHAR* pBuf, UINT nMaxChar) const
+	{
+		UINT len = m_len;
+		if (len > nMaxChar)
+		{
+			len = nMaxChar - 1;
+			memcpy(pBuf, m_pStr, sizeof(TCHAR) * len);
+			pBuf[len] = '0';
+		}
+		else
+		{
+			memcpy(pBuf, m_pStr, sizeof(TCHAR) * len);
+			--len;
+		}
+		return len;
+	}
+
 
 	INLINE INT Length() const { return m_len - 1; }
 	INLINE BOOL IsEmpty() const { return (m_len <= 1); }

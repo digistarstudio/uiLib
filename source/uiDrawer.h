@@ -4,6 +4,13 @@
 
 
 #include "uiCommon.h"
+#include <memory>
+#include <unordered_map>
+
+
+// If don't use this, you must calculate text length and draw from first visible character by yourself.
+// RoundRect has side effect too if you don't recalculate the visible portion and decide if should call it.
+#define USE_GDI_CLIPPING
 
 
 enum SYS_COLOR_NAME
@@ -25,9 +32,107 @@ public:
 	~uiImage() = default;
 
 
+};
+
+
+INLINE size_t HashRange(const uint32_t* const Begin, const uint32_t* const End, size_t Hash)
+{
+	for (const uint32_t* Iter = Begin; Iter < End; ++Iter)
+		Hash = 16777619U * Hash ^ *Iter;
+	return Hash;
+}
+
+template <typename T>
+INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166136261U)
+{
+	static_assert((sizeof(T) & 3) == 0 && alignof(T) >= 4, "State object is not word-aligned");
+	return HashRange((uint32_t*)StateDesc, (uint32_t*)(StateDesc + Count), Hash);
+}
+
+
+struct stFontHandleWrapper
+{
+	stFontHandleWrapper(HANDLE hHandleIn);
+	~stFontHandleWrapper();
+
+	HANDLE hHandle;
+};
+
+
+extern std::unordered_map<UINT, std::weak_ptr<stFontHandleWrapper>> GFontHandleMap;
+
+
+INLINE stFontHandleWrapper::stFontHandleWrapper(HANDLE hHandleIn)
+:hHandle(hHandleIn)
+{
+}
+INLINE stFontHandleWrapper::~stFontHandleWrapper()
+{
+	printx("---> stFontHandleWrapper::~stFontHandleWrapper");
+	VERIFY(::DeleteObject(hHandle));
+}
+
+
+class uiFont
+{
+public:
+
+	uiFont() = default;
+	~uiFont() = default;
+
+	BOOL Create(const TCHAR* pName, INT height, INT width)
+	{
+		uiString str(pName);
+		str.MakeLower();
+		if (str.Length() >= _countof(LOGFONT::lfFaceName)) // LF_FACESIZE
+		{
+			ASSERT(0);
+			return FALSE;
+		}
+
+		LOGFONT lg = { 0 };
+		lg.lfWidth = width;
+		lg.lfHeight = height;
+		str.CopyTo(lg.lfFaceName, _countof(lg.lfFaceName));
+
+		size_t key = HashState(&lg);
+		auto it = GFontHandleMap.find(key);
+		if (it != GFontHandleMap.end())
+		{
+			if((m_ptrHandle = it->second.lock()).get() != nullptr)
+				return TRUE;
+		}
+
+		HANDLE hFont = CreateFontIndirect(&lg);
+		if (hFont == NULL)
+		{
+			ASSERT(0);
+			printx("CreateFontIndirect failed! ec: %d\n", GetLastError());
+			return FALSE;
+		}
+
+		m_ptrHandle = std::shared_ptr<stFontHandleWrapper>(new stFontHandleWrapper(hFont));
+		if (m_ptrHandle.get() == nullptr)
+		{
+			VERIFY(DeleteObject(hFont));
+			return FALSE;
+		}
+
+		GFontHandleMap.insert({key, m_ptrHandle}); // Don't save returned iterator.
+
+		return TRUE;
+	}
+
+
+protected:
+
+	std::shared_ptr<stFontHandleWrapper> m_ptrHandle;
 
 
 };
+
+
+#define RANGE(var, min, max) ( ((var) < (min)) ? (min) : (((var) > (max)) ? (max) : (var)) )
 
 
 class uiDrawer
@@ -53,6 +158,18 @@ public:
 	void PopDestRect();
 
 //	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
+
+
+
+	INLINE void UpdateCoordinate(uiRect &rect)
+	{
+		rect.Move(m_OriginX, m_OriginY);
+	}
+	INLINE void UpdateCoordinate(INT &x, INT &y)
+	{
+		x += m_OriginX;
+		y += m_OriginY;
+	}
 
 
 protected:
@@ -292,6 +409,7 @@ protected:
 
 	void OnDestRectChanged(BOOL bRestore) override
 	{
+#ifdef USE_GDI_CLIPPING
 		HDC hMemDC = m_WndDrawDC.GetDC();
 		if (m_hRgn != NULL)
 		{
@@ -301,6 +419,7 @@ protected:
 		m_hRgn = CreateRectRgn(m_RenderDestRect.Left, m_RenderDestRect.Top, m_RenderDestRect.Right, m_RenderDestRect.Bottom);
 		INT i = SelectClipRgn(hMemDC, m_hRgn);
 		ASSERT(i != ERROR);
+#endif
 	}
 
 	HWND m_hWnd;
@@ -312,37 +431,6 @@ protected:
 	INT m_TotalBackBuffer, m_CurrentBackBufferIndex;
 	uiWndBackBuffer m_BackBuffer[MAX_BACKBUFFER_COUNT];
 	UINT m_nWidth, m_nHeight;
-
-
-};
-
-
-class uiWndFont
-{
-public:
-
-	uiWndFont(HFONT hFont)
-	:m_hFont(hFont)
-	{
-	}
-	uiWndFont()
-	:m_hFont(NULL)
-	{
-	}
-	~uiWndFont()
-	{
-	}
-
-	BOOL GetLogFont(LOGFONT *pLogFont)
-	{
-		ASSERT(IS_ALIGNED(pLogFont, 4));
-		return ::GetObject(m_hFont, sizeof(LOGFONT), pLogFont) == sizeof(LOGFONT);
-	}
-
-
-protected:
-
-	HFONT m_hFont;
 
 
 };
