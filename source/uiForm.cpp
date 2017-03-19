@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "uiForm.h"
+#include "uiControl.h"
 #include "uiMsWin.h"
 #include "FormStyle.h"
 
@@ -126,9 +127,9 @@ void uiFormBase::Close()
 			GetParent()->DetachChild(this);
 		if (GetPlate() != nullptr)
 		{
+			// TODO.
 
-
-			RedrawForm();
+			RedrawFrame();
 		}
 
 		uiWindow *pWnd = m_pWnd; // Cache this first.
@@ -289,17 +290,16 @@ void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
 		return;
 
 	uiRect dest;
-
 	if (pUpdateRect == nullptr)
-		dest = m_FrameRect;
+		dest = GetClientRectFS();
 	else
 	{
 		dest = *pUpdateRect;
-		dest.Move(GetClientRectFS().Left, GetClientRectFS().Top); // Todo.
-		dest.Move(m_FrameRect.Left, m_FrameRect.Top);
+		dest.Move(GetClientRectFS().GetLeftTop());
 	}
 
-	ToWindowSpace(this, dest, TRUE);
+	dest.Move(m_FrameRect.GetLeftTop()); // To plate space.
+	ToWindowSpace(dest, TRUE);
 
 	if (dest.IsValidRect())
 		GetBaseWnd()->RedrawImp(&dest);
@@ -311,7 +311,7 @@ void uiFormBase::RedrawFrame(const uiRect *pUpdateRect)
 		return;
 
 	uiRect dest = (pUpdateRect == nullptr) ? m_FrameRect : *pUpdateRect;
-	ToWindowSpace(this, dest, TRUE);
+	ToWindowSpace(dest, TRUE);
 
 	if (dest.IsValidRect())
 		GetBaseWnd()->RedrawImp(&dest);
@@ -338,7 +338,7 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 	{
 		ASSERT(width != -1 && height != -1);
 		uiRect rect;
-		ClientToWindow(rect);
+		GetClientRectWS(rect);
 		GetBaseWnd()->CaretShowImp(this, x + rect.Left, y + rect.Top, width, height);
 		FBSetFlag(FBF_OWN_CARET);
 	}
@@ -359,15 +359,14 @@ BOOL uiFormBase::CaretMove(INT x, INT y)
 		return FALSE;
 
 	uiRect rect;
-	ClientToWindow(rect);
+	GetClientRectWS(rect);
 	return GetBaseWnd()->CaretMoveImp(this, x + rect.Left, y + rect.Top);
 }
 
 void uiFormBase::PopupMenu(INT x, INT y, uiMenu *pMenu)
 {
-	INT sx, sy;
-	uiRect rect;
-	ClientToScreen(sx, sy);
+	uiPoint pt(x, y);
+	ClientToScreen(pt);
 
 }
 
@@ -445,11 +444,10 @@ uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT 
 {
 	++depth;
 
-	uiFormBase *pSubForm = this;
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
-		pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-		if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this)
+		uiFormBase *pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
+		if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this || pSubForm->IsSideDocked())
 			continue;
 		if (pSubForm->IsPointIn(fcX, fcY))
 			return pSubForm->FindByPos(fcX - pSubForm->m_FrameRect.Left, fcY - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
@@ -460,30 +458,13 @@ uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT 
 	return this;
 }
 
-void uiFormBase::ToWindowSpace(uiFormBase *pForm, uiRect &rect, BOOL bClip)
-{
-//	rect.Move(m_FrameRect.Left, m_FrameRect.Top);
-
-	for (uiFormBase *pPlate = GetPlate(), *pForm = this; pPlate != nullptr; pForm = pPlate, pPlate = pPlate->GetPlate())
-		pPlate->ToPlateSpace(pForm, rect, bClip);
-}
-
-void uiFormBase::ToWindowSpace(INT &x, INT &y)
-{
-//	x += m_FrameRect.Left;
-//	y += m_FrameRect.Top;
-
-	for (uiFormBase *pPlate = GetPlate(), *pForm = this; pPlate != nullptr; pForm = pPlate, pPlate = pPlate->GetPlate())
-		pPlate->ToPlateSpace(pForm, x, y);
-}
-
-void uiFormBase::ToPlateSpace(uiFormBase *pForm, INT& x, INT& y) const
+void uiFormBase::ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const
 {
 	x += m_FrameRect.Left;
 	y += m_FrameRect.Top;
 }
 
-void uiFormBase::ToPlateSpace(uiFormBase *pForm, uiRect& rect, BOOL bClip) const
+void uiFormBase::ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const
 {
 	rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 	if (bClip)
@@ -501,7 +482,7 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 		}
 		else
 		{
-			GetPlate()->ClientToWindow(rect);
+			GetPlate()->GetClientRectWS(rect);
 		}
 	}
 
@@ -749,7 +730,7 @@ void uiFormBase::OnTimer(stTimerInfo* ti)
 }
 
 
-void ISideDockable::EntryOnPaint(uiDrawer* pDrawer, INT depth)
+void ISideDockableFrame::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 {
 	OnFramePaint(pDrawer);
 
@@ -776,34 +757,21 @@ void ISideDockable::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 	}
 }
 
-uiFormBase* ISideDockable::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
+uiFormBase* ISideDockableFrame::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
 {
 	++depth;
 
-//	INT fx = pcX - m_FrameRect.Left, fy = pcY - m_FrameRect.Top;
 	INT cx = fcX - m_ClientRect.Left, cy = fcY - m_ClientRect.Top;
-
 	if (m_ClientRect.IsPointIn(fcX, fcY)) // Make sure client rectangle is always in frame rectangle. This doesn't check that case.
 	{
-		/*
-		return uiFormBase::FindByPos(cx, cy, DestX, DestY);
-		/*/
-
 		for (list_entry* pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 		{
 			uiFormBase *pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-			if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this)
-				continue;
-			if (pSubForm->IsSideDocked())
+			if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this || pSubForm->IsSideDocked()) // Check plate first then sidedock.
 				continue;
 			if (pSubForm->IsPointIn(cx, cy))
 				return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
 		}
-
-		*DestX = cx;
-		*DestY = cy;
-		return this;
-		//*/
 	}
 	else
 	{
@@ -811,18 +779,223 @@ uiFormBase* ISideDockable::FindByPos(const INT fcX, const INT fcY, INT *DestX, I
 		for (list_entry *pNext = LIST_GET_HEAD(head); IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
 		{
 			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pNext);
-			ASSERT(pForm->GetPlate() == this);
+			ASSERT(pForm->GetPlate() == this && pForm->IsSideDocked());
 			if (!pForm->IsVisible())
 				continue;
-
 			if (pForm->IsPointIn(fcX, fcY))
 				return pForm->FindByPos(fcX - pForm->m_FrameRect.Left, fcY - pForm->m_FrameRect.Top, DestX, DestY, depth);
 		}
-
-		*DestX = cx;
-		*DestY = cy;
-		return this;
 	}
+
+	*DestX = cx;
+	*DestY = cy;
+	return this;
+}
+
+void ISideDockableFrame::ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const
+{
+	ASSERT(pForm->GetPlate() == this);
+	if (!pForm->IsSideDocked())
+	{
+		x += m_ClientRect.Left;
+		y += m_ClientRect.Top;
+	}
+	uiFormBase::ToPlateSpace(pForm, x, y);
+}
+
+void ISideDockableFrame::ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const
+{
+	ASSERT(pForm->GetPlate() == this);
+	if (!pForm->IsSideDocked())
+	{
+		rect.Move(m_ClientRect.Left, m_ClientRect.Top);
+		if (bClip)
+			rect.IntersectWith(m_ClientRect);
+	}
+	uiFormBase::ToPlateSpace(pForm, rect, bClip);
+}
+
+uiPoint ISideDockableFrame::FrameToClientSpace(uiPoint& pt) const
+{
+	pt.x -= m_ClientRect.Left;
+	pt.y -= m_ClientRect.Top;
+	return pt;
+}
+
+uiRect ISideDockableFrame::GetClientRectFS() const
+{
+	return m_ClientRect;
+}
+
+uiRect ISideDockableFrame::GetClientRect() const
+{
+	return uiRect(m_ClientRect.Width(), m_ClientRect.Height());
+}
+
+void ISideDockableFrame::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
+{
+	UpdataClientRect();
+}
+
+INT ISideDockableFrame::OnNCHitTest(INT x, INT y)
+{
+	//printx("---> ISideDockableFrame::OnNCHitTest. X: %d, Y: %d\n", x, y);
+
+	if (m_ClientRect.IsPointIn(x, y))
+	{
+		return NCHT_CLIENT;
+	}
+
+	if ((m_BorderFlags & FBF_ALL) == 0)
+		return NCHT_CLIENT;
+
+	INT iRet = NCHT_CLIENT;
+	if ((m_BorderFlags & FBF_LEFT) && x < m_ThicknessLeft)
+		iRet |= NCHT_LEFT;
+	if ((m_BorderFlags & FBF_RIGHT) && m_FrameRect.Width() - x <= m_ThicknessRight)
+		iRet |= NCHT_RIGHT;
+	if ((m_BorderFlags & FBF_TOP) && y < m_ThicknessTop)
+		iRet |= NCHT_TOP;
+	if ((m_BorderFlags & FBF_BOTTOM) && m_FrameRect.Height() - y <= m_ThicknessBottom)
+		iRet |= NCHT_BOTTOM;
+
+	return iRet;
+}
+
+void ISideDockableFrame::OnFramePaint(uiDrawer* pDrawer)
+{
+	uiRect rect = GetFrameRect();
+	DWORD color = uiGetSysColor(SCN_FRAME);
+	pDrawer->FillRect(rect, color);
+}
+
+BOOL ISideDockableFrame::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
+{
+	//	ASSERT(pDockingForm->m_pDockingPlate == nullptr);
+	//	if (pDockingForm->m_pDockingPlate != nullptr)
+	//		return FALSE;
+
+	uiRect CurRect = m_FrameRect;
+	stFormSplitter NewSplitter;
+	NewSplitter.RectFull = CurRect;
+
+	//if (m_pFormSplitter == nullptr)
+	//{
+	//	UpdateDockRect(NewSplitter, fdf, 0, CurRect, pDockingForm, this);
+	//	m_pFormSplitter = new stFormSplitter(NewSplitter);
+	//}
+
+	//	if (pDockingForm)
+
+	return TRUE;
+}
+
+BOOL ISideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
+{
+	ASSERT(!pDockingForm->IsSideDocked());
+
+	const uiRect& ClientRect = GetClientRectFS();
+	uiRect rect = ClientRect;
+
+	UINT DockingLocation = fdf & 0x0f;
+	switch (DockingLocation)
+	{
+	case FDF_TOP:
+		rect.Inflate(0, -pDockingForm->m_FrameRect.Height(), 0, 0);
+		pDockingForm->Move(ClientRect.Left, ClientRect.Top);
+		if (fdf & FDF_AUTO_SIZE)
+			pDockingForm->Size(rect.Width(), -1);
+		break;
+	case FDF_BOTTOM:
+		rect.Inflate(0, 0, 0, -pDockingForm->m_FrameRect.Height());
+		if (fdf & FDF_AUTO_SIZE)
+			pDockingForm->Size(rect.Width(), -1);
+		break;
+	case FDF_LEFT:
+		rect.Inflate(-pDockingForm->m_FrameRect.Width(), 0, 0, 0);
+		if (fdf & FDF_AUTO_SIZE)
+			pDockingForm->Size(-1, rect.Height());
+		break;
+	case FDF_RIGHT:
+		rect.Inflate(0, 0, -pDockingForm->m_FrameRect.Width(), 0);
+		if (fdf & FDF_AUTO_SIZE)
+			pDockingForm->Size(-1, rect.Height());
+		break;
+	}
+
+	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
+	pDockingForm->m_DockFlag = fdf;
+	ASSERT(pDockingForm->GetParent() == this);
+	m_SideDockedFormList.push_back(pDockingForm);
+
+	SetClientRect(rect);
+	RedrawForm();
+
+	return TRUE;
+}
+
+void ISideDockableFrame::SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags)
+{
+	m_ThicknessLeft = m_ThicknessTop = m_ThicknessRight = m_ThicknessBottom = Thickness;
+	m_BorderFlags = flags;
+
+	if (IsCreated())
+	{
+		UpdataClientRect();
+		RedrawForm();
+	}
+}
+
+void ISideDockableFrame::SetClientRect(const uiRect& NewRect)
+{
+	if (NewRect != m_ClientRect)
+	{
+		if (NewRect.Width() == m_ClientRect.Width() && NewRect.Height() == m_ClientRect.Height())
+			m_ClientRect = NewRect;
+		else
+		{
+			m_ClientRect = NewRect; // Must update original data first.
+			OnSize(NewRect.Width(), NewRect.Height());
+		}
+	}
+}
+
+void ISideDockableFrame::UpdataClientRect()
+{
+	uiRect rect = GetFrameRect();
+	rect.Inflate(-m_ThicknessLeft, -m_ThicknessTop, -m_ThicknessRight, -m_ThicknessBottom);
+
+	const list_head& ListHead = m_SideDockedFormList.GetListHead();
+	for (list_entry *pEntry = LIST_GET_HEAD(ListHead); IS_VALID_ENTRY(pEntry, ListHead); pEntry = pEntry->next)
+	{
+		uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
+		UINT DockingLocation = pForm->m_DockFlag & 0x0f;
+		switch (DockingLocation)
+		{
+		case FDF_TOP:
+			if (pForm->m_DockFlag & FDF_AUTO_SIZE)
+			{
+				pForm->Move(rect.Left, rect.Top);
+				pForm->Size(rect.Width(), -1);
+			}
+			rect.Inflate(0, -pForm->m_FrameRect.Height(), 0, 0);
+			break;
+		case FDF_BOTTOM:
+			rect.Inflate(0, 0, 0, -pForm->m_FrameRect.Height());
+			if (pForm->m_DockFlag & FDF_AUTO_SIZE)
+				pForm->Size(rect.Width(), -1);
+			break;
+		case FDF_LEFT:
+			rect.Inflate(-pForm->m_FrameRect.Width(), 0, 0, 0);
+			break;
+		case FDF_RIGHT:
+			rect.Inflate(0, 0, -pForm->m_FrameRect.Width(), 0);
+			break;
+		}
+	}
+
+	if (rect != GetClientRectFS())
+		SetClientRect(rect);
 }
 
 
@@ -909,9 +1082,9 @@ void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 //		Close();
 
 /*
-	INT sx = x, sy = y;
-	ClientToScreen(sx, sy);
-	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, sx, sy);
+	uiPoint pt(x, y);
+	ClientToScreen(pt);
+	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, pt.x, pt.y);
 	POINT p;
 	if (::GetCursorPos(&p))
 		printx("Real screen pos - x:%d, y:%d\n", p.x, p.y); //*/
@@ -921,18 +1094,18 @@ void uiHeaderForm::OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 {
 	printx("---> uiHeaderForm::OnMouseBtnDown\n");
 
-	ClientToWindow(x, y);
+	uiPoint pt = ClientToWindow(uiPoint(x, y));
 
 	switch (KeyType)
 	{
 	case MKT_LEFT:
-		GetParent()->StartDragging(MKT_LEFT, x, y);
+		GetParent()->StartDragging(MKT_LEFT, pt.x, pt.y);
 		break;
 	case MKT_MIDDLE:
-	//	GetParent()->StartDragging(MKT_MIDDLE, x, y);
+	//	GetParent()->StartDragging(MKT_MIDDLE, pt.x, pt.y);
 		break;
 	case MKT_RIGHT:
-	//	GetParent()->StartDragging(MKT_RIGHT, x, y);
+	//	GetParent()->StartDragging(MKT_RIGHT, pt.x, pt.y);
 		break;
 	}
 }
@@ -977,75 +1150,6 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 }
 
 
-BOOL uiForm::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
-{
-//	ASSERT(pDockingForm->m_pDockingPlate == nullptr);
-//	if (pDockingForm->m_pDockingPlate != nullptr)
-//		return FALSE;
-
-	uiRect CurRect = m_FrameRect;
-	stFormSplitter NewSplitter;
-	NewSplitter.RectFull = CurRect;
-
-	if (m_pFormSplitter == nullptr)
-	{
-		UpdateDockRect(NewSplitter, fdf, 0, CurRect, pDockingForm, this);
-		m_pFormSplitter = new stFormSplitter(NewSplitter);
-	}
-
-	//	if (pDockingForm)
-
-	return TRUE;
-}
-
-BOOL uiForm::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
-{
-	ASSERT(!pDockingForm->IsSideDocked());
-
-	const uiRect& ClientRect = GetClientRectFS();
-	uiRect rect = ClientRect;
-
-	UINT DockingLocation = fdf & 0x0f;
-	switch (DockingLocation)
-	{
-	case FDF_TOP:
-		rect.Inflate(0, -pDockingForm->m_FrameRect.Height(), 0, 0);
-		pDockingForm->Move(ClientRect.Left, ClientRect.Top);
-		if (fdf & FDF_AUTO_SIZE)
-			pDockingForm->Size(rect.Width(), -1);
-		break;
-	case FDF_BOTTOM:
-		rect.Inflate(0, 0, 0, -pDockingForm->m_FrameRect.Height());
-		if (fdf & FDF_AUTO_SIZE)
-			pDockingForm->Size(rect.Width(), -1);
-		break;
-	case FDF_LEFT:
-		rect.Inflate(-pDockingForm->m_FrameRect.Width(), 0, 0, 0);
-		if (fdf & FDF_AUTO_SIZE)
-			pDockingForm->Size(-1, rect.Height());
-		break;
-	case FDF_RIGHT:
-		rect.Inflate(0, 0, -pDockingForm->m_FrameRect.Width(), 0);
-		if (fdf & FDF_AUTO_SIZE)
-			pDockingForm->Size(-1, rect.Height());
-		break;
-	}
-
-	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
-	pDockingForm->m_DockFlag = fdf;
-	ASSERT(pDockingForm->GetParent() == this);
-	m_SideDockedFormList.push_back(pDockingForm);
-
-	SetClientRect(rect);
-	RedrawForm();
-
-	return TRUE;
-}
-
-void uiForm::OnCreate()
-{
-}
-
 BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm)
 {
 	INT HeaderHeight = 26;
@@ -1075,86 +1179,6 @@ BOOL uiForm::SetMenuBar(uiMenu* pMenu)
 	SideDock(pMenuBar, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
 
 	return TRUE;
-}
-
-INT uiForm::OnNCHitTest(INT x, INT y)
-{
-//	printx("---> uiForm::OnNCHitTest width: %d, height: %d, x: %d, y: %d\n", m_FrameRect.Width(), m_FrameRect.Height(), x, y);
-
-	INT iRet = NCHT_CLIENT, nBorderWidth = 3;
-
-//	if (!bNoBorder)
-	{
-		if (x < nBorderWidth)
-			iRet |= NCHT_LEFT;
-		if (m_FrameRect.Width() - x <= nBorderWidth)
-			iRet |= NCHT_RIGHT;
-		if (y < nBorderWidth)
-			iRet |= NCHT_TOP;
-		if (m_FrameRect.Height() - y <= nBorderWidth)
-			iRet |= NCHT_BOTTOM;
-	}
-
-	return iRet;
-}
-
-void uiForm::OnPaint(uiDrawer* pDrawer)
-{
-	uiFormBase::OnPaint(pDrawer);
-}
-
-void uiForm::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
-{
-	ISideDockable::OnFrameSize(nNewWidth, nNewHeight);
-	UpdataClientRect();
-}
-
-void uiForm::OnSize(UINT nNewWidth, UINT nNewHeight)
-{
-
-}
-
-void uiForm::UpdataClientRect()
-{
-	uiRect rect = GetFrameRect();
-
-//	if (!bNoBorder)
-	{
-		INT BorderWidth = -3;
-		rect.Inflate(BorderWidth, BorderWidth, BorderWidth, BorderWidth);
-	}
-
-	const list_head& ListHead = m_SideDockedFormList.GetListHead();
-	for (list_entry *pEntry = LIST_GET_HEAD(ListHead); IS_VALID_ENTRY(pEntry, ListHead); pEntry = pEntry->next)
-	{
-		uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
-		UINT DockingLocation = pForm->m_DockFlag & 0x0f;
-		switch (DockingLocation)
-		{
-		case FDF_TOP:
-			if (pForm->m_DockFlag & FDF_AUTO_SIZE)
-			{
-				pForm->Move(rect.Left, rect.Top);
-				pForm->Size(rect.Width(), -1);
-			}
-			rect.Inflate(0, -pForm->m_FrameRect.Height(), 0, 0);
-			break;
-		case FDF_BOTTOM:
-			rect.Inflate(0, 0, 0, -pForm->m_FrameRect.Height());
-			if (pForm->m_DockFlag & FDF_AUTO_SIZE)
-				pForm->Size(rect.Width(), -1);
-			break;
-		case FDF_LEFT:
-			rect.Inflate(-pForm->m_FrameRect.Width(), 0, 0, 0);
-			break;
-		case FDF_RIGHT:
-			rect.Inflate(0, 0, -pForm->m_FrameRect.Width(), 0);
-			break;
-		}
-	}
-
-	if (rect != GetClientRectFS())
-		SetClientRect(rect);
 }
 
 

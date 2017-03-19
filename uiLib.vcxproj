@@ -151,6 +151,7 @@
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\targetver.h" />
     <ClInclude Include="source\uiCommon.h" />
+    <ClInclude Include="source\uiControl.h" />
     <ClInclude Include="source\uiDrawer.h" />
     <ClInclude Include="source\uiForm.h" />
     <ClInclude Include="source\uiLib.h" />
@@ -165,6 +166,7 @@
     </ClCompile>
     <ClCompile Include="source\FormStyle.cpp" />
     <ClCompile Include="source\uiCommon.cpp" />
+    <ClCompile Include="source\uiControl.cpp" />
     <ClCompile Include="source\uiDrawer.cpp" />
     <ClCompile Include="source\uiForm.cpp" />
     <ClCompile Include="source\uiLib.cpp" />

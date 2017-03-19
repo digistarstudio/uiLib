@@ -51,6 +51,9 @@
     <ClInclude Include="source\FormStyle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\uiControl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\stdafx.cpp">
@@ -74,10 +77,10 @@
     <ClCompile Include="source\UTX.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source.cpp">
+    <ClCompile Include="source\FormStyle.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\FormStyle.cpp">
+    <ClCompile Include="source\uiControl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

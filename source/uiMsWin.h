@@ -7,6 +7,7 @@
 #include <WinUser.h>
 #include "uiCommon.h"
 #include "uiForm.h"
+#include "uiControl.h"
 
 
 #define DEFAULT_BACKBUFFER_COUNT 0

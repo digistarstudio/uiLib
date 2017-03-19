@@ -30,6 +30,33 @@ struct uiPoint
 {
 	uiPoint() = default;
 	uiPoint(INT ix, INT iy):x(ix), y(iy) {}
+
+	INLINE uiPoint& operator+=(const uiPoint& pt)
+	{
+		x += pt.x;
+		y += pt.y;
+		return *this;
+	}
+	INLINE uiPoint& operator-=(const uiPoint& pt)
+	{
+		x -= pt.x;
+		y -= pt.y;
+		return *this;
+	}
+
+	friend uiPoint operator-(uiPoint lhs, const uiPoint& rhs)
+	{
+		lhs.x -= rhs.x;
+		lhs.y -= rhs.y;
+		return lhs;
+	}
+	friend uiPoint operator+(uiPoint lhs, const uiPoint& rhs)
+	{
+		lhs.x += rhs.x;
+		lhs.y += rhs.y;
+		return lhs;
+	}
+
 	INT x, y;
 };
 
@@ -72,6 +99,7 @@ struct uiRect
 	INLINE void Init(INT left, INT top, INT right, INT bottom) { Left = left; Top = top; Right = right; Bottom = bottom; }
 	INLINE void InitForUnion() { Left = Top = MAX_INT_VALUE; Right = Bottom = MIN_INT_VALUE; }
 	INLINE void Move(INT x, INT y) { Left += x; Right += x; Top += y; Bottom += y; }
+	INLINE void Move(uiPoint& pt) { Left += pt.x; Right += pt.x; Top += pt.y; Bottom += pt.y; }
 
 	INLINE BOOL IsPointIn(INT x, INT y) const { return (Left <= x && x < Right) && (Top <= y && y < Bottom); }
 	INLINE BOOL IsPointIn(const uiPoint& pt) const { return (Left <= pt.x && pt.x < Right) && (Top <= pt.y && pt.y < Bottom); }

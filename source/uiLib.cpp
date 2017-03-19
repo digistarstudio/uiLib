@@ -24,15 +24,15 @@ public:
 	{
 		printx("---> uiDraggableButton::OnMouseBtnDown: %d\n", KeyType);
 
-		INT wx = x, wy = y;
-		ClientToWindow(wx, wy);
+		uiPoint pt(x, y);
+		ClientToWindow(pt);
 		switch(KeyType)
 		{
 		case MKT_MIDDLE:
-			StartDragging(MKT_MIDDLE, wx, wy);
+			StartDragging(MKT_MIDDLE, pt.x, pt.y);
 			break;
 		case MKT_RIGHT:
-			StartDragging(MKT_RIGHT, wx, wy);
+			StartDragging(MKT_RIGHT, pt.x, pt.y);
 			break;
 		}
 	}
@@ -45,6 +45,15 @@ public:
 		case MKT_RIGHT:
 			break;
 		}
+	}
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	{
+		uiPoint pt(x, y);
+		ClientToScreen(pt);
+		printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, pt.x, pt.y);
+		POINT p;
+		if (::GetCursorPos(&p))
+			printx("Real screen pos - x:%d, y:%d\n", p.x, p.y);
 	}
 
 };
@@ -158,6 +167,9 @@ public:
 		m_pSubForm->Create(this, 20, 20, 110, 35, FCF_CENTER);
 	//	m_pSubForm->Create(this, 20, 20, 110, 60);
 		m_pSubForm->SetHeaderBar(_T("test child form"));
+
+		uiButton *pBtn = new uiDraggableButton;
+		pBtn->Create(m_pSubForm, 10, 10, 80, 80, FCF_CENTER);
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -350,6 +362,18 @@ public:
 		Bind(m_pButton4->GetID());
 		Bind(uiID_CLOSE); //*/
 
+
+
+
+		uiTabForm* m_pTabForm = new uiTabForm;
+		m_pTabForm->Create(m_pSubForm, 5, 5, 100, 150, FCF_CENTER);
+		m_pTabForm->SetMargin(3, 3, 3, 3);
+		m_pTabForm->SetProperty(uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
+		m_pTabForm->SetHeaderBar(_T("test child form"));
+
+
+
+
 	//	SetTimer(0, 1000, -1, nullptr);
 
 		VERIFY(m_menu.CreatePopupMenu());
@@ -364,26 +388,30 @@ public:
 		case MKT_LEFT:
 			printx("---> OnMouseBtnClk\n");
 	//		Size(50, 50);
-			ClientToScreen(x, y);
 			{
 				POINT pt;
 				GetCursorPos(&pt);
 
-				printx("real x: %d, y: %d - x: %d, y: %d\n", pt.x, pt.y, x, y);
+				uiPoint p(x, y);
+				ClientToScreen(p);
+
+				printx("real x: %d, y: %d - x: %d, y: %d\n", pt.x, pt.y, p.x, p.y);
 			}
 			break;
 
 		case MKT_RIGHT:
 			printx("---> MKT_RIGHT!\n");
-			ClientToScreen(x, y);
 			{
 				POINT pt;
 				GetCursorPos(&pt);
 
-				printx("real x: %d, y: %d - x: %d, y: %d\n", pt.x, pt.y, x, y);
+				uiPoint p(x, y);
+				ClientToScreen(p);
+
+				printx("real x: %d, y: %d - x: %d, y: %d\n", pt.x, pt.y, p.x, p.y);
+				uiWindow* pWnd = GetBaseWnd();
+				VERIFY(m_menu.Popup((HWND)pWnd->GetHandle(), p.x, p.y));
 			}
-			uiWindow* pWnd = GetBaseWnd();
-			VERIFY(m_menu.Popup((HWND)pWnd->GetHandle(), x, y));
 			break;
 		}
 	}
@@ -392,7 +420,7 @@ public:
 	{
 	//	printx("---> CMyForm::OnTimer ID: %d\n", ti->id);
 	//	RedrawForm();
-		MoveByOffset(-1, 20);
+		MoveByOffset(0, 20);
 	}
 
 	virtual void OnCommand(INT id, BOOL &bDone)
@@ -401,9 +429,11 @@ public:
 
 		if (id == m_pButton->GetID())
 		{
-			uiForm *pToolForm = new uiForm;
-			pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
-			pToolForm->SetHeaderBar(_T("test"));
+			m_pSubForm->SetBorder(5, uiForm::FBF_BOTTOM | uiForm::FBF_TOP); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+
+		//	uiForm *pToolForm = new uiForm;
+		//	pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
+		//	pToolForm->SetHeaderBar(_T("test"));
 		}
 		else if (id == m_pButton2->GetID())
 		{
@@ -478,7 +508,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	uiString a, b;
 	a = _T("Unicode string\n");
 
-	printx("sizeof ISideDockable: %d Bytes\n", sizeof ISideDockable);
+	printx("sizeof ISideDockableFrame: %d Bytes\n", sizeof ISideDockableFrame);
 	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
 	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);

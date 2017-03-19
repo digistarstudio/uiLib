@@ -6,6 +6,13 @@
 #include <Windowsx.h>
 
 
+#ifdef _DEBUG
+	#define MSG_TRACE(a, b, c, d) UICore::MsgRecorder wmr(a, b, c, d)
+#else
+	#define MSG_TRACE(a, b, c, d)
+#endif
+
+
 #define WM_CUSTOM   (WM_USER + 0x0001)
 #define WM_CTRL_MSG (WM_USER + 0x0002)
 
@@ -17,8 +24,6 @@ std::map<void*, uiWindow*> GWindowsHandleMap;
 
 BEGIN_NAMESPACE(UICore)
 
-list_head RootList;
-BOOL bSilentMode = FALSE; // Don't create the window using os api if this is true.
 
 uiWindow *pGAppBaseWindow = nullptr;
 
@@ -26,7 +31,6 @@ struct INIT_UI
 {
 	INIT_UI()
 	{
-		INIT_LIST_HEAD(&RootList);
 	}
 	~INIT_UI()
 	{
@@ -56,17 +60,14 @@ public:
 		WPARAM wParam;
 	};
 
-#ifdef _DEBUG
 	MsgRecorder(HWND hWnd, UINT Msg, LPARAM lParam, WPARAM wParam)
 	{
-		msWinMessage msg(hWnd, Msg, lParam, wParam);
-		MsgStack.push_back(msg);
+		MsgStack.push_back(msWinMessage(hWnd, Msg, lParam, wParam));
 	}
 	~MsgRecorder()
 	{
 		MsgStack.pop_back();
 	}
-#endif
 
 	static std::vector<msWinMessage> MsgStack;
 
@@ -131,7 +132,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	BOOL bProcessed = FALSE;
 	uiWindow *pWnd = nullptr;
 	uiFormBase *pForm;
-	UICore::MsgRecorder wmr(hWnd, message, wParam, lParam);
+	MSG_TRACE(hWnd, message, wParam, lParam);
 
 	switch (message)
 	{
@@ -1145,8 +1146,8 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y)
 	if (m_bDragging && !m_bSizing)
 		return HTCLIENT;
 
-	if (GetKeyState(VK_F2) < 0)
-		m_pHoverForm->RedrawForm();
+//	if (GetKeyState(VK_F2) < 0)
+//		m_pHoverForm->RedrawForm();
 
 	LRESULT iRet = HTCLIENT;
 	INT iPos, destX, destY;
@@ -1154,8 +1155,9 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y)
 	uiWinCursor &cursor = uiGetCursor();
 	ASSERT(pForm != nullptr);
 
-	pForm->ClientToFrameSpace(destX, destY);
-	m_NonClientArea = iPos = pForm->OnNCHitTest(destX, destY);
+	uiPoint pt(destX, destY);
+	pForm->ClientToFrameSpace(pt);
+	m_NonClientArea = iPos = pForm->OnNCHitTest(pt.x, pt.y);
 
 	switch (iPos)
 	{
@@ -1207,7 +1209,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 		SetCapture();
 
 		uiRect MouseMoveRect;
-		m_pDraggingForm->GetPlate()->ClientToWindow(MouseMoveRect);
+		m_pDraggingForm->GetPlate()->GetClientRectWS(MouseMoveRect);
 		MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
 		ClipCursor((RECT*)&MouseMoveRect);
 
@@ -1288,7 +1290,7 @@ void uiWindow::OnDragging(INT x, INT y)
 	else
 	{
 		uiRect OldRectWS, DestFrameRect = m_pDraggingForm->m_FrameRect;
-		m_pDraggingForm->FrameToWindow(OldRectWS);
+		m_pDraggingForm->GetFrameRectWS(OldRectWS);
 
 		if (m_SizingHitSide & uiForm::NCHT_TOP)
 		{
@@ -1372,9 +1374,9 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 	}
 	if (m_pMouseFocusForm != nullptr)
 	{
-		INT cx = x, cy = y;
-		m_pMouseFocusForm->WindowToClient(cx, cy);
-		m_pMouseFocusForm->OnMouseMove(cx, cy, MmdFlags);
+		uiPoint pt(x, y);
+		m_pMouseFocusForm->WindowToClient(pt);
+		m_pMouseFocusForm->OnMouseMove(pt.x, pt.y, MmdFlags);
 		return;
 	}
 
@@ -1387,7 +1389,7 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 		return;
 	}
 
-	if (GetKeyState(VK_F2) < 0 && m_pHoverForm != nullptr)
+	if (GetKeyState(VK_F4) < 0 && m_pHoverForm != nullptr)
 		m_pHoverForm->RedrawForm();
 
 	if (m_pHoverForm != nullptr)
@@ -1421,29 +1423,23 @@ void uiWindow::OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const I
 		ASSERT(0);
 	}
 
-	INT cx = x, cy = y;
-	if (m_pMouseFocusForm != nullptr)
-	{
-		m_pMouseFocusForm->WindowToClient(cx, cy);
-		m_pMouseFocusForm->OnMouseBtnDown(KeyType, cx, cy);
-	}
-	else if (m_pHoverForm != nullptr) // This could be null while debugging.
-	{
-		m_pHoverForm->WindowToClient(cx, cy);
-		m_pHoverForm->OnMouseBtnDown(KeyType, cx, cy);
-	}
+	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
+	if (pDestForm == nullptr)
+		return;
+
+	uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
+	pDestForm->OnMouseBtnDown(KeyType, ptCS.x, ptCS.y);
 }
 
 void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
 	printx("---> uiWindow::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
 
-	INT cx = x, cy = y;
 	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm != nullptr)
 	{
-		pDestForm->WindowToClient(cx, cy);
-		pDestForm->OnMouseBtnUp(KeyType, cx, cy);
+		uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
+		pDestForm->OnMouseBtnUp(KeyType, ptCS.x, ptCS.y);
 	}
 
 	if (KeyType == m_MouseDragKey && DragEventForMouseBtnUp(x, y)) // Check special event first.
@@ -1491,8 +1487,8 @@ void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT
 
 	if (ClickedKey != MKT_NONE)
 	{
-		pDestForm->WindowToClient(cx = x, cy = y);
-		pDestForm->OnMouseBtnClk(ClickedKey, cx, cy);
+		uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
+		pDestForm->OnMouseBtnClk(ClickedKey, ptCS.x, ptCS.y);
 		m_pFirstClickedForm[ClickedKey] = pDestForm;
 	}
 }
