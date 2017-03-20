@@ -49,20 +49,20 @@ public:
 
 	struct msWinMessage
 	{
-		msWinMessage(HWND hWndIn, UINT MsgIn, LPARAM lParamIn, WPARAM wParamIn)
-		:hWnd(hWndIn), Msg(MsgIn), lParam(lParamIn), wParam(wParamIn)
+		msWinMessage(HWND hWndIn, UINT MsgIn, WPARAM wParamIn, LPARAM lParamIn)
+		:hWnd(hWndIn), Msg(MsgIn), wParam(wParamIn), lParam(lParamIn)
 		{
 		}
 
 		HWND hWnd;
 		UINT Msg;
-		LPARAM lParam;
 		WPARAM wParam;
+		LPARAM lParam;
 	};
 
-	MsgRecorder(HWND hWnd, UINT Msg, LPARAM lParam, WPARAM wParam)
+	MsgRecorder(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 	{
-		MsgStack.push_back(msWinMessage(hWnd, Msg, lParam, wParam));
+		MsgStack.push_back(msWinMessage(hWnd, Msg, wParam, lParam));
 	}
 	~MsgRecorder()
 	{
@@ -1435,15 +1435,15 @@ void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT
 {
 	printx("---> uiWindow::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
 
+	if (KeyType == m_MouseDragKey) // Check special event first.
+		DragEventForMouseBtnUp(x, y);
+
 	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm != nullptr)
 	{
 		uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
 		pDestForm->OnMouseBtnUp(KeyType, ptCS.x, ptCS.y);
 	}
-
-	if (KeyType == m_MouseDragKey && DragEventForMouseBtnUp(x, y)) // Check special event first.
-		return;
 
 	pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm == nullptr) // Re-check to avoid accessing null pointer. Hover form might be deleted after key up event is called.
@@ -1495,11 +1495,11 @@ void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT
 
 void uiWindow::OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
 {
+	printx("---> uiWindow::OnMouseBtnDbClk Type:%d x:%d y:%d\n", KeyType, x, y);
+
 	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm == nullptr)
 		return;
-
-//	printx("---> uiWindow::OnMouseBtnDbClk Type:%d x:%d y:%d\n", KeyType, x, y);
 
 	BOOL bDBClick = TRUE;
 	switch (KeyType)
@@ -1518,14 +1518,11 @@ void uiWindow::OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const 
 		break;
 	}
 
+	uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
 	if (bDBClick)
-		pDestForm->OnMouseBtnDbClk(KeyType, x, y);
+		pDestForm->OnMouseBtnDbClk(KeyType, ptCS.x, ptCS.y);
 	else
-	{
-		pDestForm->OnMouseBtnDown(KeyType, x, y); 
-		pDestForm->OnMouseBtnUp(KeyType, x, y);    // Todo: not safe here.
-		pDestForm->OnMouseBtnClk(KeyType, x, y);
-	}
+		pDestForm->OnMouseBtnDown(KeyType, ptCS.x, ptCS.y); // Windows replaces button down message with double click message if it happened.
 }
 
 void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)

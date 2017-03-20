@@ -52,9 +52,10 @@ INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166
 
 struct stFontHandleWrapper
 {
-	stFontHandleWrapper(HANDLE hHandleIn);
+	stFontHandleWrapper(HANDLE hHandleIn, size_t KeyIn);
 	~stFontHandleWrapper();
 
+	size_t Key;
 	HANDLE hHandle;
 };
 
@@ -62,13 +63,14 @@ struct stFontHandleWrapper
 extern std::unordered_map<UINT, std::weak_ptr<stFontHandleWrapper>> GFontHandleMap;
 
 
-INLINE stFontHandleWrapper::stFontHandleWrapper(HANDLE hHandleIn)
-:hHandle(hHandleIn)
+INLINE stFontHandleWrapper::stFontHandleWrapper(HANDLE hHandleIn, size_t KeyIn)
+:hHandle(hHandleIn), Key(KeyIn)
 {
 }
 INLINE stFontHandleWrapper::~stFontHandleWrapper()
 {
-	printx("---> stFontHandleWrapper::~stFontHandleWrapper");
+	printx("---> stFontHandleWrapper::~stFontHandleWrapper\n");
+	GFontHandleMap.erase(Key);
 	VERIFY(::DeleteObject(hHandle));
 }
 
@@ -111,7 +113,7 @@ public:
 			return FALSE;
 		}
 
-		m_ptrHandle = std::shared_ptr<stFontHandleWrapper>(new stFontHandleWrapper(hFont));
+		m_ptrHandle = std::shared_ptr<stFontHandleWrapper>(new stFontHandleWrapper(hFont, key));
 		if (m_ptrHandle.get() == nullptr)
 		{
 			VERIFY(DeleteObject(hFont));

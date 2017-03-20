@@ -22,10 +22,11 @@ public:
 
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
-		printx("---> uiDraggableButton::OnMouseBtnDown: %d\n", KeyType);
+		printx("---> uiDraggableButton::OnMouseBtnDown: %d %d %d\n", KeyType, x, y);
 
 		uiPoint pt(x, y);
 		ClientToWindow(pt);
+		printx("ClientToWindow %d: %d\n", pt.x, pt.y);
 		switch(KeyType)
 		{
 		case MKT_MIDDLE:
@@ -38,6 +39,7 @@ public:
 	}
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
+		printx("---> uiDraggableButton::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
 		switch (KeyType)
 		{
 		case MKT_MIDDLE:
@@ -45,6 +47,11 @@ public:
 		case MKT_RIGHT:
 			break;
 		}
+	}
+
+	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> uiDraggableButton::OnMouseBtnDbClk: %d %d %d\n", KeyType, x, y);
 	}
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
@@ -356,6 +363,9 @@ public:
 		m_pButton4 = new uiButton;
 		m_pButton4->Create(this, 150, 200, 50, 50);
 
+		m_pButton5 = new uiDraggableButton;
+		m_pButton5->Create(this, 250, 200, 50, 50);
+
 		Bind(m_pButton->GetID());
 		Bind(m_pButton2->GetID());
 		Bind(m_pButton3->GetID());
@@ -477,10 +487,11 @@ public:
 
 protected:
 
-	uiButton *m_pButton, *m_pButton2, *m_pButton3, *m_pButton4;
+	uiButton *m_pButton, *m_pButton2, *m_pButton3, *m_pButton4, *m_pButton5;
 	uiForm *m_pSubForm;
 
 	uiWinMenu m_menu;
+
 
 };
 
@@ -488,8 +499,10 @@ protected:
 
 void FontTest()
 {
-	uiFont font;
+	uiFont font, font2;
 	font.Create(_T("Arial"), 20, 10);
+
+	font2 = font;
 }
 
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
@@ -513,7 +526,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 #endif
 
 	FontTest();
-	const int i = _countof(LOGFONT::lfFaceName);
 
 	uiString a, b;
 	a = _T("Unicode string\n");
