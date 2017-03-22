@@ -88,7 +88,7 @@ public:
 	void OnMove(INT scx, INT scy);
 	void OnNCPaint(HWND hWnd, HRGN hRgn);
 	void OnPaint();
-	BOOL OnSetCursor();
+//	BOOL OnSetCursor();
 	void OnGetKBFocus(HWND hOldFocusWnd);
 	void OnLoseKBFocus();
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
@@ -98,7 +98,7 @@ public:
 	LRESULT OnNCHitTest(INT x, INT y);
 
 	BOOL DragSizingEventCheck(INT x, INT y);
-	BOOL DragEventForMouseBtnUp(INT wcX, INT wcY);
+	void DragEventForMouseBtnUp(INT wcX, INT wcY);
 	void OnMouseCaptureLost();
 	void OnDragging(INT x, INT y);
 
@@ -128,7 +128,7 @@ public:
 
 	// For debugging.
 	// Don't use SetWindowPos to show windows.
-	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { ASSERT(0); }
+	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { return ::SendMessage(m_Handle, Msg, wParam, lParam); }
 	INLINE HWND SetActiveWindow()
 	{
 		ASSERT(!uiMessageLookUp(WM_KILLFOCUS));
@@ -184,6 +184,7 @@ protected:
 
 	uiFormBase *m_pForm;
 	uiFormBase *m_pHoverForm;
+	uiFormBase *m_pGrayForm;  // Mouse enters the form but doesn't leave its sizeable border region.
 	uiFormBase *m_pDraggingForm;
 	uiFormBase *m_pMouseFocusForm;
 	uiFormBase *m_pKeyboardFocusForm;
@@ -322,7 +323,8 @@ public:
 
 
 	void Set(CURSOR_TYPE type);
-	void Update();
+//	void Update();
+	void Update(uiFormBase::NON_CLIENT_HIT_TEST nca);
 	void StartSizing(BOOL bComplete);
 
 	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }

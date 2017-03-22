@@ -45,6 +45,7 @@ public:
 		case MKT_MIDDLE:
 			break;
 		case MKT_RIGHT:
+	//		ReleaseCapture();
 			break;
 		}
 	}
@@ -52,6 +53,7 @@ public:
 	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("---> uiDraggableButton::OnMouseBtnDbClk: %d %d %d\n", KeyType, x, y);
+	//	SetCapture();
 	}
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
@@ -188,6 +190,20 @@ public:
 	{
 		ASSERT(id == m_pButton->GetID());
 		CaretShow(TRUE, 5, 5, 5, 15);
+	}
+	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> CFormEx::OnMouseBtnDbClk: %d %d %d\n", KeyType, x, y);
+
+		SetCapture();
+
+	}
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> CFormEx::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
+
+		ReleaseCapture();
+
 	}
 
 protected:
@@ -374,6 +390,8 @@ public:
 
 
 
+		SetBorder(5, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+		SetDraggableThickness(50, 10, 10, 10);
 
 		uiTabForm* m_pTabForm = new uiTabForm;
 		m_pTabForm->Create(m_pSubForm, 5, 5, 100, 150, FCF_CENTER);
@@ -439,7 +457,8 @@ public:
 
 		if (id == m_pButton->GetID())
 		{
-			m_pSubForm->SetBorder(5, uiForm::FBF_BOTTOM | uiForm::FBF_TOP); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			m_pSubForm->SetBorder(5, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
 
 		//	uiForm *pToolForm = new uiForm;
 		//	pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
@@ -485,6 +504,7 @@ public:
 		printx("---> CMyForm::OnSize nw: %d, nh: %d\n", nw, nh);
 	}
 
+
 protected:
 
 	uiButton *m_pButton, *m_pButton2, *m_pButton3, *m_pButton4, *m_pButton5;
@@ -529,7 +549,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	uiString a, b;
 	a = _T("Unicode string\n");
-
+	
+	printx("sizeof std::shared_ptr<>: %d Bytes\n", sizeof std::shared_ptr<uiString>);
 	printx("sizeof ISideDockableFrame: %d Bytes\n", sizeof ISideDockableFrame);
 	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);

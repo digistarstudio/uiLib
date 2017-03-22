@@ -211,6 +211,7 @@ public:
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
 	virtual uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth); // x and y are in frame space.
+	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS);
 
 	virtual void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const;
 	virtual void ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
@@ -253,7 +254,6 @@ public:
 	virtual void OnMouseFocusLost();
 	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	virtual void OnMove(INT x, INT y, const stFormMoveInfo *pInfo);
-	virtual INT  OnNCHitTest(INT x, INT y);
 	virtual void OnPaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
@@ -471,6 +471,7 @@ public:
 	ISideDockableFrame()
 	:m_BorderFlags(FBF_ALL) // FBF_NONE FBF_ALL
 	{
+		m_DTLeft = m_DTTop = m_DTRight = m_DTBottom = DEFAULT_BORDER_THICKNESS;
 		m_ThicknessLeft = m_ThicknessTop = m_ThicknessRight = m_ThicknessBottom = DEFAULT_BORDER_THICKNESS;
 	}
 
@@ -478,6 +479,7 @@ public:
 	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override;
 
 	uiFormBase* FindByPos(const INT pcX, const INT pcY, INT *DestX, INT *DestY, INT depth) override;
+	INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS) override;
 
 	void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const override;
 	void ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const override;
@@ -486,13 +488,13 @@ public:
 	uiRect GetClientRect() const override;
 
 	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override;
-	INT  OnNCHitTest(INT x, INT y) override;
 	virtual void OnFramePaint(uiDrawer* pDrawer);
 
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 	BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 
 	void SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags = FBF_ALL);
+	void SetDraggableThickness(BYTE left, BYTE top, BYTE right, BYTE bottom);
 	void SetClientRect(const uiRect& NewRect);
 	void UpdataClientRect(); // This won't call any redraw methods.
 
@@ -503,7 +505,8 @@ protected:
 	UTX::CSimpleList m_SideDockedFormList;
 
 	FORM_BORDER_FLAGS m_BorderFlags;
-	BYTE m_ThicknessLeft, m_ThicknessTop, m_ThicknessRight, m_ThicknessBottom;
+	BYTE m_DTLeft, m_DTTop, m_DTRight, m_DTBottom; // Draggable thickness, is always thicker than or equal to visible border.
+	BYTE m_ThicknessLeft, m_ThicknessTop, m_ThicknessRight, m_ThicknessBottom; // data for drawing.
 
 };
 

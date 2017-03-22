@@ -411,6 +411,8 @@ protected:
 
 	void OnDestRectChanged(BOOL bRestore) override
 	{
+		if (bRestore)
+			return;
 #ifdef USE_GDI_CLIPPING
 		HDC hMemDC = m_WndDrawDC.GetDC();
 		if (m_hRgn != NULL)
