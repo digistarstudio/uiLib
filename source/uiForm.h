@@ -128,17 +128,17 @@ public:
 		SHOW_BORDER,
 	};
 
-	enum NON_CLIENT_HIT_TEST
+	enum CLIENT_AREA_TYPE
 	{
-		NCHT_CLIENT = 0, // Don't change this.
+		CAT_CLIENT = 0, // Don't change this.
 
-		NCHT_TOP    = 0x01,
-		NCHT_BOTTOM = 0x01 << 1,
-		NCHT_LEFT   = 0x01 << 2,
-		NCHT_RIGHT  = 0x01 << 3,
+		CAT_TOP    = 0x01,
+		CAT_BOTTOM = 0x01 << 1,
+		CAT_LEFT   = 0x01 << 2,
+		CAT_RIGHT  = 0x01 << 3,
 
-		NCHT_DRAG_BAR_H = 0x01 << 4,
-		NCHT_DRAG_BAR_v = 0x01 << 5,
+		CAT_DRAG_BAR_H = 0x01 << 4,
+		CAT_DRAG_BAR_v = 0x01 << 5,
 	};
 
 	enum FORM_BASE_FLAGS
@@ -210,8 +210,7 @@ public:
 	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
-	virtual uiFormBase* FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth); // x and y are in frame space.
-	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS);
+	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS);// fcX and fcY are in frame space.
 
 	virtual void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const;
 	virtual void ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
@@ -220,6 +219,7 @@ public:
 	virtual uiRect GetClientRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
 
 	void StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY);
+	uiPoint GetCursorPos() const;
 
 	void EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight);
 	BOOL EntryOnClose();
@@ -442,6 +442,7 @@ private:
 };
 
 
+IMPLEMENT_ENUM_FLAG(uiFormBase::CLIENT_AREA_TYPE)
 IMPLEMENT_ENUM_FLAG(uiFormBase::FORM_BASE_FLAGS)
 
 INLINE BOOL uiFormBase::FBTestFlag(uiFormBase::FORM_BASE_FLAGS flag) const { return m_Flag & flag; }
@@ -478,7 +479,6 @@ public:
 
 	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override;
 
-	uiFormBase* FindByPos(const INT pcX, const INT pcY, INT *DestX, INT *DestY, INT depth) override;
 	INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS) override;
 
 	void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const override;

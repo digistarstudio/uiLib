@@ -223,6 +223,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		pWnd->ScreenToClient(pt.x, pt.y);
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", pt.x, pt.y);
 		lRet = pWnd->OnNCHitTest(pt.x, pt.y);
+		pWnd = nullptr;
 		bProcessed = TRUE;
 		break;
 
@@ -428,7 +429,7 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 	m_pKeyboardFocusForm = nullptr;
 
 	m_TrackMouseClick = 0;
-	m_NonClientArea = 0;
+	m_AreaType = 0;
 	m_LastMousePos.x = -1;
 	m_LastMousePos.y = -1;
 
@@ -592,33 +593,33 @@ void uiWindow::ResizeImp(INT x, INT y)
 {
 	INT iRegion;
 
-	switch (m_NonClientArea)
+	switch (m_AreaType)
 	{
-//	case uiFormBase::NCHT_CLIENT:
+//	case uiFormBase::CAT_CLIENT:
 //		iRegion = HTCLIENT;
 //		break;
-	case uiFormBase::NCHT_TOP:
+	case uiFormBase::CAT_TOP:
 		iRegion = HTTOP;
 		break;
-	case uiFormBase::NCHT_BOTTOM:
+	case uiFormBase::CAT_BOTTOM:
 		iRegion = HTBOTTOM;
 		break;
-	case uiFormBase::NCHT_LEFT:
+	case uiFormBase::CAT_LEFT:
 		iRegion = HTLEFT;
 		break;
-	case uiFormBase::NCHT_RIGHT:
+	case uiFormBase::CAT_RIGHT:
 		iRegion = HTRIGHT;
 		break;
-	case uiFormBase::NCHT_TOP | uiFormBase::NCHT_LEFT:
+	case (uiFormBase::CAT_TOP | uiFormBase::CAT_LEFT):
 		iRegion = HTTOPLEFT;
 		break;
-	case uiFormBase::NCHT_TOP | uiFormBase::NCHT_RIGHT:
+	case uiFormBase::CAT_TOP | uiFormBase::CAT_RIGHT:
 		iRegion = HTTOPRIGHT;
 		break;
-	case uiFormBase::NCHT_BOTTOM | uiFormBase::NCHT_LEFT:
+	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_LEFT:
 		iRegion = HTBOTTOMLEFT;
 		break;
-	case uiFormBase::NCHT_BOTTOM | uiFormBase::NCHT_RIGHT:
+	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_RIGHT:
 		iRegion = HTBOTTOMRIGHT;
 		break;
 	}
@@ -630,7 +631,7 @@ void uiWindow::PostMsgHandler(UINT msg)
 {
 	if (bRetrackMouse)
 	{
-		if (m_NonClientArea != uiFormBase::NCHT_CLIENT)
+		if (m_AreaType != uiFormBase::CAT_CLIENT)
 		{
 			if (m_pHoverForm != nullptr)
 			{
@@ -644,6 +645,8 @@ void uiWindow::PostMsgHandler(UINT msg)
 			uiPoint pt, ptCS;
 			UICore::GCursor.GetPos(pt);
 			ScreenToClient(pt.x, pt.y);
+		//	ASSERT(pt.x == m_LastMousePos.x && pt.y == m_LastMousePos.y); This won't be true when mouse keeps moving.
+
 			uiFormBase *pOldHoverForm;
 			//	INT TrackCount = 0;
 
@@ -652,19 +655,19 @@ void uiWindow::PostMsgHandler(UINT msg)
 				bRetrackMouse = false;
 				//	printx("Start tracking: %d\n", ++TrackCount);
 
-				if ((m_NonClientArea = m_pForm->FindByPos(&m_pGrayForm, pt.x, pt.y, &ptCS)) != uiFormBase::NCHT_CLIENT)
+				if ((m_AreaType = m_pForm->FindByPos(&m_pGrayForm, pt.x, pt.y, &ptCS)) != uiFormBase::CAT_CLIENT)
 				{
 					if (m_pHoverForm != nullptr)
 					{
 						MouseLeaveForm(m_pHoverForm);
 						m_pHoverForm = nullptr;
 					}
-					uiGetCursor().Update((uiFormBase::NON_CLIENT_HIT_TEST)m_NonClientArea);
+					uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
 				}
 				else
 				{
 					pOldHoverForm = m_pHoverForm;
-					m_pHoverForm = m_pGrayForm; // m_pForm->FindByPos(pt.x, pt.y, &DestX, &DestY, 0);
+					m_pHoverForm = m_pGrayForm;
 
 					if (m_pHoverForm == pOldHoverForm)
 						break;
@@ -692,14 +695,14 @@ void uiWindow::FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect)
 
 	if (si.iHeight > 0 && pRect->Height() < si.iHeight)
 	{
-		if (nSide & uiForm::NCHT_TOP)
+		if (nSide & uiForm::CAT_TOP)
 			pRect->Top = pRect->Bottom - si.iHeight;
 		else
 			pRect->Bottom = pRect->Top + si.iHeight;
 	}
 	if (si.iWidth > 0 && pRect->Width() < si.iWidth)
 	{
-		if (nSide & uiForm::NCHT_LEFT)
+		if (nSide & uiForm::CAT_LEFT)
 			pRect->Left = pRect->Right - si.iWidth;
 		else
 			pRect->Right = pRect->Left + si.iWidth;
@@ -738,7 +741,7 @@ uiFormBase* uiWindow::CaptureMouseFocus(uiFormBase* pForm)
 	}
 
 	HWND hWnd = SetCapture();
-	if (hWnd != NULL && GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentProcessId())
+	if (hWnd != NULL) // Windows won't return the handle of the window created in other process.
 	{
 		uiWindow *pWnd = uiWindowGet(hWnd);
 		pOriginalFocusForm = pWnd->m_pMouseFocusForm;
@@ -1157,13 +1160,13 @@ void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
 LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message if the window captured the mouse focus.
 {
 	//	printx("---> uiWindow::OnNCHitTest. X:%d Y:%d\n", x, y);
+	ASSERT(!m_bDragging);
+	ASSERT(!m_bSizing);
 
-	if (m_bDragging && !m_bSizing)
-		return HTCLIENT;
-
-	INT iPos = m_NonClientArea = m_pForm->FindByPos(&m_pGrayForm, x, y, nullptr);
-
-	uiGetCursor().Update((uiFormBase::NON_CLIENT_HIT_TEST)iPos);
+	// Just determine the area type. Don't do much thing.
+	uiPoint ptCS;
+	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
+	uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
 
 	return HTCLIENT;
 }
@@ -1173,7 +1176,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 	m_MDPosX = x;
 	m_MDPosY = y;
 
-	if (m_NonClientArea != uiForm::NCHT_CLIENT)
+	if (m_AreaType != uiForm::CAT_CLIENT)
 	{
 		m_pDraggingForm = m_pGrayForm;
 
@@ -1185,7 +1188,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 
 		m_MouseDragKey = MKT_LEFT;
 		m_bSizing = m_bDragging = true;
-		m_SizingHitSide = m_NonClientArea;
+		m_SizingHitSide = m_AreaType;
 		uiGetCursor().StartSizing(FALSE);
 		SetCapture();
 
@@ -1200,7 +1203,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 	return FALSE;
 }
 
-void uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
+BOOL uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
 {
 	if (m_bDragging)
 	{
@@ -1218,7 +1221,9 @@ void uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
 			m_bSizing = false;
 			uiGetCursor().StartSizing(TRUE);
 		}
+		return TRUE;
 	}
+	return FALSE;
 }
 
 void uiWindow::OnMouseCaptureLost()
@@ -1273,26 +1278,26 @@ void uiWindow::OnDragging(INT x, INT y)
 		uiRect OldRectWS, DestFrameRect = m_pDraggingForm->m_FrameRect;
 		m_pDraggingForm->GetFrameRectWS(OldRectWS);
 
-		if (m_SizingHitSide & uiForm::NCHT_TOP)
+		if (m_SizingHitSide & uiForm::CAT_TOP)
 		{
 			if (y > OldRectWS.Top && OffsetY < 0)
 				OffsetY = 0;
 			DestFrameRect.Top += OffsetY;
 		}
-		else if (m_SizingHitSide & uiForm::NCHT_BOTTOM)
+		else if (m_SizingHitSide & uiForm::CAT_BOTTOM)
 		{
 			if (y < OldRectWS.Bottom && OffsetY > 0)
 				OffsetY = 0;
 			DestFrameRect.Bottom += OffsetY;
 		}
 
-		if (m_SizingHitSide & uiForm::NCHT_LEFT)
+		if (m_SizingHitSide & uiForm::CAT_LEFT)
 		{
 			if (x > OldRectWS.Left && OffsetX < 0)
 				OffsetX = 0;
 			DestFrameRect.Left += OffsetX;
 		}
-		else if (m_SizingHitSide & uiForm::NCHT_RIGHT)
+		else if (m_SizingHitSide & uiForm::CAT_RIGHT)
 		{
 			if (x < OldRectWS.Right && OffsetX > 0)
 				OffsetX = 0;
@@ -1320,6 +1325,7 @@ void uiWindow::OnDragging(INT x, INT y)
 
 void uiWindow::OnMouseLeave()
 {
+	uiGetCursor().Reset();
 	m_bTrackMouseLeave = false;
 	m_bDragging = false;
 	m_MouseDragKey = MKT_NONE;
@@ -1335,7 +1341,7 @@ void uiWindow::OnMouseLeave()
 
 void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 {
-//	printx("---> uiWindow::OnMouseMove. m_NonClientArea: %d\n", m_NonClientArea);
+//	printx("---> uiWindow::OnMouseMove. m_AreaType: %d\n", m_AreaType);
 
 	if (x == m_LastMousePos.x && y == m_LastMousePos.y)
 		return;
@@ -1362,16 +1368,17 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 		m_pMouseFocusForm->OnMouseMove(pt.x, pt.y, MmdFlags);
 		return;
 	}
-	if (m_NonClientArea != uiFormBase::NCHT_CLIENT)
+	if (m_AreaType != uiFormBase::CAT_CLIENT)
 	{
 		if (m_pHoverForm != nullptr)
 			bRetrackMouse = true;
 		return;
 	}
 
-	INT destX, destY;
-	uiFormBase *pForm = m_pForm->FindByPos(x, y, &destX, &destY, 0);
-	ASSERT(!bRetrackMouse);
+	uiPoint ptCS;
+	uiFormBase *pForm = nullptr;
+	INT iAreaType = m_pForm->FindByPos(&pForm, x, y, &ptCS);
+	ASSERT(!bRetrackMouse && iAreaType == uiForm::CAT_CLIENT);
 	if (m_pHoverForm != pForm)
 	{
 		bRetrackMouse = true;
@@ -1382,7 +1389,7 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 		m_pHoverForm->RedrawForm();
 
 	if (m_pHoverForm != nullptr)
-		m_pHoverForm->OnMouseMove(destX, destY, MmdFlags);
+		m_pHoverForm->OnMouseMove(ptCS.x, ptCS.y, MmdFlags);
 }
 
 void uiWindow::OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y)
@@ -1424,15 +1431,15 @@ void uiWindow::OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT
 {
 	printx("---> uiWindow::OnMouseBtnUp Type:%d x:%d y:%d\n", KeyType, x, y);
 
-	if (KeyType == m_MouseDragKey) // Check special event first.
-		DragEventForMouseBtnUp(x, y);
-
 	uiFormBase *pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm != nullptr)
 	{
 		uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
 		pDestForm->OnMouseBtnUp(KeyType, ptCS.x, ptCS.y);
 	}
+
+	if (KeyType == m_MouseDragKey && DragEventForMouseBtnUp(x, y)) // Check special event.
+		return;
 
 	pDestForm = (m_pMouseFocusForm != nullptr) ? m_pMouseFocusForm : m_pHoverForm;
 	if (pDestForm == nullptr) // Re-check to avoid accessing null pointer. Hover form might be deleted after key up event is called.
@@ -1605,7 +1612,7 @@ void uiWinMenu::ChangeStyle()
 
 uiWinCursor::uiWinCursor()
 {
-	m_CurrentType = CT_NORMAL;
+	m_CurrentType = CT_TOTAL; // Specific an invalid value, so force to update icon when cursor goes into the window.
 
 	m_hArray[CT_NORMAL] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_NORMAL), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 	m_hArray[CT_SIZE_NS] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENS), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
@@ -1628,38 +1635,29 @@ uiWinCursor::~uiWinCursor()
 	//*/
 }
 
-void uiWinCursor::Set(CURSOR_TYPE type)
-{
-	m_CurrentType = type;
-}
 
-//void uiWinCursor::Update()
-//{
-//	HANDLE hOldCursor = SetCursor(m_hArray[m_bSizing ? m_SizingType : m_CurrentType]);
-//}
-
-void uiWinCursor::Update(uiFormBase::NON_CLIENT_HIT_TEST nca)
+void uiWinCursor::Update(uiFormBase::CLIENT_AREA_TYPE nca)
 {
 	INT iOldType = m_CurrentType;
 	switch (nca)
 	{
-	case uiFormBase::NCHT_CLIENT:
+	case uiFormBase::CAT_CLIENT:
 		m_CurrentType = uiWinCursor::CT_NORMAL;
 		break;
-	case uiFormBase::NCHT_TOP:
-	case uiFormBase::NCHT_BOTTOM:
+	case uiFormBase::CAT_TOP:
+	case uiFormBase::CAT_BOTTOM:
 		m_CurrentType = uiWinCursor::CT_SIZE_NS;
 		break;
-	case uiFormBase::NCHT_LEFT:
-	case uiFormBase::NCHT_RIGHT:
+	case uiFormBase::CAT_LEFT:
+	case uiFormBase::CAT_RIGHT:
 		m_CurrentType = uiWinCursor::CT_SIZE_EW;
 		break;
-	case uiFormBase::NCHT_TOP | uiFormBase::NCHT_LEFT:
-	case uiFormBase::NCHT_BOTTOM | uiFormBase::NCHT_RIGHT:
+	case uiFormBase::CAT_TOP | uiFormBase::CAT_LEFT:
+	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_RIGHT:
 		m_CurrentType = uiWinCursor::CT_SIZE_NWSE;
 		break;
-	case uiFormBase::NCHT_TOP | uiFormBase::NCHT_RIGHT:
-	case uiFormBase::NCHT_BOTTOM | uiFormBase::NCHT_LEFT:
+	case uiFormBase::CAT_TOP | uiFormBase::CAT_RIGHT:
+	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_LEFT:
 		m_CurrentType = uiWinCursor::CT_SIZE_NESW;
 		break;
 	}

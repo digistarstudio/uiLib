@@ -440,24 +440,6 @@ void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingB
 	}
 }
 
-uiFormBase* uiFormBase::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
-{
-	++depth;
-
-	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
-	{
-		uiFormBase *pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-		if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this || pSubForm->IsSideDocked())
-			continue;
-		if (pSubForm->IsPointIn(fcX, fcY))
-			return pSubForm->FindByPos(fcX - pSubForm->m_FrameRect.Left, fcY - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
-	}
-
-	*DestX = fcX;
-	*DestY = fcY;
-	return this;
-}
-
 INT uiFormBase::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS)
 {
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
@@ -469,13 +451,10 @@ INT uiFormBase::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS)
 			return pSubForm->FindByPos(pDest, fcX - pSubForm->m_FrameRect.Left, fcY - pSubForm->m_FrameRect.Top, ptCS);
 	}
 
-	if (ptCS != nullptr)
-	{
-		ptCS->x = fcX;
-		ptCS->y = fcY;
-	}
+	ptCS->x = fcX;
+	ptCS->y = fcY;
 	*pDest = this;
-	return NCHT_CLIENT;
+	return CAT_CLIENT;
 }
 
 void uiFormBase::ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const
@@ -508,6 +487,12 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 
 	uiWindow *pWnd = GetBaseWnd();
 	pWnd->StartDraggingImp(this, mkt, wcX, wcY, rect);
+}
+
+uiPoint uiFormBase::GetCursorPos() const
+{
+	ASSERT(0);
+	return uiPoint();
 }
 
 void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
@@ -766,61 +751,25 @@ void ISideDockableFrame::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 	}
 }
 
-uiFormBase* ISideDockableFrame::FindByPos(const INT fcX, const INT fcY, INT *DestX, INT *DestY, INT depth)
-{
-	++depth;
-
-	INT cx = fcX - m_ClientRect.Left, cy = fcY - m_ClientRect.Top;
-	if (m_ClientRect.IsPointIn(fcX, fcY)) // Make sure client rectangle is always in frame rectangle. This doesn't check that case.
-	{
-		for (list_entry* pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
-		{
-			uiFormBase *pSubForm = CONTAINING_RECORD(pEntry, uiFormBase, m_ListChildrenEntry);
-			if (!pSubForm->IsVisible() || pSubForm->GetPlate() != this || pSubForm->IsSideDocked()) // Check plate first then sidedock.
-				continue;
-			if (pSubForm->IsPointIn(cx, cy))
-				return pSubForm->FindByPos(cx - pSubForm->m_FrameRect.Left, cy - pSubForm->m_FrameRect.Top, DestX, DestY, depth);
-		}
-	}
-	else
-	{
-		const list_head &head = m_SideDockedFormList.GetListHead();
-		for (list_entry *pNext = LIST_GET_HEAD(head); IS_VALID_ENTRY(pNext, head); pNext = pNext->next)
-		{
-			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pNext);
-			ASSERT(pForm->GetPlate() == this && pForm->IsSideDocked());
-			if (!pForm->IsVisible())
-				continue;
-			if (pForm->IsPointIn(fcX, fcY))
-				return pForm->FindByPos(fcX - pForm->m_FrameRect.Left, fcY - pForm->m_FrameRect.Top, DestX, DestY, depth);
-		}
-	}
-
-	*DestX = cx;
-	*DestY = cy;
-	return this;
-}
-
 INT ISideDockableFrame::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS)
 {
-	INT iRet = NCHT_CLIENT;
+	INT iRet = CAT_CLIENT;
 	*pDest = this;
 
 	if ((m_BorderFlags & FBF_ALL) != 0)
 	{
 		if ((m_BorderFlags & FBF_LEFT) && fcX < m_DTLeft)
-			iRet |= NCHT_LEFT;
+			iRet |= CAT_LEFT;
 		if ((m_BorderFlags & FBF_RIGHT) && m_FrameRect.Width() - fcX <= m_DTRight)
-			iRet |= NCHT_RIGHT;
+			iRet |= CAT_RIGHT;
 		if ((m_BorderFlags & FBF_TOP) && fcY < m_DTTop)
-			iRet |= NCHT_TOP;
+			iRet |= CAT_TOP;
 		if ((m_BorderFlags & FBF_BOTTOM) && m_FrameRect.Height() - fcY <= m_DTBottom)
-			iRet |= NCHT_BOTTOM;
+			iRet |= CAT_BOTTOM;
 	}
-	if (iRet != NCHT_CLIENT)
+	if (iRet != CAT_CLIENT)
 	{
-		if (ptCS != nullptr)
-			ptCS->x = ptCS->y = -1;
+		ptCS->x = ptCS->y = -1;
 		return iRet;
 	}
 
@@ -850,12 +799,9 @@ INT ISideDockableFrame::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint 
 		}
 	}
 
-	if (ptCS != nullptr)
-	{
-		ptCS->x = cx;
-		ptCS->y = cy;
-	}
-	return iRet;
+	ptCS->x = cx;
+	ptCS->y = cy;
+	return CAT_CLIENT;
 }
 
 void ISideDockableFrame::ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const

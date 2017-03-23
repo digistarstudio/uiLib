@@ -41,7 +41,6 @@ INLINE size_t HashRange(const uint32_t* const Begin, const uint32_t* const End, 
 		Hash = 16777619U * Hash ^ *Iter;
 	return Hash;
 }
-
 template <typename T>
 INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166136261U)
 {

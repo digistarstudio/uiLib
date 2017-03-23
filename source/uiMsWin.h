@@ -88,7 +88,6 @@ public:
 	void OnMove(INT scx, INT scy);
 	void OnNCPaint(HWND hWnd, HRGN hRgn);
 	void OnPaint();
-//	BOOL OnSetCursor();
 	void OnGetKBFocus(HWND hOldFocusWnd);
 	void OnLoseKBFocus();
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
@@ -98,7 +97,7 @@ public:
 	LRESULT OnNCHitTest(INT x, INT y);
 
 	BOOL DragSizingEventCheck(INT x, INT y);
-	void DragEventForMouseBtnUp(INT wcX, INT wcY);
+	BOOL DragEventForMouseBtnUp(INT wcX, INT wcY);
 	void OnMouseCaptureLost();
 	void OnDragging(INT x, INT y);
 
@@ -116,8 +115,9 @@ public:
 
 	INLINE HWND GetHandle() const { return m_Handle; }
 	INLINE void SetHandle(HWND hWnd) { m_Handle = hWnd; }
-	INLINE void ClientToScreen(INT& x, INT& y) { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
-	INLINE void ScreenToClient(INT& x, INT& y) { x -= m_ScreenCoordinateX; y -= m_ScreenCoordinateY; }
+	INLINE uiPoint ClientToScreen(uiPoint& pt) const { return (pt += uiPoint(m_ScreenCoordinateX, m_ScreenCoordinateY)); }
+	INLINE void ClientToScreen(INT& x, INT& y) const { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
+	INLINE void ScreenToClient(INT& x, INT& y) const { x -= m_ScreenCoordinateX; y -= m_ScreenCoordinateY; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
 	INLINE BOOL UpdateWindow() { return ::UpdateWindow(m_Handle); }
 	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
@@ -189,10 +189,10 @@ protected:
 	uiFormBase *m_pMouseFocusForm;
 	uiFormBase *m_pKeyboardFocusForm;
 
-	POINT m_LastMousePos;
-	UINT8 m_TrackMouseClick;
+	uiPoint m_LastMousePos; // window client spcae
+	UINT8   m_TrackMouseClick;
 
-	INT m_NonClientArea, m_SizingHitSide;
+	INT m_AreaType, m_SizingHitSide;
 	INT m_ScreenCoordinateX, m_ScreenCoordinateY;
 	INT m_MDPosX, m_MDPosY;
 
@@ -321,12 +321,10 @@ public:
 	uiWinCursor();
 	~uiWinCursor();
 
-
-	void Set(CURSOR_TYPE type);
-//	void Update();
-	void Update(uiFormBase::NON_CLIENT_HIT_TEST nca);
+	void Update(uiFormBase::CLIENT_AREA_TYPE nca);
 	void StartSizing(BOOL bComplete);
 
+	INLINE void Reset() { m_CurrentType = CT_TOTAL; }
 	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }
 
 

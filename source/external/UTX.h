@@ -31,7 +31,7 @@
 #define INLINE inline
 
 #define IMPLEMENT_ENUM_FLAG(ENUM_NAME) \
-INLINE ENUM_NAME operator|(ENUM_NAME a, ENUM_NAME b) \
+constexpr ENUM_NAME operator|(ENUM_NAME a, ENUM_NAME b) \
 { \
 	return static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
 } \
@@ -43,7 +43,7 @@ INLINE ENUM_NAME& operator&=(ENUM_NAME& a, ENUM_NAME b) \
 { \
 	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) & static_cast<INT>(b)); \
 }\
-INLINE ENUM_NAME operator~(ENUM_NAME a) \
+constexpr ENUM_NAME operator~(ENUM_NAME a) \
 { \
 	return static_cast<ENUM_NAME>(~static_cast<INT>(a)); \
 }

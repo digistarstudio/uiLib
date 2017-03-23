@@ -191,20 +191,21 @@ public:
 		ASSERT(id == m_pButton->GetID());
 		CaretShow(TRUE, 5, 5, 5, 15);
 	}
+	
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	{
+	}
 	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("---> CFormEx::OnMouseBtnDbClk: %d %d %d\n", KeyType, x, y);
-
 		SetCapture();
-
 	}
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("---> CFormEx::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
-
-		ReleaseCapture();
-
+	//	ReleaseCapture();
 	}
+
 
 protected:
 
@@ -418,7 +419,7 @@ public:
 	//		Size(50, 50);
 			{
 				POINT pt;
-				GetCursorPos(&pt);
+				::GetCursorPos(&pt);
 
 				uiPoint p(x, y);
 				ClientToScreen(p);
@@ -431,7 +432,7 @@ public:
 			printx("---> MKT_RIGHT!\n");
 			{
 				POINT pt;
-				GetCursorPos(&pt);
+				::GetCursorPos(&pt);
 
 				uiPoint p(x, y);
 				ClientToScreen(p);
