@@ -13,28 +13,51 @@
 #define USE_GDI_CLIPPING
 
 
-enum SYS_COLOR_NAME
+#define DECLARE_WIN_HANDLE_TYPE(ClassType, Deletor, winType) \
+class ClassType \
+{ \
+public: \
+	static BOOL Del(HANDLE hHandle) { return ::Deletor((winType)hHandle); } \
+	static std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<ClassType>>> HandleMap; \
+	static CHAR* GetName() { return #ClassType; } \
+};
+
+#define IMPLEMENT_WIN_HANDLE_TYPE(ClassType) \
+std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<ClassType>>> ClassType::HandleMap;
+
+
+template <typename HandleType>
+struct stHandleWrapper
 {
-	SCN_CAPTAIN,
-	SCN_FRAME,
+	INLINE stHandleWrapper::stHandleWrapper(HANDLE hHandleIn, size_t KeyIn)
+	:hHandle(hHandleIn), Key(KeyIn)
+	{
+	}
+	stHandleWrapper::~stHandleWrapper()
+	{
+		printx("---> stHandleWrapper::~stHandleWrapper type: %s\n", HandleType::GetName());
+		HandleType::HandleMap.erase(Key);
+		BOOL bRet = HandleType::Del(hHandle);
+		if (!bRet)
+		{
+			ASSERT(0);
+			DWORD ec = GetLastError();
+		}
+	}
+
+	HANDLE hHandle;
+	size_t Key;
 
 };
 
 
-UINT32 uiGetSysColor(INT index);
+DECLARE_WIN_HANDLE_TYPE(winBmpHandleType, DeleteObject, HBITMAP)
+DECLARE_WIN_HANDLE_TYPE(winCursorIconHandleType, DestroyCursor, HCURSOR)
+DECLARE_WIN_HANDLE_TYPE(winFontHandleType, DeleteObject, HGDIOBJ)
+DECLARE_WIN_HANDLE_TYPE(winIconHandleType, DestroyIcon, HICON)
 
 
-class uiImage
-{
-public:
-
-	uiImage() = default;
-	~uiImage() = default;
-
-
-};
-
-
+// These two functions are "CP" from DX12 mini engine. Hope c standard has the same things.
 INLINE size_t HashRange(const uint32_t* const Begin, const uint32_t* const End, size_t Hash)
 {
 	for (const uint32_t* Iter = Begin; Iter < End; ++Iter)
@@ -49,29 +72,10 @@ INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166
 }
 
 
-struct stFontHandleWrapper
-{
-	stFontHandleWrapper(HANDLE hHandleIn, size_t KeyIn);
-	~stFontHandleWrapper();
-
-	size_t Key;
-	HANDLE hHandle;
-};
-
-
-extern std::unordered_map<UINT, std::weak_ptr<stFontHandleWrapper>> GFontHandleMap;
-
-
-INLINE stFontHandleWrapper::stFontHandleWrapper(HANDLE hHandleIn, size_t KeyIn)
-:hHandle(hHandleIn), Key(KeyIn)
-{
-}
-INLINE stFontHandleWrapper::~stFontHandleWrapper()
-{
-	printx("---> stFontHandleWrapper::~stFontHandleWrapper\n");
-	GFontHandleMap.erase(Key);
-	VERIFY(::DeleteObject(hHandle));
-}
+typedef stHandleWrapper<winBmpHandleType>        BmpHandleW;
+typedef stHandleWrapper<winCursorIconHandleType> CursorHandleW;
+typedef stHandleWrapper<winFontHandleType>       FontHandleW;
+typedef stHandleWrapper<winIconHandleType>       IconHandleW;
 
 
 class uiFont
@@ -97,11 +101,12 @@ public:
 		str.CopyTo(lg.lfFaceName, _countof(lg.lfFaceName));
 
 		size_t key = HashState(&lg);
-		auto it = GFontHandleMap.find(key);
-		if (it != GFontHandleMap.end())
+		auto it = winFontHandleType::HandleMap.find(key);
+		if (it != winFontHandleType::HandleMap.end())
 		{
 			if((m_ptrHandle = it->second.lock()).get() != nullptr)
 				return TRUE;
+			ASSERT(0); // Only single thread is supported.
 		}
 
 		HANDLE hFont = CreateFontIndirect(&lg);
@@ -112,14 +117,14 @@ public:
 			return FALSE;
 		}
 
-		m_ptrHandle = std::shared_ptr<stFontHandleWrapper>(new stFontHandleWrapper(hFont, key));
+		m_ptrHandle = std::shared_ptr<FontHandleW>(new FontHandleW(hFont, key));
 		if (m_ptrHandle.get() == nullptr)
 		{
 			VERIFY(DeleteObject(hFont));
 			return FALSE;
 		}
 
-		GFontHandleMap.insert({key, m_ptrHandle}); // Don't save returned iterator.
+		winFontHandleType::HandleMap.insert({key, m_ptrHandle}); // Don't save returned iterator.
 
 		return TRUE;
 	}
@@ -127,13 +132,59 @@ public:
 
 protected:
 
-	std::shared_ptr<stFontHandleWrapper> m_ptrHandle;
+	std::shared_ptr<FontHandleW> m_ptrHandle;
 
 
 };
 
 
+class uiImage
+{
+public:
+
+	enum IMAGE_TYPE
+	{
+		IT_NONE,
+		IT_ICON,
+		IT_CURSOR_ICON,
+		IT_IMAGE,
+	};
+
+	uiImage()
+	:m_Type(IT_NONE)
+	{
+	}
+	~uiImage() = default;
+
+
+
+
+
+
+
+protected:
+
+	IMAGE_TYPE m_Type;
+	std::shared_ptr<void*> m_SmartPointerStorage;
+//	std::shared_ptr<BmpHandleW>    m_pBmp;
+//	std::shared_ptr<CursorHandleW> m_pCursor;
+//	std::shared_ptr<IconHandleW>   m_pIcon;
+
+};
+
+
 #define RANGE(var, min, max) ( ((var) < (min)) ? (min) : (((var) > (max)) ? (max) : (var)) )
+
+
+enum SYS_COLOR_NAME
+{
+	SCN_CAPTAIN,
+	SCN_FRAME,
+
+};
+
+
+UINT32 uiGetSysColor(INT index);
 
 
 class uiDrawer

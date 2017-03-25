@@ -629,63 +629,60 @@ void uiWindow::ResizeImp(INT x, INT y)
 
 void uiWindow::PostMsgHandler(UINT msg)
 {
+	BOOL bAreaTypeChanged = FALSE;
+	uiPoint ptWS, ptSS, ptCS;
+
 	if (bRetrackMouse)
 	{
-		if (m_AreaType != uiFormBase::CAT_CLIENT)
+		UICore::GCursor.GetPos(ptSS);
+		ptWS = ptSS;
+		ScreenToClient(ptWS.x, ptWS.y);
+
+		uiFormBase *pOldHoverForm;
+		//	INT TrackCount = 0;
+
+		do
 		{
-			if (m_pHoverForm != nullptr)
-			{
-				MouseLeaveForm(m_pHoverForm);
-				m_pHoverForm = nullptr;
-			}
 			bRetrackMouse = false;
-		}
-		else
-		{
-			uiPoint pt, ptCS;
-			UICore::GCursor.GetPos(pt);
-			ScreenToClient(pt.x, pt.y);
-		//	ASSERT(pt.x == m_LastMousePos.x && pt.y == m_LastMousePos.y); This won't be true when mouse keeps moving.
+			//	printx("Start tracking: %d\n", ++TrackCount);
 
-			uiFormBase *pOldHoverForm;
-			//	INT TrackCount = 0;
-
-			do
+			if ((m_AreaType = m_pForm->FindByPos(&m_pGrayForm, ptWS.x, ptWS.y, &ptCS)) != uiFormBase::CAT_CLIENT)
 			{
-				bRetrackMouse = false;
-				//	printx("Start tracking: %d\n", ++TrackCount);
-
-				if ((m_AreaType = m_pForm->FindByPos(&m_pGrayForm, pt.x, pt.y, &ptCS)) != uiFormBase::CAT_CLIENT)
+				if (m_pHoverForm != nullptr)
 				{
-					if (m_pHoverForm != nullptr)
-					{
-						MouseLeaveForm(m_pHoverForm);
-						m_pHoverForm = nullptr;
-					}
-					uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+					MouseLeaveForm(m_pHoverForm);
+					m_pHoverForm = nullptr;
 				}
-				else
+				bAreaTypeChanged = TRUE;
+			}
+			else
+			{
+				pOldHoverForm = m_pHoverForm;
+				m_pHoverForm = m_pGrayForm;
+
+				if (m_pHoverForm == pOldHoverForm)
+					break;
+				if (pOldHoverForm != nullptr)
+					MouseLeaveForm(pOldHoverForm);
+				if (bRetrackMouse)
 				{
-					pOldHoverForm = m_pHoverForm;
-					m_pHoverForm = m_pGrayForm;
-
-					if (m_pHoverForm == pOldHoverForm)
-						break;
-					if (pOldHoverForm != nullptr)
-						MouseLeaveForm(pOldHoverForm);
-					if (bRetrackMouse)
-					{
-						m_pHoverForm = nullptr;
-						continue;
-					}
-					if (m_pHoverForm != nullptr)
-						MouseEnterForm(m_pHoverForm, ptCS.x, ptCS.y);
+					m_pHoverForm = nullptr;
+					continue;
 				}
+				if (m_pHoverForm != nullptr)
+					MouseEnterForm(m_pHoverForm, ptCS.x, ptCS.y);
+			}
 
-				//	printx("Leave tracking: %d\n", TrackCount);
-			} while (bRetrackMouse);
-		}
+			//	printx("Leave tracking: %d\n", TrackCount);
+		} while (bRetrackMouse);
+
 		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing with this message.
+	}
+
+	if (bAreaTypeChanged) // Let OnNCHitTest handle cursor icon change.
+	{
+	//	::WindowFromPoint(*(POINT*)&ptSS);
+		OnNCHitTest(ptWS.x, ptWS.y);
 	}
 }
 
@@ -1166,7 +1163,16 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 	// Just determine the area type. Don't do much thing.
 	uiPoint ptCS;
 	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
-	uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+
+	IAreaCursor *pIAC = m_pGrayForm->GetIAreaCursor();
+	if (pIAC == nullptr)
+	{
+		uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+	}
+	else
+	{
+		uiImage *pNewCursor = pIAC->GetCursorImage(ptCS.x, ptCS.y, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+	}
 
 	return HTCLIENT;
 }
@@ -1371,7 +1377,10 @@ void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
 	if (m_AreaType != uiFormBase::CAT_CLIENT)
 	{
 		if (m_pHoverForm != nullptr)
-			bRetrackMouse = true;
+		{
+			MouseLeaveForm(m_pHoverForm);
+			m_pHoverForm = nullptr;
+		}
 		return;
 	}
 

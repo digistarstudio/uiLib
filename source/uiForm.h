@@ -7,6 +7,14 @@
 #include "uiCommon.h"
 
 
+// Pure composition.
+#define DECLARE_INTERFACE(iName) \
+virtual iName* Get##iName() { return nullptr; }
+#define IMPLEMENT_INTERFACE(iName, type) \
+public: iName* Get##iName() override { return &m_##iName; } \
+protected: type m_##iName;
+
+
 class uiMenu;
 class uiButton;
 class uiFormBase;
@@ -116,22 +124,18 @@ struct stFormSplitter
 };
 
 
+class IAreaCursor;
+
+
 class uiFormBase
 {
 public:
-
-	enum SHOW_FLAG
-	{
-		SHOW_TITLE = 1,
-		SHOW_CLOSE,
-
-		SHOW_BORDER,
-	};
 
 	enum CLIENT_AREA_TYPE
 	{
 		CAT_CLIENT = 0, // Don't change this.
 
+		// Border.
 		CAT_TOP    = 0x01,
 		CAT_BOTTOM = 0x01 << 1,
 		CAT_LEFT   = 0x01 << 2,
@@ -139,6 +143,8 @@ public:
 
 		CAT_DRAG_BAR_H = 0x01 << 4,
 		CAT_DRAG_BAR_v = 0x01 << 5,
+
+		CAT_EDITABLE = 7,
 	};
 
 	enum FORM_BASE_FLAGS
@@ -210,7 +216,8 @@ public:
 	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
-	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS);// fcX and fcY are in frame space.
+	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS); // fcX and fcY are in frame space.
+	virtual CLIENT_AREA_TYPE GetAreaType(INT csX, INT csY) { return CAT_CLIENT; }
 
 	virtual void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const;
 	virtual void ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
@@ -378,6 +385,8 @@ public:
 		return TRUE;
 	}
 
+	DECLARE_INTERFACE(IAreaCursor)
+
 
 protected:
 
@@ -448,6 +457,15 @@ IMPLEMENT_ENUM_FLAG(uiFormBase::FORM_BASE_FLAGS)
 INLINE BOOL uiFormBase::FBTestFlag(uiFormBase::FORM_BASE_FLAGS flag) const { return m_Flag & flag; }
 INLINE void uiFormBase::FBSetFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag |= flag; }
 INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
+
+
+
+class IAreaCursor
+{
+public:
+
+	virtual uiImage* GetCursorImage(INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
+};
 
 
 class ISideDockableFrame : virtual public uiFormBase

@@ -57,13 +57,17 @@ public:
 	}
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 	{
+		printx("---> uiDraggableButton::OnMouseMove x: %d, y: %d\n", x, y);
+
 		uiPoint pt(x, y);
 		ClientToScreen(pt);
 		printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y, pt.x, pt.y);
 		POINT p;
 		if (::GetCursorPos(&p))
 			printx("Real screen pos - x:%d, y:%d\n", p.x, p.y);
+
 	}
+
 
 };
 
@@ -401,9 +405,7 @@ public:
 		m_pTabForm->SetHeaderBar(_T("test child form"));
 
 
-
-
-	//	SetTimer(0, 1000, -1, nullptr);
+	//	TimerStart(0, 1000, -1, nullptr);
 
 		VERIFY(m_menu.CreatePopupMenu());
 		VERIFY(m_menu.InsertItem(_T("Test item 1"), 2, 1));
@@ -449,7 +451,15 @@ public:
 	{
 	//	printx("---> CMyForm::OnTimer ID: %d\n", ti->id);
 	//	RedrawForm();
-		MoveByOffset(0, 20);
+	//	MoveByOffset(0, 20);
+
+	//*/
+		POINT wpt;
+		::GetCursorPos(&wpt);
+		
+		HWND hWnd = ::WindowFromPoint(wpt);
+		printx("---> CMyForm::OnTimer HWND: %p\n", hWnd);
+	//*/
 	}
 
 	virtual void OnCommand(INT id, BOOL &bDone)
@@ -517,6 +527,53 @@ protected:
 };
 
 
+class IDerivedAC : public IAreaCursor
+{
+	uiImage* GetCursorImage(INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override { return nullptr; }
+
+	INT a, b, c, d;
+};
+
+class uiInterfaceTestForm1 : public uiFormBase // Pure compostion.
+{
+public:
+
+	uiInterfaceTestForm1()
+	{
+		printx("---> uiInterfaceTestForm1::uiInterfaceTestForm1\n");
+	}
+
+	IMPLEMENT_INTERFACE(IAreaCursor, IDerivedAC)
+
+};
+
+class uiInterfaceTestForm2 : public uiFormBase, public IDerivedAC // Composition over inheritance.
+{
+public:
+
+	uiInterfaceTestForm2()
+	{
+		printx("---> uiInterfaceTestForm2::uiInterfaceTestForm2\n");
+	}
+
+	IAreaCursor* GetIAreaCursor() override { return dynamic_cast<IAreaCursor*>(this); }
+
+};
+
+void InterfaceTest()
+{
+	IDerivedAC *pI = new IDerivedAC;
+	uiInterfaceTestForm1 *pTF1 = new uiInterfaceTestForm1;
+	uiInterfaceTestForm2 *pTF2 = new uiInterfaceTestForm2;
+
+	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
+	printx("sizeof IDerivedAC: %d Bytes\n", sizeof IDerivedAC);
+	printx("sizeof uiInterfaceTestForm1: %d Bytes\n", sizeof uiInterfaceTestForm1);
+	printx("sizeof uiInterfaceTestForm2: %d Bytes\n", sizeof uiInterfaceTestForm2);
+
+	pTF1->GetIAreaCursor()->GetCursorImage(0, 0, uiFormBase::CAT_CLIENT);
+	pTF2->GetIAreaCursor()->GetCursorImage(0, 0, uiFormBase::CAT_CLIENT);
+}
 
 void FontTest()
 {
@@ -547,6 +604,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 #endif
 
 	FontTest();
+	InterfaceTest();
+
 
 	uiString a, b;
 	a = _T("Unicode string\n");

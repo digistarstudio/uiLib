@@ -4,7 +4,11 @@
 #include "uiDrawer.h"
 
 
-std::unordered_map<UINT, std::weak_ptr<stFontHandleWrapper>> GFontHandleMap;
+std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winCursorIconHandleType>>> winCursorIconHandleType::HandleMap;
+//std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winFontHandleType>>> winFontHandleType::HandleMap;
+std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winIconHandleType>>> winIconHandleType::HandleMap;
+
+IMPLEMENT_WIN_HANDLE_TYPE(winFontHandleType)
 
 
 UINT32 uiGetSysColor(INT index)
