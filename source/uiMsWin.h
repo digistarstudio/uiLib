@@ -328,11 +328,26 @@ public:
 	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }
 
 
+	BOOL Set(uiImage &img)
+	{
+		if (!img.IsValid() || img.GetType() != WIT_CURSOR)
+			return FALSE;
+		if (img == m_CustomCursor)
+			return TRUE;
+
+		::SetCursor((HCURSOR)img.GetHandle()); // Set fisrt, then assign the image.
+		m_CustomCursor = img;
+		return TRUE;
+	}
+
+
 protected:
 
 	INT m_CurrentType, m_SizingType;
 	HCURSOR m_hArray[CT_TOTAL];
 	bool m_bSizing;
+
+	uiImage m_CustomCursor;
 
 
 };

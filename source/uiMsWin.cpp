@@ -485,13 +485,13 @@ void uiWindow::CloseImp()
 
 BOOL uiWindow::MoveImp(INT scX, INT scY)
 {
-	if (scX == 0 && scY == 0)
-		return FALSE;
 	return ::SetWindowPos(m_Handle, NULL, scX, scY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
 
 BOOL uiWindow::MoveByOffsetImp(INT x, INT y)
 {
+	if (x == 0 && y == 0)
+		return FALSE;
 	return MoveImp(m_ScreenCoordinateX + x, m_ScreenCoordinateY + y);
 }
 
@@ -1164,6 +1164,7 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 	uiPoint ptCS;
 	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
 
+	uiImage NewCursor;
 	IAreaCursor *pIAC = m_pGrayForm->GetIAreaCursor();
 	if (pIAC == nullptr)
 	{
@@ -1171,7 +1172,8 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 	}
 	else
 	{
-		uiImage *pNewCursor = pIAC->GetCursorImage(ptCS.x, ptCS.y, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+		uiImage NewCursor = pIAC->GetCursorImage(m_pGrayForm, ptCS.x, ptCS.y, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+		uiGetCursor().Set(NewCursor);
 	}
 
 	return HTCLIENT;
@@ -1642,6 +1644,7 @@ uiWinCursor::~uiWinCursor()
 		}
 	} 
 	//*/
+	::SetCursor(NULL); // Must call this to remove the using cursor.
 }
 
 
@@ -1671,8 +1674,11 @@ void uiWinCursor::Update(uiFormBase::CLIENT_AREA_TYPE nca)
 		break;
 	}
 
-	if (iOldType != m_CurrentType)
-		::SetCursor(m_hArray[m_CurrentType]);
+	if (iOldType != m_CurrentType || m_CustomCursor.IsValid())
+	{
+		::SetCursor(m_hArray[m_CurrentType]); // Muse set first to release internal reference count to the image.
+		m_CustomCursor.Release();
+	}
 }
 
 void uiWinCursor::StartSizing(BOOL bComplete)

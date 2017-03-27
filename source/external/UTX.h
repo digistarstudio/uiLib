@@ -18,14 +18,19 @@
 //#include "RMath.h"
 
 
+#define UI_NO_VTABLE __declspec(novtable)
+
+
 #ifndef ASSERT
 #define ASSERT assert
 #endif
 
 #ifdef _DEBUG
 	#define VERIFY(statement) ASSERT(statement)
+	#define DEBUG_CHECK(func) func()
 #else
 	#define VERIFY(statement) ((void)(statement))
+	#define DEBUG_CHECK(func)
 #endif
 
 #define INLINE inline

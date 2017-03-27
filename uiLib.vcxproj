@@ -180,6 +180,12 @@
     <Image Include="small.ico" />
     <Image Include="uiLib.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="busy.ani" />
+    <None Include="cursor1.cur" />
+    <None Include="Working In Background.ani" />
+    <None Include="z.cur" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -144,7 +144,7 @@ public:
 		CAT_DRAG_BAR_H = 0x01 << 4,
 		CAT_DRAG_BAR_v = 0x01 << 5,
 
-		CAT_EDITABLE = 7,
+	//	CAT_EDITABLE = 7,
 	};
 
 	enum FORM_BASE_FLAGS
@@ -460,11 +460,11 @@ INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &
 
 
 
-class IAreaCursor
+class UI_NO_VTABLE IAreaCursor
 {
 public:
 
-	virtual uiImage* GetCursorImage(INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
+	virtual uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
 };
 
 
@@ -524,7 +524,7 @@ protected:
 
 	FORM_BORDER_FLAGS m_BorderFlags;
 	BYTE m_DTLeft, m_DTTop, m_DTRight, m_DTBottom; // Draggable thickness, is always thicker than or equal to visible border.
-	BYTE m_ThicknessLeft, m_ThicknessTop, m_ThicknessRight, m_ThicknessBottom; // data for drawing.
+	BYTE m_ThicknessLeft, m_ThicknessTop, m_ThicknessRight, m_ThicknessBottom; // Border thickness for drawing.
 
 };
 

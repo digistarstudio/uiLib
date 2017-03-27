@@ -71,7 +71,29 @@ public:
 
 };
 
-class CTabFormContext1 : public uiFormBase
+class IDerivedAC : public IAreaCursor
+{
+public:
+	uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override
+	{
+		uiRect crect = pForm->GetClientRect();
+
+		if (csX > crect.Width() / 2)
+			return m_cur1;
+		else
+			return m_cur2;
+	}
+
+	IDerivedAC()
+	{
+		m_cur1.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+		m_cur2.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+	}
+
+	uiImage m_cur1, m_cur2;
+};
+
+class CTabFormContext1 : public uiFormBase, public IDerivedAC
 {
 public:
 
@@ -98,6 +120,9 @@ public:
 	{
 		printx("---> CTabFormContext1::OnSize nw: %d, nh: %d\n", nw, nh);
 	}
+
+	IAreaCursor* GetIAreaCursor() override { return dynamic_cast<IAreaCursor*>(this); }
+
 
 };
 
@@ -468,7 +493,7 @@ public:
 
 		if (id == m_pButton->GetID())
 		{
-			m_pSubForm->SetBorder(5, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			m_pSubForm->SetBorder(10, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
 			m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
 
 		//	uiForm *pToolForm = new uiForm;
@@ -526,14 +551,6 @@ protected:
 
 };
 
-
-class IDerivedAC : public IAreaCursor
-{
-	uiImage* GetCursorImage(INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override { return nullptr; }
-
-	INT a, b, c, d;
-};
-
 class uiInterfaceTestForm1 : public uiFormBase // Pure compostion.
 {
 public:
@@ -571,16 +588,63 @@ void InterfaceTest()
 	printx("sizeof uiInterfaceTestForm1: %d Bytes\n", sizeof uiInterfaceTestForm1);
 	printx("sizeof uiInterfaceTestForm2: %d Bytes\n", sizeof uiInterfaceTestForm2);
 
-	pTF1->GetIAreaCursor()->GetCursorImage(0, 0, uiFormBase::CAT_CLIENT);
-	pTF2->GetIAreaCursor()->GetCursorImage(0, 0, uiFormBase::CAT_CLIENT);
+//	pTF1->GetIAreaCursor()->GetCursorImage(nullptr, 0, 0, uiFormBase::CAT_CLIENT);
+//	pTF2->GetIAreaCursor()->GetCursorImage(nullptr, 0, 0, uiFormBase::CAT_CLIENT);
+
+	delete pI;
+	delete pTF1;
+	delete pTF2;
 }
 
 void FontTest()
 {
-	uiFont font, font2;
+	uiFont font, font2, font3;
 	font.Create(_T("Arial"), 20, 10);
 
+//	uiFont *ptr = new uiFont;
+//	new (&font) uiFont();
+
+	const int i = sizeof(uiFont);
+
 	font2 = font;
+
+	font.~uiFont();
+//	font2.~uiFont();
+
+	font2 = font3;
+
+	font3.~uiFont();
+
+	for (UINT i = 0; i < 1; ++i)
+	{
+		uiImage img, img2, img3, img4, img5, img6, img7, img8, a, b, c, d, e;
+		img.LoadCursor(_T("R:\\test.cur"));
+		img4.LoadCursor(_T("R:\\test4.cur"));
+		img2.LoadCursor(_T("R:\\test2.cur"));
+		img6.LoadCursor(_T("R:\\a1.cur"));
+		img7.LoadCursor(_T("R:\\z.cur"));
+		img5.LoadCursor(_T("R:\\test5.cur"));
+		img3.LoadCursor(_T("R:\\test3.cur"));
+
+		d.LoadCursor(IDC_CURSOR1);
+		d.LoadCursor(IDC_CURSOR1);
+		d.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+		b.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+		c.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+	}
+//	c.LoadCursor(_T("R:\\wait.ani"));
+
+//	a = img3;
+
+//	b.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+//	c.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+//	::SetCursor((HCURSOR)img.GetHandle());
+
+//	d.LoadCursor(IDC_CURSOR1);
+
+//	img.Initial(uiImage::IT_BMP);
+	font3.~uiFont();
+
 }
 
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
@@ -622,6 +686,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	CMyForm* pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
+
 //	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
 
 //	pForm = new CMyForm;

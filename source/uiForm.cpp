@@ -728,19 +728,26 @@ void ISideDockableFrame::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 {
 	OnFramePaint(pDrawer);
 
-	const list_head &head = m_SideDockedFormList.GetListHead();
-	for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
+	if (m_SideDockedFormList.size())
 	{
-		uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
-
-		if (!pForm->IsVisible())
-			continue;
-
-		if (pDrawer->PushDestRect(pForm->m_FrameRect))
+		uiRect temp;
+		const uiRect DrawableRegion = GetFrameRect().InflateRV(-m_ThicknessLeft, -m_ThicknessTop, -m_ThicknessRight, -m_ThicknessBottom);
+		const list_head &head = m_SideDockedFormList.GetListHead();
+		for (list_entry *pEntry = LIST_GET_HEAD(head); IS_VALID_ENTRY(pEntry, head); pEntry = pEntry->next)
 		{
-			ASSERT(pForm->m_FrameRect.IsValidRect());
-			pForm->EntryOnPaint(pDrawer, depth + 1);
-			pDrawer->PopDestRect();
+			uiFormBase *pForm = (uiFormBase*)m_SideDockedFormList.GetAt(pEntry);
+
+			if (!pForm->IsVisible())
+				continue;
+
+			temp = DrawableRegion;
+			temp.IntersectWith(pForm->m_FrameRect);
+			if (pDrawer->PushDestRect(temp))
+			{
+				ASSERT(pForm->m_FrameRect.IsValidRect());
+				pForm->EntryOnPaint(pDrawer, depth + 1);
+				pDrawer->PopDestRect();
+			}
 		}
 	}
 

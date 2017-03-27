@@ -4,11 +4,14 @@
 #include "uiDrawer.h"
 
 
-std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winCursorIconHandleType>>> winCursorIconHandleType::HandleMap;
-//std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winFontHandleType>>> winFontHandleType::HandleMap;
-std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<winIconHandleType>>> winIconHandleType::HandleMap;
-
 IMPLEMENT_WIN_HANDLE_TYPE(winFontHandleType)
+
+
+ImgDeleter stImgHandleWrapper::m_Del[WIT_TOTAL] = { (ImgDeleter)DeleteObject, (ImgDeleter)DestroyCursor, (ImgDeleter)DestroyIcon };
+//ImgDeleter stImgHandleWrapper::m_Del[WIT_TOTAL] = { (ImgDeleter)DeleteObject, (ImgDeleter)DestroyIcon, (ImgDeleter)DestroyIcon };
+
+stImgHandleWrapper::PathMap stImgHandleWrapper::PathHandleMap;
+stImgHandleWrapper::KeyMap stImgHandleWrapper::KeyHandleMap;
 
 
 UINT32 uiGetSysColor(INT index)

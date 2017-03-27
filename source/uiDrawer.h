@@ -9,15 +9,20 @@
 
 
 // If don't use this, you must calculate text length and draw from first visible character by yourself.
-// RoundRect has side effect too if you don't recalculate the visible portion and decide if should call it.
+// RoundRect has side effect too if you didn't recalculate the visible portion and decided if should call it.
 #define USE_GDI_CLIPPING
 
 
-#define DECLARE_WIN_HANDLE_TYPE(ClassType, Deletor, winType) \
+#define DISABLE_DYNAMIC_ALLOCATION \
+void* operator new(std::size_t size) = delete; \
+void* operator new(std::size_t size, void* addr) = delete; // Disable placement new.
+
+
+#define DECLARE_WIN_HANDLE_TYPE(ClassType, Deleter, winType) \
 class ClassType \
 { \
 public: \
-	static BOOL Del(HANDLE hHandle) { return ::Deletor((winType)hHandle); } \
+	static BOOL Del(HANDLE hHandle) { return ::Deleter((winType)hHandle); } \
 	static std::unordered_map<UINT, std::weak_ptr<stHandleWrapper<ClassType>>> HandleMap; \
 	static CHAR* GetName() { return #ClassType; } \
 };
@@ -51,10 +56,7 @@ struct stHandleWrapper
 };
 
 
-DECLARE_WIN_HANDLE_TYPE(winBmpHandleType, DeleteObject, HBITMAP)
-DECLARE_WIN_HANDLE_TYPE(winCursorIconHandleType, DestroyCursor, HCURSOR)
 DECLARE_WIN_HANDLE_TYPE(winFontHandleType, DeleteObject, HGDIOBJ)
-DECLARE_WIN_HANDLE_TYPE(winIconHandleType, DestroyIcon, HICON)
 
 
 // These two functions are "CP" from DX12 mini engine. Hope c standard has the same things.
@@ -72,15 +74,14 @@ INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166
 }
 
 
-typedef stHandleWrapper<winBmpHandleType>        BmpHandleW;
-typedef stHandleWrapper<winCursorIconHandleType> CursorHandleW;
-typedef stHandleWrapper<winFontHandleType>       FontHandleW;
-typedef stHandleWrapper<winIconHandleType>       IconHandleW;
+typedef stHandleWrapper<winFontHandleType> FontHandleW;
 
 
 class uiFont
 {
 public:
+
+	DISABLE_DYNAMIC_ALLOCATION;
 
 	uiFont() = default;
 	~uiFont() = default;
@@ -112,8 +113,8 @@ public:
 		HANDLE hFont = CreateFontIndirect(&lg);
 		if (hFont == NULL)
 		{
-			ASSERT(0);
 			printx("CreateFontIndirect failed! ec: %d\n", GetLastError());
+			ASSERT(0);
 			return FALSE;
 		}
 
@@ -138,37 +139,257 @@ protected:
 };
 
 
+typedef BOOL (WINAPI *ImgDeleter)(HANDLE);
+
+
+enum WIN_IMAGE_TYPE
+{
+	WIT_BMP,
+	WIT_CURSOR,
+	WIT_ICON,
+
+	WIT_TOTAL,
+	WIT_NONE,
+
+	WIT_TYPE_MASK = 0x03,
+	WIT_LOAD_FROM_FILE = 0x01 << 7,
+};
+
+
+IMPLEMENT_ENUM_FLAG(WIN_IMAGE_TYPE);
+
+
+struct stImgHandleWrapper
+{
+	struct cmp_str
+	{
+		bool operator()(const TCHAR *a, const TCHAR *b) const
+		{
+			return _tcscmp(a, b) < 0;
+		}
+	};
+
+	typedef std::map<const TCHAR*, std::weak_ptr<stImgHandleWrapper>, cmp_str> PathMap;
+	typedef std::unordered_map<UINT, std::weak_ptr<stImgHandleWrapper>> KeyMap;
+
+	INLINE stImgHandleWrapper::stImgHandleWrapper(WIN_IMAGE_TYPE typeIn, HANDLE hHandleIn, size_t KeyIn)
+	:Type(typeIn), hHandle(hHandleIn), Key(KeyIn)
+	{
+	}
+	INLINE stImgHandleWrapper::stImgHandleWrapper(WIN_IMAGE_TYPE typeIn, HANDLE hHandleIn)
+	:Type(typeIn), hHandle(hHandleIn)
+	{
+		Type |= WIT_LOAD_FROM_FILE;
+	}
+
+	stImgHandleWrapper::~stImgHandleWrapper()
+	{
+	//	printx("---> stImgHandleWrapper::~stImgHandleWrapper type: %d\n", Type & WIT_TYPE_MASK);
+
+		DEBUG_CHECK(DebugCheckFunc);
+
+		if (Type & WIT_LOAD_FROM_FILE)
+			PathHandleMap.erase(it);
+		else
+			KeyHandleMap.erase(Key);
+
+		BOOL bRet = m_Del[Type & WIT_TYPE_MASK](hHandle);
+		if (!bRet)
+		{
+			printx("Failed to close image handle! ec: %d\n", GetLastError()); // if ec is zero, there might exist something using the handle.
+			ASSERT(0);
+		}
+	}
+
+	void DebugCheckFunc()
+	{
+		if (Type & WIT_LOAD_FROM_FILE)
+		{
+			if (PathHandleMap.find(strPath) != it)
+				ASSERT(0);
+		}
+		else
+		{
+			ASSERT(KeyHandleMap[Key].expired());
+		}
+	}
+
+	void Set(PathMap::iterator itIn, uiString &strIn)
+	{
+		ASSERT(Type & WIT_LOAD_FROM_FILE);
+		new (&it) PathMap::iterator();
+		it = itIn;
+		strPath = std::move(strIn);
+	}
+
+
+	WIN_IMAGE_TYPE Type;
+	HANDLE hHandle;
+	union
+	{
+		PathMap::iterator it;
+		size_t Key;
+	};
+#ifdef _DEBUG
+	uiString strPath;
+#endif
+
+	static ImgDeleter m_Del[WIT_TOTAL];
+	static PathMap PathHandleMap;
+	static KeyMap  KeyHandleMap;
+
+};
+
+
 class uiImage
 {
 public:
 
-	enum IMAGE_TYPE
+	DISABLE_DYNAMIC_ALLOCATION;
+
+	struct stImageSourceInfo
 	{
-		IT_NONE,
-		IT_ICON,
-		IT_CURSOR_ICON,
-		IT_IMAGE,
+		HINSTANCE  hModule;
+		UINT       ResID;
 	};
 
-	uiImage()
-	:m_Type(IT_NONE)
-	{
-	}
+
+	uiImage() = default;
 	~uiImage() = default;
 
 
+	BOOL LoadCursor(uiString str)
+	{
+		str.MakeLower();
 
+		auto it = stImgHandleWrapper::PathHandleMap.find(str);
+		if (it != stImgHandleWrapper::PathHandleMap.end())
+		{
+			if ((m_pImg = it->second.lock()).get() != nullptr)
+				return TRUE;
+			ASSERT(0); // Only single thread is supported.
+		}
 
+		HCURSOR hCursor = (HCURSOR)LoadImage(NULL, str, IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR | LR_LOADFROMFILE);
+		if (hCursor == NULL)
+		{
+			printx("LoadImage (Cursor) failed! ec: %d\n", GetLastError());
+			return FALSE;
+		}
 
+		m_pImg = std::shared_ptr<stImgHandleWrapper>(new stImgHandleWrapper(WIT_CURSOR, hCursor));
+		if (m_pImg.get() == nullptr)
+		{
+			VERIFY(stImgHandleWrapper::m_Del[WIT_CURSOR](hCursor));
+			return FALSE;
+		}
+
+		it = stImgHandleWrapper::PathHandleMap.insert({ str, m_pImg }).first;
+		m_pImg->Set(it, str);
+
+		return TRUE;
+	}
+	BOOL LoadCursor(UINT ResID, const TCHAR* ResType = nullptr, HINSTANCE hModule = NULL)
+	{
+		stImageSourceInfo isi = { (hModule == NULL) ? GetModuleHandle(NULL) : hModule, ResID };
+		const size_t Key = HashState(&isi);
+
+		auto it = stImgHandleWrapper::KeyHandleMap.find(Key);
+		if (it != stImgHandleWrapper::KeyHandleMap.end())
+		{
+			if ((m_pImg = it->second.lock()).get() != nullptr)
+				return TRUE;
+			ASSERT(0); // Only single thread is supported.
+		}
+
+		// No need to close handle of HRSRC and fake HGLOBAL.
+		HCURSOR hCursor;
+		if (ResType != nullptr)
+		{
+			TCHAR path[MAX_PATH + 1];
+			HRSRC hRes = FindResource(isi.hModule, MAKEINTRESOURCE(ResID), ResType);
+			if (hRes != NULL)
+			{
+				HGLOBAL hMem = LoadResource(isi.hModule, hRes);
+				if (hMem != NULL)
+				{
+					PBYTE pAddr = (PBYTE)LockResource(hMem);
+					DWORD dwSize = SizeofResource(isi.hModule, hRes);
+					if (SaveToTempFile(_T("uiCursorTempFile"), path, _countof(path), pAddr, dwSize))
+					{
+						hCursor = (HCURSOR)LoadImage(NULL, path, IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR | LR_LOADFROMFILE);
+						::DeleteFile(path);
+					}
+				}
+				else
+				{
+					printx("LoadResource failed! ec: %d\n", GetLastError());
+					return FALSE;
+				}
+			}
+			else
+			{
+				printx("FindResource failed! ec: %d\n", GetLastError());
+				return FALSE;
+			}
+		}
+		else
+		{
+			hCursor = (HCURSOR)LoadImage(isi.hModule, MAKEINTRESOURCE(ResID), IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR);
+		}
+		// It looks like these two old win32 functions are not compatiable with new animation format.
+	//	HICON hCursor = CreateIconFromResourceEx(pAddr, dwSize, FALSE, 0x00030000, 0, 0, LR_DEFAULTCOLOR);
+	//	HCURSOR hCursor = ::LoadCursor(isi.hModule, MAKEINTRESOURCE(ResID));
+
+		if (hCursor == NULL)
+		{
+			printx("LoadImage (Cursor) failed! ec: %d\n", GetLastError());
+			return FALSE;
+		}
+
+		m_pImg = std::shared_ptr<stImgHandleWrapper>(new stImgHandleWrapper(WIT_CURSOR, hCursor, Key));
+		if (m_pImg.get() == nullptr)
+		{
+			VERIFY(stImgHandleWrapper::m_Del[WIT_CURSOR](hCursor));
+			return FALSE;
+		}
+
+		stImgHandleWrapper::KeyHandleMap.insert({ Key, m_pImg });
+
+		return TRUE;
+	}
+
+	BOOL SaveToTempFile(const TCHAR* pFileName, TCHAR buf[], UINT nMaxCharCount, void *pData, UINT nSize)
+	{
+		INT len = GetTempPath(nMaxCharCount, buf);
+		if (buf[len - 1] != '\\')
+		{
+			buf[len - 1] = '\\';
+			buf[len] = '0';
+		}
+		_tcscat_s(buf, nMaxCharCount, pFileName);
+		HANDLE hFile = ::CreateFile(buf, GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, NULL);
+		DWORD dwSizeWritten;
+		if (hFile != NULL)
+		{
+			::WriteFile(hFile, pData, nSize, &dwSizeWritten, nullptr);
+			::CloseHandle(hFile);
+			return TRUE;
+		}
+		return FALSE;
+	}
+
+	INLINE bool operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
+	INLINE HANDLE GetHandle() const { return (m_pImg) ? m_pImg->hHandle : NULL; }
+	INLINE WIN_IMAGE_TYPE GetType() const { return (m_pImg) ? m_pImg->Type : WIT_NONE; }
+	INLINE BOOL IsValid() const { return (bool)m_pImg; }
+	INLINE void Release() { m_pImg.reset(); }
 
 
 protected:
 
-	IMAGE_TYPE m_Type;
-	std::shared_ptr<void*> m_SmartPointerStorage;
-//	std::shared_ptr<BmpHandleW>    m_pBmp;
-//	std::shared_ptr<CursorHandleW> m_pCursor;
-//	std::shared_ptr<IconHandleW>   m_pIcon;
+	std::shared_ptr<stImgHandleWrapper> m_pImg;
+
 
 };
 
