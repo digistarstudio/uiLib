@@ -97,7 +97,7 @@ int printx(const wchar_t *format, ...)
 
 void UTXStringLowercase(TCHAR *in)
 {
-	UINT length = _tcslen(in), i;
+	std::size_t length = _tcslen(in), i;
 	for(i = 0; i < length; i++)
 		if('A' <= in[i] && in[i] <= 'Z')
 			in[i] -= 'A' - 'a';
@@ -105,7 +105,7 @@ void UTXStringLowercase(TCHAR *in)
 
 void UTXStringUppercase(TCHAR *in)
 {
-	UINT length = _tcslen(in), i;
+	std::size_t length = _tcslen(in), i;
 	for(i = 0; i < length; i++)
 		if('a' <= in[i] && in[i] <= 'z')
 			in[i] += 'A' - 'a';
@@ -113,7 +113,7 @@ void UTXStringUppercase(TCHAR *in)
 
 BOOL UTXIsStringLowercase(TCHAR const *in)
 {
-	UINT length = _tcslen(in), i;
+	std::size_t length = _tcslen(in), i;
 	for(i = 0; i < length; i++)
 		if('A' <= in[i] && in[i] <= 'Z')
 			return FALSE;
@@ -122,7 +122,7 @@ BOOL UTXIsStringLowercase(TCHAR const *in)
 
 BOOL UTXIsStringUppercase(TCHAR const *in)
 {
-	UINT length = _tcslen(in), i;
+	std::size_t length = _tcslen(in), i;
 	for(i = 0; i < length; i++)
 		if('a' <= in[i] && in[i] <= 'z')
 			return FALSE;

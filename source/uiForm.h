@@ -459,8 +459,7 @@ INLINE void uiFormBase::FBSetFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag |= 
 INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
 
 
-
-class UI_NO_VTABLE IAreaCursor
+class UI_INTERFACE IAreaCursor
 {
 public:
 

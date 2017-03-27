@@ -209,10 +209,8 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		LogWndMsg("Msg: WM_ACTIVATEAPP 0x%p 0x%p\n", wParam, lParam);
 		break;
 
-	case WM_SETCURSOR: // If an application processes this message, it should return TRUE to halt further processing or FALSE to continue.
+	case WM_SETCURSOR: // Just set hCursor in struct WNDCLASSEXW to NULL.
 	//	LogWndMsg("Msg: WM_SETCURSOR\n");
-	//	pWnd = uiWindowGet(hWnd);
-		//lRet = pWnd->OnSetCursor();
 		lRet = bProcessed = TRUE;
 		break;
 
@@ -350,7 +348,7 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 		wcex.cbWndExtra = 0;
 		wcex.hInstance = hInstance;
 		wcex.hIcon = NULL;
-		wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
+		wcex.hCursor = NULL; // LoadCursor(nullptr, IDC_ARROW);
 		wcex.hbrBackground = NULL; //(HBRUSH)(COLOR_WINDOW + 1);
 		wcex.lpszMenuName = nullptr;
 		wcex.lpszClassName = pWndClass;

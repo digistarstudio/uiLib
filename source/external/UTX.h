@@ -18,7 +18,7 @@
 //#include "RMath.h"
 
 
-#define UI_NO_VTABLE __declspec(novtable)
+#define UI_INTERFACE __declspec(novtable)
 
 
 #ifndef ASSERT
@@ -35,10 +35,15 @@
 
 #define INLINE inline
 
+
 #define IMPLEMENT_ENUM_FLAG(ENUM_NAME) \
 constexpr ENUM_NAME operator|(ENUM_NAME a, ENUM_NAME b) \
 { \
 	return static_cast<ENUM_NAME>(static_cast<INT>(a) | static_cast<INT>(b)); \
+} \
+constexpr ENUM_NAME operator~(ENUM_NAME a) \
+{ \
+	return static_cast<ENUM_NAME>(~static_cast<INT>(a)); \
 } \
 INLINE ENUM_NAME& operator|=(ENUM_NAME& a, ENUM_NAME b) \
 { \
@@ -47,10 +52,6 @@ INLINE ENUM_NAME& operator|=(ENUM_NAME& a, ENUM_NAME b) \
 INLINE ENUM_NAME& operator&=(ENUM_NAME& a, ENUM_NAME b) \
 { \
 	return a = static_cast<ENUM_NAME>(static_cast<INT>(a) & static_cast<INT>(b)); \
-}\
-constexpr ENUM_NAME operator~(ENUM_NAME a) \
-{ \
-	return static_cast<ENUM_NAME>(~static_cast<INT>(a)); \
 }
 
 

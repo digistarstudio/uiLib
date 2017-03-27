@@ -615,7 +615,7 @@ void FontTest()
 
 	font3.~uiFont();
 
-	for (UINT i = 0; i < 1; ++i)
+	for (UINT i = 0; i < 5; ++i)
 	{
 		uiImage img, img2, img3, img4, img5, img6, img7, img8, a, b, c, d, e;
 		img.LoadCursor(_T("R:\\test.cur"));
@@ -644,6 +644,12 @@ void FontTest()
 
 //	img.Initial(uiImage::IT_BMP);
 	font3.~uiFont();
+
+	uiString s1(_T("test"));
+	uiString s2(s1);
+
+	s1 = _T("");
+	INT len = s1.Length();
 
 }
 

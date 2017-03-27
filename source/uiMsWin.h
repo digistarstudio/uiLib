@@ -335,7 +335,7 @@ public:
 		if (img == m_CustomCursor)
 			return TRUE;
 
-		::SetCursor((HCURSOR)img.GetHandle()); // Set fisrt, then assign the image.
+		HANDLE hPrev = ::SetCursor((HCURSOR)img.GetHandle()); // Set fisrt, then assign the image.
 		m_CustomCursor = img;
 		return TRUE;
 	}

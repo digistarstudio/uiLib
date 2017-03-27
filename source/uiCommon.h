@@ -198,15 +198,15 @@ class uiString
 public:
 
 	uiString() :m_pStr(nullptr) {}
-	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, _tcslen(pstrIn)); }
+	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, (UINT)_tcslen(pstrIn)); }
 	uiString(const uiString &src) :m_pStr(nullptr) { StoreString(src.m_pStr, src.Length()); }
 
-	uiString(uiString &&rvalue)
+	uiString(uiString &&SrcStr)
 	{
-		m_pStr = rvalue.m_pStr;
-		m_len = rvalue.m_len;
-		rvalue.m_pStr = nullptr;
-		rvalue.m_len = 0;
+		m_pStr = SrcStr.m_pStr;
+		m_len = SrcStr.m_len;
+		SrcStr.m_pStr = nullptr;
+		SrcStr.m_len = 0;
 	}
 	~uiString()
 	{
@@ -220,7 +220,7 @@ public:
 
 	void MakeLower()
 	{
-		for (INT i = 0; i < m_len; ++i)
+		for (UINT i = 0; i < m_len; ++i)
 			if ('A' <= m_pStr[i] && m_pStr[i] <= 'Z')
 				m_pStr[i] += ('a' - 'A');
 	}
@@ -231,7 +231,7 @@ public:
 		{
 			len = nMaxChar - 1;
 			memcpy(pBuf, m_pStr, sizeof(TCHAR) * len);
-			pBuf[len] = '0';
+			pBuf[len] = '\0';
 		}
 		else
 		{
@@ -241,14 +241,19 @@ public:
 		return len;
 	}
 
-
-	INLINE INT Length() const { return m_len - 1; }
-	INLINE BOOL IsEmpty() const { return (m_len <= 1); }
-
 	void StoreString(const TCHAR* pStrIn, UINT lenIn)
 	{
-		if (pStrIn != nullptr && lenIn == 0)
-			lenIn = _tcslen(pStrIn);
+		if (pStrIn == nullptr || *pStrIn == '\0')
+		{
+			if (m_pStr != nullptr)
+			{
+				free(m_pStr);
+				m_pStr = nullptr;
+			}
+			return;
+		}
+		if (lenIn == 0)
+			lenIn = (UINT)_tcslen(pStrIn);
 		if (m_pStr == nullptr)
 		{
 			m_len = lenIn + 1;
@@ -286,13 +291,15 @@ public:
 		return *this;
 	}
 
+	INLINE UINT Length() const { return (m_pStr == nullptr) ? 0 : m_len - 1; }
+	INLINE BOOL IsEmpty() const { return (m_len <= 1); }
 	operator const TCHAR*() const { return (m_pStr == nullptr) ? _T("") : m_pStr; }
 
 
 protected:
 
 	TCHAR *m_pStr;
-	INT m_len; // Null-terminator is included.
+	UINT m_len; // Null-terminator is included. This is valid only when m_pStr != nullptr.
 
 
 };

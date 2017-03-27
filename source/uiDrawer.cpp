@@ -8,7 +8,6 @@ IMPLEMENT_WIN_HANDLE_TYPE(winFontHandleType)
 
 
 ImgDeleter stImgHandleWrapper::m_Del[WIT_TOTAL] = { (ImgDeleter)DeleteObject, (ImgDeleter)DestroyCursor, (ImgDeleter)DestroyIcon };
-//ImgDeleter stImgHandleWrapper::m_Del[WIT_TOTAL] = { (ImgDeleter)DeleteObject, (ImgDeleter)DestroyIcon, (ImgDeleter)DestroyIcon };
 
 stImgHandleWrapper::PathMap stImgHandleWrapper::PathHandleMap;
 stImgHandleWrapper::KeyMap stImgHandleWrapper::KeyHandleMap;
@@ -30,6 +29,129 @@ UINT32 uiGetSysColor(INT index)
 	}
 
 	return color;
+}
+
+
+BOOL uiImage::LoadCursor(uiString str)
+{
+	str.MakeLower();
+
+	auto it = stImgHandleWrapper::PathHandleMap.find(str);
+	if (it != stImgHandleWrapper::PathHandleMap.end())
+	{
+		if ((m_pImg = it->second.lock()).get() != nullptr)
+			return TRUE;
+		ASSERT(0); // Only single thread is supported.
+	}
+
+	HCURSOR hCursor = (HCURSOR)LoadImage(NULL, str, IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR | LR_LOADFROMFILE);
+	if (hCursor == NULL)
+	{
+		printx("LoadImage (Cursor) failed! ec: %d\n", GetLastError());
+		return FALSE;
+	}
+
+	m_pImg = std::shared_ptr<stImgHandleWrapper>(new stImgHandleWrapper(WIT_CURSOR, hCursor));
+	if (m_pImg.get() == nullptr)
+	{
+		VERIFY(stImgHandleWrapper::m_Del[WIT_CURSOR](hCursor));
+		return FALSE;
+	}
+
+	it = stImgHandleWrapper::PathHandleMap.insert({ str, m_pImg }).first;
+	m_pImg->Set(it, str);
+
+	return TRUE;
+}
+
+BOOL uiImage::LoadCursor(UINT ResID, const TCHAR* ResType, HINSTANCE hModule)
+{
+	stImageSourceInfo isi = { (hModule == NULL) ? GetModuleHandle(NULL) : hModule, ResID };
+	const size_t Key = HashState(&isi);
+
+	auto it = stImgHandleWrapper::KeyHandleMap.find(Key);
+	if (it != stImgHandleWrapper::KeyHandleMap.end())
+	{
+		if ((m_pImg = it->second.lock()).get() != nullptr)
+			return TRUE;
+		ASSERT(0); // Only single thread is supported.
+	}
+
+	// No need to close handle of HRSRC and fake HGLOBAL.
+	HCURSOR hCursor;
+	if (ResType != nullptr)
+	{
+		TCHAR path[MAX_PATH + 1];
+		HRSRC hRes = FindResource(isi.hModule, MAKEINTRESOURCE(ResID), ResType);
+		if (hRes != NULL)
+		{
+			HGLOBAL hMem = LoadResource(isi.hModule, hRes);
+			if (hMem != NULL)
+			{
+				PBYTE pAddr = (PBYTE)LockResource(hMem);
+				DWORD dwSize = SizeofResource(isi.hModule, hRes);
+				if (SaveToTempFile(_T("uiCursorTempFile"), path, _countof(path), pAddr, dwSize))
+				{
+					hCursor = (HCURSOR)LoadImage(NULL, path, IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR | LR_LOADFROMFILE);
+					::DeleteFile(path);
+				}
+			}
+			else
+			{
+				printx("LoadResource failed! ec: %d\n", GetLastError());
+				return FALSE;
+			}
+		}
+		else
+		{
+			printx("FindResource failed! ec: %d\n", GetLastError());
+			return FALSE;
+		}
+	}
+	else
+	{
+		hCursor = (HCURSOR)LoadImage(isi.hModule, MAKEINTRESOURCE(ResID), IMAGE_CURSOR, 0, 0, LR_DEFAULTCOLOR);
+	}
+	// It looks like these two old win32 functions are not compatiable with new animation format.
+	//	HICON hCursor = CreateIconFromResourceEx(pAddr, dwSize, FALSE, 0x00030000, 0, 0, LR_DEFAULTCOLOR);
+	//	HCURSOR hCursor = ::LoadCursor(isi.hModule, MAKEINTRESOURCE(ResID));
+
+	if (hCursor == NULL)
+	{
+		printx("LoadImage (Cursor) failed! ec: %d\n", GetLastError());
+		return FALSE;
+	}
+
+	m_pImg = std::shared_ptr<stImgHandleWrapper>(new stImgHandleWrapper(WIT_CURSOR, hCursor, Key));
+	if (m_pImg.get() == nullptr)
+	{
+		VERIFY(stImgHandleWrapper::m_Del[WIT_CURSOR](hCursor));
+		return FALSE;
+	}
+
+	stImgHandleWrapper::KeyHandleMap.insert({ Key, m_pImg });
+
+	return TRUE;
+}
+
+BOOL uiImage::SaveToTempFile(const TCHAR* pFileName, TCHAR buf[], UINT nMaxCharCount, void *pData, UINT nSize)
+{
+	INT len = GetTempPath(nMaxCharCount, buf);
+	if (buf[len - 1] != '\\')
+	{
+		buf[len - 1] = '\\';
+		buf[len] = '\0';
+	}
+	_tcscat_s(buf, nMaxCharCount, pFileName);
+	HANDLE hFile = ::CreateFile(buf, GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, NULL);
+	DWORD dwSizeWritten;
+	if (hFile != NULL)
+	{
+		::WriteFile(hFile, pData, nSize, &dwSizeWritten, nullptr);
+		::CloseHandle(hFile);
+		return TRUE;
+	}
+	return FALSE;
 }
 
 
