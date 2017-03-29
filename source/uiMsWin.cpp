@@ -209,10 +209,10 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		LogWndMsg("Msg: WM_ACTIVATEAPP 0x%p 0x%p\n", wParam, lParam);
 		break;
 
-	case WM_SETCURSOR: // Just set hCursor in struct WNDCLASSEXW to NULL.
+	//case WM_SETCURSOR: // Just set hCursor in struct WNDCLASSEXW to NULL.
 	//	LogWndMsg("Msg: WM_SETCURSOR\n");
-		lRet = bProcessed = TRUE;
-		break;
+	//	lRet = bProcessed = TRUE;
+	//	break;
 
 	case WM_NCHITTEST:
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -225,8 +225,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		bProcessed = TRUE;
 		break;
 
-/*
-	case WM_NCPAINT:
+/*	case WM_NCPAINT:
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnNCPaint(hWnd, (HRGN)wParam);
 		bProcessed = TRUE;
@@ -290,6 +289,12 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		MOUSE_KEY_UP(MKT_MIDDLE);
 	case WM_MBUTTONDBLCLK:
 		MOUSE_KEY_DBCLK(MKT_MIDDLE);
+
+	case WM_MOUSEWHEEL:
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnMouseWheel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), GET_WHEEL_DELTA_WPARAM(wParam), GET_KEYSTATE_WPARAM(wParam));
+		bProcessed = TRUE;
+		break;
 
 	case WM_SIZING:
 		pWnd = uiWindowGet(hWnd);
@@ -627,7 +632,7 @@ void uiWindow::ResizeImp(INT x, INT y)
 
 void uiWindow::PostMsgHandler(UINT msg)
 {
-	BOOL bAreaTypeChanged = FALSE;
+	BOOL bUpdateMouse = FALSE;
 	uiPoint ptWS, ptSS, ptCS;
 
 	if (bRetrackMouse)
@@ -642,6 +647,7 @@ void uiWindow::PostMsgHandler(UINT msg)
 		do
 		{
 			bRetrackMouse = false;
+			bUpdateMouse = TRUE;
 			//	printx("Start tracking: %d\n", ++TrackCount);
 
 			if ((m_AreaType = m_pForm->FindByPos(&m_pGrayForm, ptWS.x, ptWS.y, &ptCS)) != uiFormBase::CAT_CLIENT)
@@ -651,7 +657,6 @@ void uiWindow::PostMsgHandler(UINT msg)
 					MouseLeaveForm(m_pHoverForm);
 					m_pHoverForm = nullptr;
 				}
-				bAreaTypeChanged = TRUE;
 			}
 			else
 			{
@@ -667,8 +672,9 @@ void uiWindow::PostMsgHandler(UINT msg)
 					m_pHoverForm = nullptr;
 					continue;
 				}
-				if (m_pHoverForm != nullptr)
-					MouseEnterForm(m_pHoverForm, ptCS.x, ptCS.y);
+
+				ASSERT(m_pHoverForm != nullptr);
+				MouseEnterForm(m_pHoverForm, ptCS.x, ptCS.y);
 			}
 
 			//	printx("Leave tracking: %d\n", TrackCount);
@@ -677,11 +683,8 @@ void uiWindow::PostMsgHandler(UINT msg)
 		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing with this message.
 	}
 
-	if (bAreaTypeChanged) // Let OnNCHitTest handle cursor icon change.
-	{
-	//	::WindowFromPoint(*(POINT*)&ptSS);
-		OnNCHitTest(ptWS.x, ptWS.y);
-	}
+	if (bUpdateMouse)
+		UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 }
 
 void uiWindow::FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect)
@@ -718,6 +721,24 @@ void uiWindow::RetrackMouseCheck(uiFormBase *pFormBase) // For form size and mov
 				bRetrackMouse = true;
 				break;
 			}
+}
+
+void uiWindow::UpdateCursor(uiFormBase *pForm, INT csX, INT csY)
+{
+	if (m_bSizing)
+		return;
+
+	uiImage NewCursor;
+	IAreaCursor *pIAC = pForm->GetIAreaCursor();
+	if (pIAC == nullptr)
+	{
+		uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+	}
+	else
+	{
+		uiImage NewCursor = pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+		uiGetCursor().Set(NewCursor);
+	}
 }
 
 uiFormBase* uiWindow::CaptureMouseFocus(uiFormBase* pForm)
@@ -1155,24 +1176,13 @@ void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
 LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message if the window captured the mouse focus.
 {
 	//	printx("---> uiWindow::OnNCHitTest. X:%d Y:%d\n", x, y);
-	ASSERT(!m_bDragging);
-	ASSERT(!m_bSizing);
+//	ASSERT(!m_bDragging);
+//	ASSERT(!m_bSizing);
 
-	// Just determine the area type. Don't do much thing.
+	// Just determine the area type. Don't do much.
 	uiPoint ptCS;
 	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
-
-	uiImage NewCursor;
-	IAreaCursor *pIAC = m_pGrayForm->GetIAreaCursor();
-	if (pIAC == nullptr)
-	{
-		uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
-	}
-	else
-	{
-		uiImage NewCursor = pIAC->GetCursorImage(m_pGrayForm, ptCS.x, ptCS.y, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
-		uiGetCursor().Set(NewCursor);
-	}
+	UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 
 	return HTCLIENT;
 }
@@ -1195,7 +1205,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 		m_MouseDragKey = MKT_LEFT;
 		m_bSizing = m_bDragging = true;
 		m_SizingHitSide = m_AreaType;
-		uiGetCursor().StartSizing(FALSE);
+//		uiGetCursor().StartSizing(FALSE);
 		SetCapture();
 
 		uiRect MouseMoveRect;
@@ -1225,7 +1235,7 @@ BOOL uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
 		if (m_bSizing)
 		{
 			m_bSizing = false;
-			uiGetCursor().StartSizing(TRUE);
+//			uiGetCursor().StartSizing(TRUE);
 		}
 		return TRUE;
 	}
@@ -1235,7 +1245,7 @@ BOOL uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
 void uiWindow::OnMouseCaptureLost()
 {
 	uiPoint cpt;
-	UICore::GCursor.GetPos(cpt);
+	uiGetCursor().GetPos(cpt);
 	ScreenToClient(cpt.x, cpt.y);
 
 	if (m_bDragging)
@@ -1250,9 +1260,7 @@ void uiWindow::OnMouseCaptureLost()
 		if (m_bSizing)
 		{
 			m_bSizing = false;
-			OnNCHitTest(cpt.x, cpt.y); // Force to get the right state first.
-		//	SendMessage(WM_NCHITTEST, NULL, MAKELONG(cpt.x, cpt.y));
-			uiGetCursor().StartSizing(TRUE);
+//			uiGetCursor().StartSizing(TRUE);
 		}
 	}
 	else if (m_pMouseFocusForm != nullptr)
@@ -1530,6 +1538,11 @@ void uiWindow::OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const 
 		pDestForm->OnMouseBtnDown(KeyType, ptCS.x, ptCS.y); // Windows replaces button down message with double click message if it happened.
 }
 
+void uiWindow::OnMouseWheel(SHORT scX, SHORT scY, INT z, UINT_PTR kf)
+{
+	printx("---> uiWindow::OnMouseWheel. x: %d, y: %d, z: %d\n", scX, scY, z);
+}
+
 void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)
 {
 	ASSERT(!pForm->IsMouseHovering());
@@ -1621,15 +1634,13 @@ void uiWinMenu::ChangeStyle()
 
 uiWinCursor::uiWinCursor()
 {
-	m_CurrentType = CT_TOTAL; // Specific an invalid value, so force to update icon when cursor goes into the window.
+	m_CurrentType = CT_TOTAL; // Specify an invalid value to force updating cursor when mouse goes inside the window first time.
 
 	m_hArray[CT_NORMAL] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_NORMAL), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 	m_hArray[CT_SIZE_NS] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENS), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 	m_hArray[CT_SIZE_EW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZEWE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 	m_hArray[CT_SIZE_NESW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENESW), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 	m_hArray[CT_SIZE_NWSE] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENWSE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-
-	m_bSizing = false;
 }
 
 uiWinCursor::~uiWinCursor()
@@ -1645,6 +1656,17 @@ uiWinCursor::~uiWinCursor()
 	::SetCursor(NULL); // Must call this to remove the using cursor.
 }
 
+BOOL uiWinCursor::Set(uiImage &img)
+{
+	if (!img.IsValid() || img.GetType() != WIT_CURSOR)
+		return FALSE;
+	if (img == m_CustomCursor)
+		return TRUE;
+
+	HANDLE hPrev = ::SetCursor((HCURSOR)img.GetHandle()); // Set fisrt, then assign the image.
+	m_CustomCursor = std::move(img);
+	return TRUE;
+}
 
 void uiWinCursor::Update(uiFormBase::CLIENT_AREA_TYPE nca)
 {
@@ -1676,22 +1698,6 @@ void uiWinCursor::Update(uiFormBase::CLIENT_AREA_TYPE nca)
 	{
 		::SetCursor(m_hArray[m_CurrentType]); // Muse set first to release internal reference count to the image.
 		m_CustomCursor.Release();
-	}
-}
-
-void uiWinCursor::StartSizing(BOOL bComplete)
-{
-	if (bComplete)
-	{
-		ASSERT(m_bSizing);
-		HANDLE hOldCursor = SetCursor(m_hArray[m_CurrentType]);
-		m_bSizing = false;
-	}
-	else
-	{
-		ASSERT(!m_bSizing);
-		m_bSizing = true;
-		m_SizingType = m_CurrentType;
 	}
 }
 

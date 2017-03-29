@@ -81,7 +81,7 @@ struct uiRect
 
 	INLINE void Inflate(INT x, INT y) { Left -= x; Right += x; Top -= y; Bottom += y; }
 	INLINE void Inflate(INT l, INT t, INT r, INT b) { Left -= l; Right += r; Top -= t; Bottom += b; }
-	INLINE uiRect InflateRV(INT l, INT t, INT r, INT b) { return uiRect(Left + l, Top + t, Right + r, Bottom + b); }
+	INLINE uiRect InflateRV(INT l, INT t, INT r, INT b) const { return uiRect(Left + l, Top + t, Right + r, Bottom + b); }
 
 	INLINE void GetPos(INT &x, INT &y) const { x = Left; y = Top; }
 	INLINE void SetPos(INT x, INT y) { Left = x; Top = y; }

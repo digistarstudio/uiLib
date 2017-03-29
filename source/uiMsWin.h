@@ -38,6 +38,7 @@ struct stWndTimerInfo
 
 };
 
+
 class uiWindow
 {
 public:
@@ -66,6 +67,7 @@ public:
 	void PostMsgHandler(UINT msg);
 	void FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect);
 	void RetrackMouseCheck(uiFormBase *pFormBase);
+	void UpdateCursor(uiFormBase *pForm, INT csX, INT csY);
 
 	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
 	BOOL ReleaseMouseFocus(uiFormBase* pForm);
@@ -106,6 +108,7 @@ public:
 	void OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 	void OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 	void OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
+	void OnMouseWheel(SHORT scX, SHORT scY, INT z, UINT_PTR kf);
 
 	void MouseEnterForm(uiFormBase *pForm, INT x, INT y);
 	void MouseLeaveForm(uiFormBase *pForm);
@@ -119,16 +122,16 @@ public:
 	INLINE void ClientToScreen(INT& x, INT& y) const { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
 	INLINE void ScreenToClient(INT& x, INT& y) const { x -= m_ScreenCoordinateX; y -= m_ScreenCoordinateY; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
-	INLINE BOOL UpdateWindow() { return ::UpdateWindow(m_Handle); }
-	INLINE BOOL GetWindowRect(uiRect &rect) { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
-	INLINE BOOL GetClientRect(uiRect &rect) { return ::GetClientRect(m_Handle, (LPRECT)&rect); }
-	INLINE BOOL ShowWindow(INT nCmdShow) { return ::ShowWindow(m_Handle, nCmdShow); }
-	INLINE HWND SetCapture() { return ::SetCapture(m_Handle); }
-	INLINE BOOL ReleaseCapture() { return ::ReleaseCapture(); }
+	INLINE BOOL UpdateWindow() const { return ::UpdateWindow(m_Handle); }
+	INLINE BOOL GetWindowRect(uiRect &rect) const { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
+	INLINE BOOL GetClientRect(uiRect &rect) const { return ::GetClientRect(m_Handle, (LPRECT)&rect); }
+	INLINE BOOL ShowWindow(INT nCmdShow) const { return ::ShowWindow(m_Handle, nCmdShow); }
+	INLINE HWND SetCapture() const { return ::SetCapture(m_Handle); }
+	INLINE BOOL ReleaseCapture() const { return ::ReleaseCapture(); }
 
 	// For debugging.
 	// Don't use SetWindowPos to show windows.
-	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { return ::SendMessage(m_Handle, Msg, wParam, lParam); }
+//	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { return ::SendMessage(m_Handle, Msg, wParam, lParam); }
 	INLINE HWND SetActiveWindow()
 	{
 		ASSERT(!uiMessageLookUp(WM_KILLFOCUS));
@@ -208,7 +211,6 @@ protected:
 	bool m_bTrackMouseLeave = false;
 	bool m_bDragging = false;
 	bool m_bSizing = false;
-	bool bChangeCursor = false;
 	bool bRetrackMouse = false;
 	bool bMouseFocusCaptured = false;
 	bool bKBFocusCaptured = false;
@@ -321,32 +323,17 @@ public:
 	uiWinCursor();
 	~uiWinCursor();
 
+	BOOL Set(uiImage &img);
 	void Update(uiFormBase::CLIENT_AREA_TYPE nca);
-	void StartSizing(BOOL bComplete);
 
 	INLINE void Reset() { m_CurrentType = CT_TOTAL; }
 	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }
 
 
-	BOOL Set(uiImage &img)
-	{
-		if (!img.IsValid() || img.GetType() != WIT_CURSOR)
-			return FALSE;
-		if (img == m_CustomCursor)
-			return TRUE;
-
-		HANDLE hPrev = ::SetCursor((HCURSOR)img.GetHandle()); // Set fisrt, then assign the image.
-		m_CustomCursor = img;
-		return TRUE;
-	}
-
-
 protected:
 
-	INT m_CurrentType, m_SizingType;
+	INT     m_CurrentType;
 	HCURSOR m_hArray[CT_TOTAL];
-	bool m_bSizing;
-
 	uiImage m_CustomCursor;
 
 

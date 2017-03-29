@@ -121,8 +121,7 @@ public:
 		printx("---> CTabFormContext1::OnSize nw: %d, nh: %d\n", nw, nh);
 	}
 
-	IAreaCursor* GetIAreaCursor() override { return dynamic_cast<IAreaCursor*>(this); }
-
+	IMPLEMENT_INTERFACE_COI(IAreaCursor)
 
 };
 
@@ -618,7 +617,12 @@ void FontTest()
 	for (UINT i = 0; i < 5; ++i)
 	{
 		uiImage img, img2, img3, img4, img5, img6, img7, img8, a, b, c, d, e;
+
 		img.LoadCursor(_T("R:\\test.cur"));
+
+		img2 = (uiImage&&)img;
+		img3 = img2;
+
 		img4.LoadCursor(_T("R:\\test4.cur"));
 		img2.LoadCursor(_T("R:\\test2.cur"));
 		img6.LoadCursor(_T("R:\\a1.cur"));
@@ -638,6 +642,8 @@ void FontTest()
 
 //	b.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
 //	c.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+	uiImage img;
+	img.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
 //	::SetCursor((HCURSOR)img.GetHandle());
 
 //	d.LoadCursor(IDC_CURSOR1);
@@ -681,7 +687,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	a = _T("Unicode string\n");
 	
 	printx("sizeof std::shared_ptr<>: %d Bytes\n", sizeof std::shared_ptr<uiString>);
-	printx("sizeof ISideDockableFrame: %d Bytes\n", sizeof ISideDockableFrame);
+	printx("sizeof uiSideDockableFrame: %d Bytes\n", sizeof uiSideDockableFrame);
 	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
 	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
 	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
@@ -692,6 +698,14 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
 	CMyForm* pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
+
+	{
+		uiImage icon;
+		uiString str(_T("New title!"));
+
+		pForm->SetIcon(icon);
+		pForm->SetTitle(str);
+	}
 
 //	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
 

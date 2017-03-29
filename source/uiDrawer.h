@@ -45,8 +45,8 @@ struct stHandleWrapper
 		BOOL bRet = HandleType::Del(hHandle);
 		if (!bRet)
 		{
-			ASSERT(0);
 			DWORD ec = GetLastError();
+			ASSERT(0);
 		}
 	}
 
@@ -83,52 +83,21 @@ public:
 
 	DISABLE_DYNAMIC_ALLOCATION;
 
-	uiFont() = default;
-	~uiFont() = default;
+	uiFont() {}
+	uiFont(const uiFont& src) { m_ptrHandle = src.m_ptrHandle; }
+	~uiFont() {}
 
-	BOOL Create(const TCHAR* pName, INT height, INT width)
-	{
-		uiString str(pName);
-		str.MakeLower();
-		if (str.Length() >= _countof(LOGFONT::lfFaceName)) // LF_FACESIZE
-		{
-			ASSERT(0);
-			return FALSE;
-		}
 
-		LOGFONT lg = { 0 };
-		lg.lfWidth = width;
-		lg.lfHeight = height;
-		str.CopyTo(lg.lfFaceName, _countof(lg.lfFaceName));
+	BOOL Create(const TCHAR* pName, INT height, INT width);
 
-		size_t key = HashState(&lg);
-		auto it = winFontHandleType::HandleMap.find(key);
-		if (it != winFontHandleType::HandleMap.end())
-		{
-			if((m_ptrHandle = it->second.lock()).get() != nullptr)
-				return TRUE;
-			ASSERT(0); // Only single thread is supported.
-		}
 
-		HANDLE hFont = CreateFontIndirect(&lg);
-		if (hFont == NULL)
-		{
-			printx("CreateFontIndirect failed! ec: %d\n", GetLastError());
-			ASSERT(0);
-			return FALSE;
-		}
+	INLINE HANDLE GetHandle() const { return (m_ptrHandle) ? m_ptrHandle->hHandle : NULL; }
+	INLINE BOOL   IsValid() const { return (bool)m_ptrHandle; }
+	INLINE void   Release() { m_ptrHandle.reset(); }
 
-		m_ptrHandle = std::shared_ptr<FontHandleW>(new FontHandleW(hFont, key));
-		if (m_ptrHandle.get() == nullptr)
-		{
-			VERIFY(DeleteObject(hFont));
-			return FALSE;
-		}
-
-		winFontHandleType::HandleMap.insert({key, m_ptrHandle}); // Don't save returned iterator.
-
-		return TRUE;
-	}
+	INLINE uiFont& operator=(uiFont&& rhs) { m_ptrHandle = std::move(rhs.m_ptrHandle); return *this; }
+	INLINE uiFont& operator=(const uiFont& rhs) { m_ptrHandle = rhs.m_ptrHandle; return *this; }
+	INLINE bool    operator==(const uiFont& in) const { return m_ptrHandle == in.m_ptrHandle; }
 
 
 protected:
@@ -137,9 +106,6 @@ protected:
 
 
 };
-
-
-typedef BOOL (WINAPI *ImgDeleter)(HANDLE);
 
 
 enum WIN_IMAGE_TYPE
@@ -161,12 +127,19 @@ IMPLEMENT_ENUM_FLAG(WIN_IMAGE_TYPE);
 
 struct stImgHandleWrapper
 {
-	struct cmp_str
+	struct Functor
 	{
-		bool operator()(const TCHAR *a, const TCHAR *b) const
+		union
 		{
-			return _tcscmp(a, b) < 0;
-		}
+			BOOL(WINAPI *Deleter)(HANDLE);
+			BOOL(WINAPI *g)(HGDIOBJ);
+			BOOL(WINAPI *c)(HCURSOR);
+		//	BOOL(WINAPI *i)(HICON);
+		};
+		INLINE BOOL operator()(HANDLE hHandle) const { return Deleter(hHandle); }
+		Functor(BOOL(WINAPI *img)(HGDIOBJ)) { g = img; }
+		Functor(BOOL(WINAPI *cur)(HCURSOR)) { c = cur; }
+	//	Functor(BOOL(WINAPI *ico)(HICON)) { i = ico; }
 	};
 
 	typedef std::map<const TCHAR*, std::weak_ptr<stImgHandleWrapper>, cmp_str> PathMap;
@@ -234,12 +207,14 @@ struct stImgHandleWrapper
 		size_t Key;
 	};
 
-	static ImgDeleter m_Del[WIT_TOTAL];
+
+	static Functor m_Del[WIT_TOTAL];
 	static PathMap PathHandleMap;
 	static KeyMap  KeyHandleMap;
 
 
 };
+
 
 
 class uiImage
@@ -248,15 +223,9 @@ public:
 
 	DISABLE_DYNAMIC_ALLOCATION;
 
-	struct stImageSourceInfo
-	{
-		HINSTANCE  hModule;
-		UINT       ResID;
-	};
-
-
-	uiImage() = default;
-	~uiImage() = default;
+	uiImage() {}
+	uiImage(const uiImage& src) { m_pImg = src.m_pImg; }
+	~uiImage() {}
 
 
 	BOOL LoadCursor(uiString str);
@@ -264,11 +233,15 @@ public:
 
 	BOOL SaveToTempFile(const TCHAR* pFileName, TCHAR buf[], UINT nMaxCharCount, void *pData, UINT nSize);
 
-	INLINE bool operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
 	INLINE HANDLE GetHandle() const { return (m_pImg) ? m_pImg->hHandle : NULL; }
-	INLINE WIN_IMAGE_TYPE GetType() const { return (m_pImg) ? (WIN_IMAGE_TYPE)(m_pImg->Type & WIT_TYPE_MASK) : WIT_NONE; }
-	INLINE BOOL IsValid() const { return (bool)m_pImg; }
-	INLINE void Release() { m_pImg.reset(); }
+	INLINE BOOL   IsValid() const { return (bool)m_pImg; }
+	INLINE void   Release() { m_pImg.reset(); }
+
+	INLINE uiImage& operator=(uiImage&& rhs) { m_pImg = std::move(rhs.m_pImg); return *this; }
+	INLINE uiImage& operator=(const uiImage& rhs) { m_pImg = rhs.m_pImg; return *this; }
+	INLINE bool     operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
+
+	INLINE WIN_IMAGE_TYPE GetType() const { return (m_pImg) ? m_pImg->GetType() : WIT_NONE; }
 
 
 protected:
@@ -315,9 +288,8 @@ public:
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
+
 //	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
-
-
 
 	INLINE void UpdateCoordinate(uiRect &rect)
 	{
@@ -331,8 +303,6 @@ public:
 
 
 protected:
-
-	friend class uiFormBase;
 
 	virtual void OnDestRectChanged(BOOL bRestore) {}
 
@@ -465,7 +435,7 @@ public:
 	}
 	~uiWndBackBuffer()
 	{
-		if (m_MemDC != NULL)
+		if (m_MemDC != NULL) // Delete memory dc first then delete bitmap.
 		{
 #ifdef _DEBUG
 			ASSERT(m_hOldPen == (HPEN)::GetCurrentObject(m_MemDC, OBJ_PEN));
@@ -473,7 +443,7 @@ public:
 			ASSERT(m_hOldFont = (HFONT)::GetCurrentObject(m_MemDC, OBJ_FONT));
 #endif
 			::SelectObject(m_MemDC, m_hOldBmp); // This may not be necessary.
-			::DeleteDC(m_MemDC); // Delete memory dc first then delete bitmap.
+			::DeleteDC(m_MemDC);
 		}
 		if (m_hBmp != NULL)
 			::DeleteObject(m_hBmp);

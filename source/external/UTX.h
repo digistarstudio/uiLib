@@ -20,6 +20,17 @@
 
 #define UI_INTERFACE __declspec(novtable)
 
+// for base class
+#define DECLARE_INTERFACE(iName) \
+virtual iName* Get##iName() { return nullptr; }
+// pure composition
+#define IMPLEMENT_INTERFACE(iName, type) \
+public: iName* Get##iName() override { return &m_##iName; } \
+protected: type m_##iName;
+// composition over inheritance
+#define IMPLEMENT_INTERFACE_COI(iName) \
+iName* Get##iName() override { return static_cast<iName*>(this); }
+
 
 #ifndef ASSERT
 #define ASSERT assert
@@ -193,6 +204,14 @@ void UTXStringUppercase(TCHAR *in);
 BOOL UTXIsStringLowercase(TCHAR const *in);
 BOOL UTXIsStringUppercase(TCHAR const *in);
 
+
+struct cmp_str
+{
+	bool operator()(const TCHAR *a, const TCHAR *b) const
+	{
+		return _tcscmp(a, b) < 0;
+	}
+};
 
 
 INLINE FLOAT Abs(FLOAT in)

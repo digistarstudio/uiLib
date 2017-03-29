@@ -7,14 +7,6 @@
 #include "uiCommon.h"
 
 
-// Pure composition.
-#define DECLARE_INTERFACE(iName) \
-virtual iName* Get##iName() { return nullptr; }
-#define IMPLEMENT_INTERFACE(iName, type) \
-public: iName* Get##iName() override { return &m_##iName; } \
-protected: type m_##iName;
-
-
 class uiMenu;
 class uiButton;
 class uiFormBase;
@@ -211,7 +203,7 @@ public:
 
 	void PopupMenu(INT x, INT y, uiMenu *pMenu);
 
-	virtual FORM_CLASS GetClass() { return FC_BASE; }
+	virtual FORM_CLASS GetClass() const { return FC_BASE; }
 
 	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
@@ -268,6 +260,26 @@ public:
 
 	virtual void OnKBGetFocus() {}
 	virtual void OnKBLoseFocus() {}
+
+
+	struct stFindCtx
+	{
+		stFindCtx() { pos = nullptr; }
+		list_entry* pos;
+	};
+
+	uiFormBase* FindChildByClass(FORM_CLASS fc, stFindCtx& ctx)
+	{
+		ctx.pos = (ctx.pos == nullptr) ? m_ListChildren.next : ctx.pos->next;
+
+		for (; ctx.pos != &m_ListChildren; ctx.pos = ctx.pos->next)
+		{
+			uiFormBase *pForm = CONTAINING_RECORD(ctx.pos, uiFormBase, m_ListChildrenEntry);
+			if (pForm->GetClass() == fc)
+				return pForm;
+		}
+		return nullptr;
+	}
 
 
 	INLINE uiFormBase* NextSibling()
@@ -385,6 +397,10 @@ public:
 		return TRUE;
 	}
 
+	typedef void(*OnFind)(uiFormBase* pDest, void*);
+	static UINT EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callback, void* CBCtx);
+
+
 	DECLARE_INTERFACE(IAreaCursor)
 
 
@@ -414,7 +430,7 @@ private:
 	friend uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
 	friend LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-	friend class ISideDockableFrame;
+	friend class uiSideDockableFrame;
 	friend class uiForm;
 	friend class uiWindow;
 
@@ -464,10 +480,36 @@ class UI_INTERFACE IAreaCursor
 public:
 
 	virtual uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
+
+};
+
+class IFrameImp
+{
+public:
+
+	struct stParamPack
+	{
+		stParamPack(const uiImage& imgIn, BOOL bBigIn):img(imgIn), bBig(bBigIn) {}
+		const uiImage& img;
+		BOOL bBig;
+	};
+
+	BOOL SetTitleImp(uiFormBase* pForm, const uiString& str);
+	BOOL SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig);
+
+	static void CBTitleChanged(uiFormBase *pDest, void* ctx);
+	static void CIconChanged(uiFormBase *pDest, void* ctx);
+
+
+protected:
+
+	uiImage m_IconImageS, m_IconImageB;
+
+
 };
 
 
-class ISideDockableFrame : virtual public uiFormBase
+class uiSideDockableFrame : virtual public uiFormBase, public IFrameImp
 {
 public:
 
@@ -486,11 +528,11 @@ public:
 	};
 
 
-	ISideDockableFrame()
+	uiSideDockableFrame()
 	:m_BorderFlags(FBF_ALL) // FBF_NONE FBF_ALL
 	{
+		m_BTLeft = m_BTTop = m_BTRight = m_BTBottom = DEFAULT_BORDER_THICKNESS;
 		m_DTLeft = m_DTTop = m_DTRight = m_DTBottom = DEFAULT_BORDER_THICKNESS;
-		m_ThicknessLeft = m_ThicknessTop = m_ThicknessRight = m_ThicknessBottom = DEFAULT_BORDER_THICKNESS;
 	}
 
 
@@ -512,23 +554,29 @@ public:
 
 	void SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags = FBF_ALL);
 	void SetDraggableThickness(BYTE left, BYTE top, BYTE right, BYTE bottom);
-	void SetClientRect(const uiRect& NewRect);
-	void UpdataClientRect(); // This won't call any redraw methods.
+
+	INLINE void SetIcon(uiImage img, BOOL bBig = FALSE) { SetIconImp(this, img, bBig); }
+	INLINE void SetTitle(const uiString& str) { m_strName = str; SetTitleImp(this, str); }
 
 
 protected:
+
+	void SetClientRect(const uiRect& NewRect);
+	void UpdataClientRect(); // This won't call any redraw methods.
+
 
 	uiRect m_ClientRect;
 	UTX::CSimpleList m_SideDockedFormList;
 
 	FORM_BORDER_FLAGS m_BorderFlags;
+	BYTE m_BTLeft, m_BTTop, m_BTRight, m_BTBottom; // Border thickness for drawing.
 	BYTE m_DTLeft, m_DTTop, m_DTRight, m_DTBottom; // Draggable thickness, is always thicker than or equal to visible border.
-	BYTE m_ThicknessLeft, m_ThicknessTop, m_ThicknessRight, m_ThicknessBottom; // Border thickness for drawing.
+
 
 };
 
 
-IMPLEMENT_ENUM_FLAG(ISideDockableFrame::FORM_BORDER_FLAGS)
+IMPLEMENT_ENUM_FLAG(uiSideDockableFrame::FORM_BORDER_FLAGS)
 
 
 class IMessageHandler : virtual public uiFormBase
@@ -626,14 +674,25 @@ protected:
 };
 
 
-class uiHeaderForm : public uiFormBase
+class uiHeaderFormBase : public uiFormBase
 {
 public:
 
-	uiHeaderForm()
-	{
-	}
-	~uiHeaderForm() {}
+	virtual FORM_CLASS GetClass() const override { return FC_HEADER_BAR; }
+
+	virtual void OnTitleChanged(const uiString& str) = 0;
+	virtual void OnIconChanged(const uiImage& img, BOOL bBig) = 0;
+
+
+};
+
+
+class uiHeaderForm : public uiHeaderFormBase
+{
+public:
+
+	uiHeaderForm() {}
+	virtual ~uiHeaderForm() {}
 
 
 	void EntryOnCommand(UINT id);
@@ -659,21 +718,24 @@ public:
 	void OnPaint(uiDrawer* pDrawer);
 	void OnSize(UINT nNewWidth, UINT nNewHeight);
 
+	// framework notification.
+	virtual void OnTitleChanged(const uiString& str) override { printx("Title changed!\n"); }
+	virtual void OnIconChanged(const uiImage& img, BOOL bBig) override { printx("Icon changed!\n"); }
+
 
 protected:
 
 	void UpdateLayout(INT NewWidth, INT NewHeight);
 
-	//POINT m_pt;
-
 	uiButton *m_pMinBtn = nullptr;
 	uiButton *m_pMiddleBtn = nullptr;
 	uiButton *m_pCloseBtn = nullptr;
 
+
 };
 
 
-class uiForm : public ISideDockableFrame//, public IMessageHandler
+class uiForm : public uiSideDockableFrame//, public IMessageHandler
 {
 public:
 
@@ -686,7 +748,7 @@ public:
 	~uiForm() {}
 
 
-	BOOL SetHeaderBar(const TCHAR* pStr, uiHeaderForm *pHeaderForm = nullptr);
+	BOOL SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm = nullptr);
 	BOOL SetMenuBar(uiMenu* pMenu);
 
 	virtual uiSize GetMinSize() { return m_minSize; }

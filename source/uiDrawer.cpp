@@ -7,10 +7,9 @@
 IMPLEMENT_WIN_HANDLE_TYPE(winFontHandleType)
 
 
-ImgDeleter stImgHandleWrapper::m_Del[WIT_TOTAL] = { (ImgDeleter)DeleteObject, (ImgDeleter)DestroyCursor, (ImgDeleter)DestroyIcon };
-
+stImgHandleWrapper::Functor stImgHandleWrapper::m_Del[WIT_TOTAL] = { DeleteObject, DestroyCursor, DestroyIcon };
 stImgHandleWrapper::PathMap stImgHandleWrapper::PathHandleMap;
-stImgHandleWrapper::KeyMap stImgHandleWrapper::KeyHandleMap;
+stImgHandleWrapper::KeyMap  stImgHandleWrapper::KeyHandleMap;
 
 
 UINT32 uiGetSysColor(INT index)
@@ -29,6 +28,51 @@ UINT32 uiGetSysColor(INT index)
 	}
 
 	return color;
+}
+
+
+BOOL uiFont::Create(const TCHAR* pName, INT height, INT width)
+{
+	uiString str(pName);
+	str.MakeLower();
+	if (str.Length() >= _countof(LOGFONT::lfFaceName)) // LF_FACESIZE
+	{
+		ASSERT(0);
+		return FALSE;
+	}
+
+	LOGFONT lg = { 0 };
+	lg.lfWidth = width;
+	lg.lfHeight = height;
+	str.CopyTo(lg.lfFaceName, _countof(lg.lfFaceName));
+
+	size_t key = HashState(&lg);
+	auto it = winFontHandleType::HandleMap.find(key);
+	if (it != winFontHandleType::HandleMap.end())
+	{
+		if ((m_ptrHandle = it->second.lock()).get() != nullptr)
+			return TRUE;
+		ASSERT(0); // Only single thread is supported.
+	}
+
+	HANDLE hFont = CreateFontIndirect(&lg);
+	if (hFont == NULL)
+	{
+		printx("CreateFontIndirect failed! ec: %d\n", GetLastError());
+		ASSERT(0);
+		return FALSE;
+	}
+
+	m_ptrHandle = std::shared_ptr<FontHandleW>(new FontHandleW(hFont, key));
+	if (m_ptrHandle.get() == nullptr)
+	{
+		VERIFY(DeleteObject(hFont));
+		return FALSE;
+	}
+
+	winFontHandleType::HandleMap.insert({ key, m_ptrHandle }); // Don't save returned iterator.
+
+	return TRUE;
 }
 
 
@@ -66,6 +110,12 @@ BOOL uiImage::LoadCursor(uiString str)
 
 BOOL uiImage::LoadCursor(UINT ResID, const TCHAR* ResType, HINSTANCE hModule)
 {
+	struct stImageSourceInfo
+	{
+		HINSTANCE hModule;
+		UINT      ResID;
+	};
+
 	stImageSourceInfo isi = { (hModule == NULL) ? GetModuleHandle(NULL) : hModule, ResID };
 	const size_t Key = HashState(&isi);
 
