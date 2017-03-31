@@ -79,6 +79,8 @@ struct uiRect
 	uiRect(const uiRect& rectIn) = default;
 
 
+	INLINE BOOL IsValidRect() const { return (Left < Right && Top < Bottom); }
+
 	INLINE void Inflate(INT x, INT y) { Left -= x; Right += x; Top -= y; Bottom += y; }
 	INLINE void Inflate(INT l, INT t, INT r, INT b) { Left -= l; Right += r; Top -= t; Bottom += b; }
 	INLINE uiRect InflateRV(INT l, INT t, INT r, INT b) const { return uiRect(Left + l, Top + t, Right + r, Bottom + b); }
@@ -109,6 +111,17 @@ struct uiRect
 	INLINE uiPoint GetLeftTop() const { return uiPoint(Left, Top); }
 	INLINE uiPoint GetRightBottom() const { return uiPoint(Right, Bottom); }
 
+	INLINE uiPoint VCenter(INT heightIn) const
+	{
+		INT offset = (Height() - heightIn) / 2;
+		return uiPoint(Top + offset, Bottom - offset);
+	}
+	INLINE uiPoint HCenter(INT WidthIn) const
+	{
+		INT offset = (Width() - WidthIn) / 2;
+		return uiPoint(Left + offset, Right - offset);
+	}
+
 	INLINE void IntersectWith(const uiRect &rectIn) // The rectangle will be invalid if there is no intersection.
 	{
 		if (Left < rectIn.Left)
@@ -120,7 +133,6 @@ struct uiRect
 		if (Bottom > rectIn.Bottom)
 			Bottom = rectIn.Bottom;
 	}
-	INLINE BOOL IsValidRect() const { return (Left < Right && Top < Bottom); }
 
 	INLINE void UnionWith(const uiRect &rectIn)
 	{
@@ -218,11 +230,12 @@ public:
 	{
 	}
 
-	void MakeLower()
+	uiString& MakeLower()
 	{
 		for (UINT i = 0; i < m_len; ++i)
 			if ('A' <= m_pStr[i] && m_pStr[i] <= 'Z')
 				m_pStr[i] += ('a' - 'A');
+		return *this;
 	}
 	UINT CopyTo(TCHAR* pBuf, UINT nMaxChar) const
 	{
@@ -269,6 +282,18 @@ public:
 		m_pStr[lenIn] = '\0';
 	}
 
+	BOOL CmpRight(UINT len, const TCHAR* strSrc)
+	{
+		ASSERT(_tcslen(strSrc) >= len);
+		if (m_pStr == nullptr || m_len <= len)
+			return FALSE;
+		TCHAR* Dest = &m_pStr[m_len - 1 - len];
+		for (UINT i = 0; i < len; ++i)
+			if (Dest[i] != strSrc[i])
+				return FALSE;
+		return TRUE;
+	}
+
 	uiString& operator=(const TCHAR* pStrIn)
 	{
 		StoreString(pStrIn, 0);
@@ -299,7 +324,7 @@ public:
 protected:
 
 	TCHAR *m_pStr;
-	UINT m_len; // Null-terminator is included. This is valid only when m_pStr != nullptr.
+	UINT  m_len; // Null-terminator is included. This is valid only when m_pStr != nullptr.
 
 
 };

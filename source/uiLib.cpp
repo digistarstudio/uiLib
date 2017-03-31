@@ -6,6 +6,7 @@
 
 #include "uiForm.h"
 #include "uiMsWin.h"
+#include "UnitTest.h"
 
 
 #define MAX_LOADSTRING 100
@@ -74,6 +75,7 @@ public:
 class IDerivedAC : public IAreaCursor
 {
 public:
+
 	uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override
 	{
 		uiRect crect = pForm->GetClientRect();
@@ -86,8 +88,12 @@ public:
 
 	IDerivedAC()
 	{
-		m_cur1.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
-		m_cur2.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+	//	m_cur1.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+	//	m_cur2.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+
+		m_cur1.LoadFromFile(_T("R:\\uiLib\\busy.ani"));
+		m_cur2.LoadFromFile(_T("R:\\uiLib\\Working In Background.ani"));
+
 	}
 
 	uiImage m_cur1, m_cur2;
@@ -97,9 +103,10 @@ class CTabFormContext1 : public uiFormBase, public IDerivedAC
 {
 public:
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		SetName(_T("Tab Pane No. 1"));
+		return TRUE;
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -129,9 +136,10 @@ class CTabFormContext2 : public uiFormBase
 {
 public:
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		SetName(_T("Tab Pane No. 2"));
+		return TRUE;
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -154,7 +162,7 @@ class CTabFormContext3 : public uiFormBase
 {
 public:
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		SetName(_T("Tab Pane No. 3"));
 
@@ -164,6 +172,7 @@ public:
 		uiButton *pButton2 = new uiDraggableButton;
 		pButton2->Create(pButton, 10, 10, 30, 30);
 
+		return TRUE;
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -189,7 +198,7 @@ public:
 	CFormEx() = default;
 	~CFormEx() = default;
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		uiForm::OnCreate();
 		printx("---> CFormEx::OnCreate\n");
@@ -207,6 +216,8 @@ public:
 
 		uiButton *pBtn = new uiDraggableButton;
 		pBtn->Create(m_pSubForm, 10, 10, 80, 80, FCF_CENTER);
+
+		return TRUE;
 	}
 	void OnPaint(uiDrawer* pDrawer)
 	{
@@ -250,7 +261,7 @@ public:
 	CTimerTestForm() = default;
 	~CTimerTestForm() = default;
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 30, 100, 120, 30);
@@ -258,6 +269,8 @@ public:
 		Bind(m_pButton->GetID());
 
 		TimerStart(555, 1000, -1, nullptr);
+
+		return TRUE;
 	}
 
 	void OnCommand(INT id, BOOL &bDone)
@@ -284,7 +297,7 @@ public:
 	CFormEx2() = default;
 	~CFormEx2() = default;
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		uiForm::OnCreate();
 		printx("---> CFormEx2::OnCreate\n");
@@ -313,6 +326,8 @@ public:
 
 		VERIFY(SetTimer(0, 1000, -1, nullptr));
 	//	VERIFY(SetTimer(1, 2000, 3, nullptr));
+
+		return TRUE;
 	}
 
 	void OnTimer(stTimerInfo* ti)
@@ -381,7 +396,7 @@ public:
 	CMyForm() = default;
 	~CMyForm() = default;
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		uiForm::OnCreate();
 
@@ -418,7 +433,6 @@ public:
 		Bind(uiID_CLOSE); //*/
 
 
-
 		SetBorder(5, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
 		SetDraggableThickness(50, 10, 10, 10);
 
@@ -428,12 +442,14 @@ public:
 		m_pTabForm->SetProperty(uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
 		m_pTabForm->SetHeaderBar(_T("test child form"));
 
-
 	//	TimerStart(0, 1000, -1, nullptr);
+
 
 		VERIFY(m_menu.CreatePopupMenu());
 		VERIFY(m_menu.InsertItem(_T("Test item 1"), 2, 1));
 		m_menu.ChangeStyle();
+
+		return TRUE;
 	}
 
 	virtual void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
@@ -465,7 +481,7 @@ public:
 
 				printx("real x: %d, y: %d - x: %d, y: %d\n", pt.x, pt.y, p.x, p.y);
 				uiWindow* pWnd = GetBaseWnd();
-				VERIFY(m_menu.Popup((HWND)pWnd->GetHandle(), p.x, p.y));
+				VERIFY(m_menu.Popup((HWND)pWnd->GetHandle(), p.x, p.y + 10));
 			}
 			break;
 		}
@@ -494,6 +510,8 @@ public:
 		{
 			m_pSubForm->SetBorder(10, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
 			m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
+
+			SetBorder(-1, 0, -1, -1, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
 
 		//	uiForm *pToolForm = new uiForm;
 		//	pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
@@ -618,23 +636,23 @@ void FontTest()
 	{
 		uiImage img, img2, img3, img4, img5, img6, img7, img8, a, b, c, d, e;
 
-		img.LoadCursor(_T("R:\\test.cur"));
+		img.LoadFromFile(_T("R:\\test.cur"));
 
 		img2 = (uiImage&&)img;
 		img3 = img2;
 
-		img4.LoadCursor(_T("R:\\test4.cur"));
-		img2.LoadCursor(_T("R:\\test2.cur"));
-		img6.LoadCursor(_T("R:\\a1.cur"));
-		img7.LoadCursor(_T("R:\\z.cur"));
-		img5.LoadCursor(_T("R:\\test5.cur"));
-		img3.LoadCursor(_T("R:\\test3.cur"));
+		img4.LoadFromFile(_T("R:\\test4.cur"));
+		img2.LoadFromFile(_T("R:\\test2.cur"));
+		img6.LoadFromFile(_T("R:\\a1.cur"));
+		img7.LoadFromFile(_T("R:\\z.cur"));
+		img5.LoadFromFile(_T("R:\\test5.cur"));
+		img3.LoadFromFile(_T("R:\\test3.cur"));
 
-		d.LoadCursor(IDC_CURSOR1);
-		d.LoadCursor(IDC_CURSOR1);
-		d.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
-		b.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
-		c.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+		d.LoadCursorRes(IDC_CURSOR1);
+		d.LoadCursorRes(IDC_CURSOR1);
+		d.LoadCursorRes(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+		b.LoadCursorRes(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
+		c.LoadCursorRes(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
 	}
 //	c.LoadCursor(_T("R:\\wait.ani"));
 
@@ -643,7 +661,8 @@ void FontTest()
 //	b.LoadCursor(IDR_ANI_CURSOR, _T("ANI_CURSOR"));
 //	c.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
 	uiImage img;
-	img.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+//	img.LoadCursor(IDR_ANI_CURSOR2, _T("ANI_CURSOR"));
+	img.LoadFromFile(_T("R:\\test.Cur"));
 //	::SetCursor((HCURSOR)img.GetHandle());
 
 //	d.LoadCursor(IDC_CURSOR1);
@@ -699,22 +718,15 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	CMyForm* pForm = new CMyForm;
 	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
 
-	{
-		uiImage icon;
-		uiString str(_T("New title!"));
-
-		pForm->SetIcon(icon);
-		pForm->SetTitle(str);
-	}
-
 //	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
 
 //	pForm = new CMyForm;
 //	pForm->Create(nullptr, 150, 150, 600, 400);
 
-
 //	pForm->Show(FSM_SHOW);
 //	pForm->Move(1000, 680);
+
+	UnitTestMain();
 
 	uiMonitorEvent();
 

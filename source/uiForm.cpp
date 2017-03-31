@@ -61,22 +61,28 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
 		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
-	//	printx("CreateTemplateWindow completed!\n");
-
-		bResult = (pWnd != nullptr);
-		if (pAppBaseForm == nullptr)
-			pAppBaseForm = this;
-		if (fcf & FCF_CENTER)
-			pWnd->MoveToCenter();
+		if (pWnd == nullptr)
+			bResult = FALSE;
+		else
+		{
+			if (pAppBaseForm == nullptr)
+				pAppBaseForm = this;
+			if (fcf & FCF_CENTER)
+				pWnd->MoveToCenter();
+		}
 	}
 	else if (fcf & FCF_TOOL)
 	{
 		ASSERT(parent != nullptr);
 		uiWindow *pWnd = CreateTemplateWindow(UWT_TOOL, this, parent, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
-
-		parent->AddChild(this);
-		if (fcf & FCF_CENTER)
-			pWnd->MoveToCenter();
+		if (pWnd == nullptr)
+			bResult = FALSE;
+		else
+		{
+			parent->AddChild(this);
+			if (fcf & FCF_CENTER)
+				pWnd->MoveToCenter();
+		}
 	}
 	else if (parent != nullptr)
 	{
@@ -96,6 +102,12 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	else
 	{
 		ASSERT(0);
+	}
+
+	if (!bResult)
+	{
+		delete this;
+		return FALSE;
 	}
 
 	EntryOnCreate(!(fcf & FCF_INVISIBLE), nWidth, nHeight);
@@ -726,7 +738,7 @@ void uiFormBase::OnTimer(stTimerInfo* ti)
 UINT uiFormBase::EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callback, void* CBCtx)
 {
 	UINT nCount = 0;
-	uiFormBase::stFindCtx ctx;
+	stFindCtx ctx;
 	for (uiFormBase* pChild = pForm->FindChildByClass(fc, ctx); pChild != nullptr; ++nCount)
 	{
 		Callback(pChild, CBCtx);
@@ -972,20 +984,22 @@ BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 	return TRUE;
 }
 
-void uiSideDockableFrame::SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags)
+void uiSideDockableFrame::SetBorder(INT left, INT top, INT right, INT bottom, FORM_BORDER_FLAGS flags)
 {
-	m_BTLeft = m_BTTop = m_BTRight = m_BTBottom = Thickness;
+	if (left >= 0)
+		if ((m_BTLeft = left) > m_DTLeft)
+			m_DTLeft = m_BTLeft;
+	if (top >= 0)
+		if ((m_BTTop = top) > m_DTTop)
+			m_DTTop = m_BTTop;
+	if (right >= 0)
+		if ((m_BTRight = right) > m_DTRight)
+			m_DTRight = m_BTRight;
+	if (bottom >= 0)
+		if ((m_BTBottom = bottom) > m_DTBottom)
+			m_DTBottom = m_BTBottom;
+
 	m_BorderFlags = flags;
-
-	if (m_BTLeft > m_DTLeft)
-		m_DTLeft = m_BTLeft;
-	if (m_BTTop > m_DTTop)
-		m_DTTop = m_BTTop;
-	if (m_BTRight > m_DTRight)
-		m_DTRight = m_BTRight;
-	if (m_BTBottom > m_DTBottom)
-		m_DTBottom = m_BTBottom;
-
 	if (IsCreated())
 	{
 		UpdataClientRect();
@@ -1110,7 +1124,7 @@ void uiHeaderForm::OnMouseLeave()
 		GetParent()->MoveByOffset(0, 5);
 }
 
-void uiHeaderForm::OnCreate()
+BOOL uiHeaderForm::OnCreate()
 {
 	//	printx("---> uiHeaderForm::OnCreate\n");
 	ASSERT(m_pCloseBtn == nullptr);
@@ -1129,6 +1143,8 @@ void uiHeaderForm::OnCreate()
 	}
 
 	UpdateLayout(rect.Width(), rect.Height());
+
+	return TRUE;
 }
 
 void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
@@ -1173,16 +1189,26 @@ void uiHeaderForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//printx("---> uiHeaderForm::OnMouseBtnUp\n");
 }
 
+#include "Resource.h"
 void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 {
 //	printx("---> uiHeaderForm::OnPaint\n");
 
 	uiRect rect = GetFrameRect();
 	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
-//	pDrawer->FillRect(rect, color);
-	pDrawer->FillRect(rect, RGB(255, 255, 255));
+	pDrawer->FillRect(rect, color);
+//	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
 	pDrawer->DrawText(GetParent()->GetName(), rect, DT_CENTER);
+
+//	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
+
+	if (!m_temp.IsValid())
+	//	m_temp.LoadIconRes(IDI_SMALL);
+		m_temp.LoadFromFile(_T("R:\\tt.bmp"));
+	pDrawer->DrawImage(m_temp, m_rectIcon.Left, m_rectIcon.Top, m_rectIcon.Width(), m_rectIcon.Height(), 0);
+
+//	pDrawer->FillRect(m_rectIcon, RGB(255, 0, 255));
 }
 
 void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -1194,6 +1220,14 @@ void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
 void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 {
 	INT ButtonHeight = (GetFrameRect().Height() - 1 * 2);
+	uiRect rectClient = GetClientRect();
+
+	INT len = 20; // rectClient.Height() - 6;
+	uiPoint pt = rectClient.VCenter(len); // small icon size: 16 x 16
+	m_rectIcon.Left = 0;
+	m_rectIcon.Right = len;
+	m_rectIcon.Top = pt.x;
+	m_rectIcon.Bottom = pt.y;
 
 	if (m_pCloseBtn != nullptr)
 	{
@@ -1211,14 +1245,14 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm)
 {
 	INT HeaderHeight = 26;
-	INT BorderWidth = 3;
+	INT BorderWidth = m_BTTop + m_BTBottom;
 
 	if (pHeaderForm == nullptr)
 	{
 		pHeaderForm = new uiHeaderForm;
 		pHeaderForm->Create(this, 0, 0, 100, HeaderHeight, FCF_NONE);
 	}
-	m_minSize.iHeight = HeaderHeight + 2 * BorderWidth;
+	m_minSize.iHeight = HeaderHeight + BorderWidth;
 	m_minSize.iWidth = 150;
 
 	SideDock(pHeaderForm, FDF_TOP | FDF_AUTO_SIZE);

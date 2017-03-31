@@ -118,7 +118,8 @@ enum WIN_IMAGE_TYPE
 	WIT_NONE,
 
 	WIT_TYPE_MASK = 0x03,
-	WIT_LOAD_RESOURCE = 0x01 << 7,
+	WIT_SHARED_RESOURCE = 0x01 << 6,
+	WIT_LOAD_RESOURCE   = 0x01 << 7,
 };
 
 
@@ -216,7 +217,6 @@ struct stImgHandleWrapper
 };
 
 
-
 class uiImage
 {
 public:
@@ -228,10 +228,11 @@ public:
 	~uiImage() {}
 
 
-	BOOL LoadCursor(uiString str);
-	BOOL LoadCursor(UINT ResID, const TCHAR* ResType = nullptr, HINSTANCE hModule = NULL);
+	BOOL LoadCursorRes(UINT ResID, const TCHAR* ResType = nullptr, HINSTANCE hModule = NULL);
+	BOOL LoadIconRes(UINT ResID, HINSTANCE hModule = NULL);
 
-	BOOL SaveToTempFile(const TCHAR* pFileName, TCHAR buf[], UINT nMaxCharCount, void *pData, UINT nSize);
+	BOOL LoadFromFile(uiString str);
+
 
 	INLINE HANDLE GetHandle() const { return (m_pImg) ? m_pImg->hHandle : NULL; }
 	INLINE BOOL   IsValid() const { return (bool)m_pImg; }
@@ -240,11 +241,21 @@ public:
 	INLINE uiImage& operator=(uiImage&& rhs) { m_pImg = std::move(rhs.m_pImg); return *this; }
 	INLINE uiImage& operator=(const uiImage& rhs) { m_pImg = rhs.m_pImg; return *this; }
 	INLINE bool     operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
+	INLINE bool     operator!=(const uiImage& in) const { return m_pImg != in.m_pImg; }
 
 	INLINE WIN_IMAGE_TYPE GetType() const { return (m_pImg) ? m_pImg->GetType() : WIT_NONE; }
 
 
 protected:
+
+	struct stImageSourceInfo
+	{
+		HINSTANCE hModule;
+		UINT      ResID;
+	};
+
+	static WIN_IMAGE_TYPE GetType(uiString& str);
+
 
 	std::shared_ptr<stImgHandleWrapper> m_pImg;
 
@@ -284,6 +295,8 @@ public:
 	virtual void DrawEdge(uiRect &rect, UINT color) = 0;
 	virtual void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) = 0;
 	virtual void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) = 0;
+	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) = 0;
+
 
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
@@ -326,7 +339,8 @@ public:
 
 	uiWndDC()
 	{
-		m_hDC = NULL;
+		m_hDC = m_hBmpDC = NULL;
+		m_hOldBmp = NULL;
 		m_hOldPen = NULL;
 		m_hOldBrush = NULL;
 		m_hOldFont = NULL;
@@ -334,12 +348,14 @@ public:
 	~uiWndDC()
 	{
 		ASSERT(m_hDC == NULL);
+		ASSERT(m_hBmpDC == NULL);
 	}
 
 	BOOL Attach(HDC hDC)
 	{
 		ASSERT(hDC != NULL);
 		ASSERT(m_hDC == NULL);
+		ASSERT(m_hBmpDC == NULL);
 		m_hDC = hDC;
 		m_hOldPen = (HPEN)::GetCurrentObject(m_hDC, OBJ_PEN);
 		m_hOldBrush = (HBRUSH)::GetCurrentObject(m_hDC, OBJ_BRUSH);
@@ -348,6 +364,12 @@ public:
 	}
 	BOOL Detach()
 	{
+		if (m_hBmpDC != NULL)
+		{
+			::SelectObject(m_hBmpDC, m_hOldBmp);
+			VERIFY(DeleteDC(m_hBmpDC));
+			m_hBmpDC = NULL;
+		}
 		if (m_hDC != NULL)
 		{
 			HPEN hPen = (HPEN)::SelectObject(m_hDC, m_hOldPen);
@@ -409,15 +431,32 @@ public:
 		return TRUE;
 	}
 
+	BOOL SelectBmp(HDC hPaintDC, HBITMAP hBmp)
+	{
+		if (m_hBmpDC == NULL)
+		{
+			if ((m_hBmpDC = ::CreateCompatibleDC(hPaintDC)) == NULL)
+				return FALSE;
+			m_hOldBmp = (HBITMAP)::GetCurrentObject(m_hBmpDC, OBJ_BITMAP);
+		}
+		return (::SelectObject(m_hBmpDC, hBmp) != HGDI_ERROR);
+	}
+
+	BOOL BitBlt(INT x, INT y, INT cx, INT cy, INT x1, INT y1, DWORD rop = SRCCOPY)
+	{
+		return ::BitBlt(m_hDC, x, y, cx, cy, m_hBmpDC, x1, y1, rop);
+	}
+
 	INLINE HDC GetDC() const { return m_hDC; }
 
 
 protected:
 
-	HDC    m_hDC;
-	HPEN   m_hOldPen;
-	HBRUSH m_hOldBrush;
-	HFONT  m_hOldFont;
+	HDC     m_hDC, m_hBmpDC;
+	HBITMAP m_hOldBmp;
+	HPEN    m_hOldPen;
+	HBRUSH  m_hOldBrush;
+	HFONT   m_hOldFont;
 
 
 };
@@ -531,6 +570,7 @@ public:
 	void DrawEdge(uiRect &rect, UINT color) override;
 	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) override;
 	void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) override;
+	BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) override;
 
 
 protected:

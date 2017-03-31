@@ -147,6 +147,7 @@
     <ClInclude Include="source\external\Template.h" />
     <ClInclude Include="source\external\UTX.h" />
     <ClInclude Include="source\FormStyle.h" />
+    <ClInclude Include="source\MsWinHelper.h" />
     <ClInclude Include="source\Resource.h" />
     <ClInclude Include="source\stdafx.h" />
     <ClInclude Include="source\targetver.h" />
@@ -156,8 +157,10 @@
     <ClInclude Include="source\uiForm.h" />
     <ClInclude Include="source\uiLib.h" />
     <ClInclude Include="source\uiMsWin.h" />
+    <ClInclude Include="source\UnitTest.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="source\MsWinHelper.cpp" />
     <ClCompile Include="source\stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -171,6 +174,7 @@
     <ClCompile Include="source\uiForm.cpp" />
     <ClCompile Include="source\uiLib.cpp" />
     <ClCompile Include="source\uiMsWin.cpp" />
+    <ClCompile Include="source\UnitTest.cpp" />
     <ClCompile Include="source\UTX.cpp" />
   </ItemGroup>
   <ItemGroup>

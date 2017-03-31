@@ -236,7 +236,7 @@ public:
 	virtual uiSize GetMaxSize() { return uiSize(-1, -1); }
 
 	virtual BOOL OnClose() { return TRUE; }
-	virtual void OnCreate() {}
+	virtual BOOL OnCreate() { return TRUE; }
 	virtual void OnDestroy() {}
 	virtual void OnActivate(BOOL bActive) {}
 
@@ -272,7 +272,7 @@ public:
 	{
 		ctx.pos = (ctx.pos == nullptr) ? m_ListChildren.next : ctx.pos->next;
 
-		for (; ctx.pos != &m_ListChildren; ctx.pos = ctx.pos->next)
+		for (; IS_VALID_ENTRY(ctx.pos, m_ListChildren); ctx.pos = ctx.pos->next)
 		{
 			uiFormBase *pForm = CONTAINING_RECORD(ctx.pos, uiFormBase, m_ListChildrenEntry);
 			if (pForm->GetClass() == fc)
@@ -282,22 +282,22 @@ public:
 	}
 
 
-	INLINE uiFormBase* NextSibling()
-	{
-		if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.next, m_pParent->m_ListChildren))
-			return CONTAINING_RECORD(m_ListChildrenEntry.next, uiFormBase, m_ListChildrenEntry);
-	}
-	INLINE uiFormBase* PrevSibling()
-	{
-		if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.prev, m_pParent->m_ListChildren))
-			return CONTAINING_RECORD(m_ListChildrenEntry.prev, uiFormBase, m_ListChildrenEntry);
-	}
-	INLINE uiFormBase* GetFirstChild()
-	{
-		if (!LIST_IS_EMPTY(m_ListChildren))
-			return CONTAINING_RECORD(m_ListChildren.next, uiFormBase, m_ListChildrenEntry);
-		return nullptr;
-	}
+	//INLINE uiFormBase* NextSibling()
+	//{
+	//	if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.next, m_pParent->m_ListChildren))
+	//		return CONTAINING_RECORD(m_ListChildrenEntry.next, uiFormBase, m_ListChildrenEntry);
+	//}
+	//INLINE uiFormBase* PrevSibling()
+	//{
+	//	if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.prev, m_pParent->m_ListChildren))
+	//		return CONTAINING_RECORD(m_ListChildrenEntry.prev, uiFormBase, m_ListChildrenEntry);
+	//}
+	//INLINE uiFormBase* GetFirstChild()
+	//{
+	//	if (!LIST_IS_EMPTY(m_ListChildren))
+	//		return CONTAINING_RECORD(m_ListChildren.next, uiFormBase, m_ListChildrenEntry);
+	//	return nullptr;
+	//}
 
 	INLINE void AddChild(uiFormBase *pChildForm)
 	{
@@ -397,7 +397,7 @@ public:
 		return TRUE;
 	}
 
-	typedef void(*OnFind)(uiFormBase* pDest, void*);
+	typedef void(*OnFind)(uiFormBase* pDest, void* ctx);
 	static UINT EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callback, void* CBCtx);
 
 
@@ -483,6 +483,7 @@ public:
 
 };
 
+
 class IFrameImp
 {
 public:
@@ -500,10 +501,12 @@ public:
 	static void CBTitleChanged(uiFormBase *pDest, void* ctx);
 	static void CIconChanged(uiFormBase *pDest, void* ctx);
 
+	INLINE uiImage& GetIcon(BOOL bSmall = TRUE) { return bSmall ? m_IconS : m_IconB; }
+
 
 protected:
 
-	uiImage m_IconImageS, m_IconImageB;
+	uiImage m_IconS, m_IconB;
 
 
 };
@@ -552,7 +555,8 @@ public:
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 	BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 
-	void SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags = FBF_ALL);
+	INLINE void SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags = FBF_ALL) { SetBorder(Thickness, Thickness, Thickness, Thickness, flags); }
+	void SetBorder(INT left, INT top, INT right, INT bottom, FORM_BORDER_FLAGS flags = FBF_ALL);
 	void SetDraggableThickness(BYTE left, BYTE top, BYTE right, BYTE bottom);
 
 	INLINE void SetIcon(uiImage img, BOOL bBig = FALSE) { SetIconImp(this, img, bBig); }
@@ -701,7 +705,7 @@ public:
 	void OnMouseEnter(INT x, INT y);
 	void OnMouseLeave();
 
-	void OnCreate();
+	BOOL OnCreate();
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
@@ -731,7 +735,9 @@ protected:
 	uiButton *m_pMiddleBtn = nullptr;
 	uiButton *m_pCloseBtn = nullptr;
 
+	uiRect m_rectIcon, m_rectTitle;
 
+	uiImage m_temp;
 };
 
 

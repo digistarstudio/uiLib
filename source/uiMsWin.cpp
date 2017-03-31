@@ -141,7 +141,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		pWnd->SetHandle(hWnd);
 		WndAddMap(hWnd, pWnd);
 		::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWnd);
-		pWnd->OnCreate();
+		lRet = pWnd->OnCreate();
 		bProcessed = TRUE;
 		break;
 
@@ -366,7 +366,7 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 	HWND hParent = (ParentForm == nullptr) ? NULL : (HWND)ParentForm->GetBaseWnd()->GetHandle();
 	RECT r = { x, y, (LONG)(x + nWidth), (LONG)(y + nHeight) };
 	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX | WS_MAXIMIZEBOX*/;
-	// DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU;
+//	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU | WS_VISIBLE;
 
 	switch (uwt)
 	{
@@ -392,17 +392,14 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 			UICore::pGAppBaseWindow = pWnd;
 			pForm->SetAsBase();
 		}
-
 		pForm->SetWindow(pWnd);
 
 		HWND hWnd = CreateWindowEx(ExStyle, pWndClass, nullptr, Style, r.left, r.top, nWidth, nHeight, hParent, NULL, hInstance, pWnd);
-		if (hWnd != NULL)
+		if (hWnd != NULL) // pWnd will be deleted if create fails.
 			return pWnd;
-
-		delete pWnd;
 	}
 
-	return FALSE;
+	return nullptr;
 }
 
 
@@ -954,13 +951,14 @@ BOOL uiWindow::OnClose()
 	return FALSE;
 }
 
-void uiWindow::OnCreate()
+BOOL uiWindow::OnCreate()
 {
-	printx("---> uiWindow::OnCreate\n");
-
 	uiRect rect;
 	GetClientRect(rect);
-	m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, rect.Width(), rect.Height());
+	if (m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, rect.Width(), rect.Height()))
+		return 0;
+	m_pForm = nullptr;
+	return -1;
 }
 
 void uiWindow::OnDestroy()
@@ -980,7 +978,7 @@ void uiWindow::OnKeyUp(INT iKey)
 
 void uiWindow::OnMove(INT scx, INT scy)
 {
-	printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
+	//printx("---> uiWindow::OnMove scX: %d, scY: %d\n", scx, scy);
 
 	if (m_pForm->IsCreated())
 	{
@@ -1000,7 +998,7 @@ void uiWindow::OnMove(INT scx, INT scy)
 
 void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 {
-	// This doesno't work totally.
+	// This doesn't work totally.
 /*	HDC hdc;
 	RECT rect;
 	RGNDATA rdata;
@@ -1076,7 +1074,7 @@ void uiWindow::OnLoseKBFocus()
 
 void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 {
-	printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
+	//printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
 	switch (nType)
 	{

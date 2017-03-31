@@ -16,10 +16,12 @@ public:
 	}
 
 
-	void OnCreate()
+	BOOL OnCreate()
 	{
 		if (m_ID == uiID_INVALID)
 			m_ID = uiGetID();
+
+		return TRUE;
 	}
 	void OnDestroy()
 	{

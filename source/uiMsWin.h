@@ -83,7 +83,7 @@ public:
 
 	void OnActivate(WPARAM wParam, LPARAM LParam);
 	BOOL OnClose();
-	void OnCreate();
+	BOOL OnCreate();
 	void OnDestroy();
 	void OnKeyDown(INT iKey);
 	void OnKeyUp(INT iKey);
@@ -341,5 +341,7 @@ protected:
 
 
 uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
+
+
 
 
