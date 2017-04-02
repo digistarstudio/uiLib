@@ -29,9 +29,6 @@ static void FreeSplitter(stFormSplitter *pSplitter)
 }
 
 
-uiFormBase* uiFormBase::pAppBaseForm = nullptr;
-
-
 uiFormBase::uiFormBase()
 {
 	m_pWnd = nullptr;
@@ -65,8 +62,6 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 			bResult = FALSE;
 		else
 		{
-			if (pAppBaseForm == nullptr)
-				pAppBaseForm = this;
 			if (fcf & FCF_CENTER)
 				pWnd->MoveToCenter();
 		}
@@ -569,7 +564,7 @@ void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo)
 {
 	OnMove(x, y, pInfo);
 
-	if (FBTestFlag(FBF_OWN_CARET) && !IsBaseForm())
+	if (FBTestFlag(FBF_OWN_CARET) && !IsRootForm())
 		CaretMoveByOffset(pInfo->XOffset, pInfo->YOffset);
 }
 
@@ -756,7 +751,7 @@ BOOL IFrameImp::SetTitleImp(uiFormBase* pForm, const uiString& str)
 BOOL IFrameImp::SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig)
 {
 	stParamPack pp(img, bBig);
-	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CIconChanged, &pp);
+	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CBIconChanged, &pp);
 }
 
 void IFrameImp::CBTitleChanged(uiFormBase *pDest, void* ctx)
@@ -766,7 +761,7 @@ void IFrameImp::CBTitleChanged(uiFormBase *pDest, void* ctx)
 	pHeaderForm->OnTitleChanged(*(uiString*)ctx);
 }
 
-void IFrameImp::CIconChanged(uiFormBase *pDest, void* ctx)
+void IFrameImp::CBIconChanged(uiFormBase *pDest, void* ctx)
 {
 	stParamPack& pp = *(stParamPack*)ctx;
 	uiHeaderFormBase* pHeaderForm = dynamic_cast<uiHeaderFormBase*>(pDest);
@@ -825,6 +820,16 @@ INT uiSideDockableFrame::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint
 		if ((m_BorderFlags & FBF_BOTTOM) && m_FrameRect.Height() - fcY <= m_DTBottom)
 			iRet |= CAT_BOTTOM;
 	}
+
+	if (fcX < m_BTLeft)
+		iRet |= CAT_B_LEFT;
+	else if (m_FrameRect.Width() - fcX <= m_BTRight)
+		iRet |= CAT_B_RIGHT;
+	if (fcY < m_BTTop)
+		iRet |= CAT_B_TOP;
+	else if (m_FrameRect.Height() - fcY < m_BTBottom)
+		iRet |= CAT_B_BOTTOM;
+
 	if (iRet != CAT_CLIENT)
 	{
 		ptCS->x = ptCS->y = -1;
@@ -1247,6 +1252,7 @@ BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm)
 	INT HeaderHeight = 26;
 	INT BorderWidth = m_BTTop + m_BTBottom;
 
+	SetName(pStr);
 	if (pHeaderForm == nullptr)
 	{
 		pHeaderForm = new uiHeaderForm;

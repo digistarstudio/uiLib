@@ -5,6 +5,36 @@
 #include "MsWinHelper.h"
 
 
+HCURSOR WINAPI fnLoader(HCURSOR, LPCWSTR, DWORD, DWORD*, DWORD*);
+
+typedef HCURSOR(WINAPI* GET_CURSOR_FRAME_INFO)(HCURSOR, LPCWSTR, DWORD, DWORD*, DWORD*);
+GET_CURSOR_FRAME_INFO fnGetCursorFrameInfo = fnLoader;
+
+
+HCURSOR WINAPI fnLoader(HCURSOR hCursor, LPCWSTR str, DWORD len, DWORD* displayRate, DWORD* totalFrames)
+{
+	HCURSOR hRet = NULL;
+	HMODULE libUser32 = LoadLibraryA("user32.dll");
+	if (!libUser32)
+		return NULL;
+
+	fnGetCursorFrameInfo = reinterpret_cast<GET_CURSOR_FRAME_INFO>(GetProcAddress(libUser32, "GetCursorFrameInfo"));
+	ASSERT(fnGetCursorFrameInfo != NULL);
+	if (fnGetCursorFrameInfo != NULL)
+	{
+		return fnGetCursorFrameInfo(hCursor, str, len, displayRate, totalFrames);
+	}
+
+//	FreeLibrary(libUser32); // This's necessary lib for windows app.
+	return hRet;
+}
+
+BOOL GetCursorFrameInfo(HCURSOR hCursor, DWORD& DispRate, DWORD& TotalFrame)
+{
+	return fnGetCursorFrameInfo(hCursor, _T(""), 0, &DispRate, &TotalFrame) != NULL;
+}
+
+
 BOOL SaveFile(const TCHAR* pFileName, void *pData, UINT nSize)
 {
 	DWORD dwSizeWritten;

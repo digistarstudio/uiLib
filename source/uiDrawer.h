@@ -179,7 +179,7 @@ struct stImgHandleWrapper
 	}
 
 	INLINE WIN_IMAGE_TYPE GetType() const { return (WIN_IMAGE_TYPE)(Type & WIT_TYPE_MASK); }
-	void Set(PathMap::iterator itIn, uiString &strIn)
+	void Set(PathMap::iterator itIn, uiString&& strIn)
 	{
 		ASSERT(!(Type & WIT_LOAD_RESOURCE));
 		strPath = std::move(strIn); // Take over the string that store in the map.
@@ -188,14 +188,11 @@ struct stImgHandleWrapper
 
 	void DebugCheckFunc()
 	{
+		ASSERT((Type & WIT_TYPE_MASK)< WIT_TOTAL);
 		if (Type & WIT_LOAD_RESOURCE)
-		{
 			ASSERT(KeyHandleMap[Key].expired());
-		}
 		else
-		{
 			ASSERT(PathHandleMap.find(strPath) == it);
-		}
 	}
 
 
@@ -233,17 +230,29 @@ public:
 
 	BOOL LoadFromFile(uiString str);
 
-
-	INLINE HANDLE GetHandle() const { return (m_pImg) ? m_pImg->hHandle : NULL; }
-	INLINE BOOL   IsValid() const { return (bool)m_pImg; }
-	INLINE void   Release() { m_pImg.reset(); }
+	INLINE BOOL IsValid() const { return (bool)m_pImg; }
+	INLINE void Release() { m_pImg.reset(); }
 
 	INLINE uiImage& operator=(uiImage&& rhs) { m_pImg = std::move(rhs.m_pImg); return *this; }
 	INLINE uiImage& operator=(const uiImage& rhs) { m_pImg = rhs.m_pImg; return *this; }
 	INLINE bool     operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
 	INLINE bool     operator!=(const uiImage& in) const { return m_pImg != in.m_pImg; }
 
-	INLINE WIN_IMAGE_TYPE GetType() const { return (m_pImg) ? m_pImg->GetType() : WIT_NONE; }
+
+	struct stImageInfo
+	{
+		stImageInfo() { ZeroMemory(this, sizeof(*this)); }
+
+		INT  Width, Height;
+		// Cursor info.
+		INT  TotalFrame, DispRate;
+		INT  HotSpotX, HotSpotY;
+	};
+	BOOL GetInfo(stImageInfo& ImgInfo);
+
+	// TODO: move to protected scope
+	INLINE HANDLE GetHandle() const { ASSERT(m_pImg); return m_pImg->hHandle; }
+	INLINE WIN_IMAGE_TYPE GetType() const { ASSERT(m_pImg); return m_pImg->GetType(); }
 
 
 protected:
@@ -281,8 +290,11 @@ class uiDrawer
 {
 public:
 
-	uiDrawer();
-	virtual ~uiDrawer();
+	enum DEST_CHANGE_TYPE { DEST_RESTORE, DEST_PUSH, DEST_UPDATE };
+
+
+	uiDrawer() :m_OriginX(0), m_OriginY(0), m_FrameIndex(0) {}
+	virtual ~uiDrawer() {}
 
 
 	virtual BOOL Begin(void *pCtx) = 0;
@@ -295,13 +307,15 @@ public:
 	virtual void DrawEdge(uiRect &rect, UINT color) = 0;
 	virtual void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) = 0;
 	virtual void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) = 0;
-	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) = 0;
+	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags = 0) = 0;
+
+	INLINE void SetAniFrameIndex(UINT index) { m_FrameIndex = index; }
 
 
 	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
 	void PopDestRect();
 
-
+	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE); }
 //	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 
 	INLINE void UpdateCoordinate(uiRect &rect)
@@ -312,12 +326,13 @@ public:
 	{
 		x += m_OriginX;
 		y += m_OriginY;
+		const int i = sizeof(m_RectList);
 	}
 
 
 protected:
 
-	virtual void OnDestRectChanged(BOOL bRestore) {}
+	virtual void OnDestRectChanged(DEST_CHANGE_TYPE dct) {}
 
 	struct stRenderDestInfo
 	{
@@ -327,7 +342,9 @@ protected:
 
 	uiRect m_RenderDestRect;
 	INT m_OriginX, m_OriginY;
-	TList<stRenderDestInfo> m_RectList;
+	TList<stRenderDestInfo> m_RectList; // x86: 24 Bytes
+
+	UINT m_FrameIndex;
 
 
 };
@@ -575,9 +592,9 @@ public:
 
 protected:
 
-	void OnDestRectChanged(BOOL bRestore) override
+	void OnDestRectChanged(DEST_CHANGE_TYPE dct) override
 	{
-		if (bRestore)
+		if (dct == DEST_RESTORE)
 			return;
 #ifdef USE_GDI_CLIPPING
 		HDC hMemDC = m_WndDrawDC.GetDC();

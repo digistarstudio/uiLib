@@ -195,9 +195,9 @@ protected:
 	uiPoint m_LastMousePos; // window client spcae
 	UINT8   m_TrackMouseClick;
 
-	INT m_AreaType, m_SizingHitSide;
-	INT m_ScreenCoordinateX, m_ScreenCoordinateY;
-	INT m_MDPosX, m_MDPosY;
+	UINT m_AreaType, m_SizingHitSide;
+	INT  m_ScreenCoordinateX, m_ScreenCoordinateY;
+	INT  m_MDPosX, m_MDPosY;
 
 	MOUSE_KEY_TYPE m_MouseDragKey;
 	UINT64 m_MouseKeyDownTime[MKT_TOTAL];
@@ -309,31 +309,31 @@ class uiWinCursor
 {
 public:
 
-	enum CURSOR_TYPE
+	enum DEFAULT_CURSOR_TYPE
 	{
-		CT_NORMAL,
-		CT_SIZE_NS,
-		CT_SIZE_EW,
-		CT_SIZE_NESW,
-		CT_SIZE_NWSE,
+		DCT_NORMAL,
+		DCT_SIZE_NS,
+		DCT_SIZE_EW,
+		DCT_SIZE_NESW,
+		DCT_SIZE_NWSE,
 
-		CT_TOTAL,
+		DCT_TOTAL,
 	};
 
 	uiWinCursor();
 	~uiWinCursor();
 
-	BOOL Set(uiImage &img);
-	void Update(uiFormBase::CLIENT_AREA_TYPE nca);
+	BOOL Set(uiImage&& img);
+	void Update(DEFAULT_CURSOR_TYPE dct);
 
-	INLINE void Reset() { m_CurrentType = CT_TOTAL; }
+	INLINE void Reset() { m_CurrentType = DCT_TOTAL; }
 	INLINE BOOL GetPos(uiPoint& pt) const { return ::GetCursorPos((POINT*)&pt); }
 
 
 protected:
 
 	INT     m_CurrentType;
-	HCURSOR m_hArray[CT_TOTAL];
+	HCURSOR m_hArray[DCT_TOTAL];
 	uiImage m_CustomCursor;
 
 

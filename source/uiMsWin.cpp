@@ -25,8 +25,6 @@ std::map<void*, uiWindow*> GWindowsHandleMap;
 BEGIN_NAMESPACE(UICore)
 
 
-uiWindow *pGAppBaseWindow = nullptr;
-
 struct INIT_UI
 {
 	INIT_UI()
@@ -97,11 +95,12 @@ static uiWindow* WndFindByHandle(void* handle)
 	return it->second;
 }
 
-static void WndRemoveMap(void* handle)
+static size_t WndRemoveMap(void* handle)
 {
 	auto it = GWindowsHandleMap.find(handle);
 	ASSERT(it != GWindowsHandleMap.end());
 	GWindowsHandleMap.erase(it);
+	return GWindowsHandleMap.size();
 }
 
 static void WndAddMap(void* handle, uiWindow* pWnd)
@@ -148,12 +147,8 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 	case WM_DESTROY:
 		LogWndMsg("Msg: WM_DESTROY wParam:%p lParam:%p\n", wParam, lParam);
 		pWnd = uiWindowGet(hWnd);
-		if (pWnd == UICore::pGAppBaseWindow)
-		{
+		if (WndRemoveMap(hWnd) == 0)
 			PostQuitMessage(0);
-			UICore::pGAppBaseWindow = nullptr;
-		}
-		WndRemoveMap(hWnd);
 		pWnd->SetHandle(NULL);
 		delete pWnd;
 		return 0;
@@ -387,15 +382,10 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 	uiWindow *pWnd = new uiWindow(pForm);
 	if (pWnd != nullptr)
 	{
-		if (UICore::pGAppBaseWindow == nullptr)
-		{
-			UICore::pGAppBaseWindow = pWnd;
-			pForm->SetAsBase();
-		}
 		pForm->SetWindow(pWnd);
 
 		HWND hWnd = CreateWindowEx(ExStyle, pWndClass, nullptr, Style, r.left, r.top, nWidth, nHeight, hParent, NULL, hInstance, pWnd);
-		if (hWnd != NULL) // pWnd will be deleted if create fails.
+		if (hWnd != NULL) // pWnd will be deleted if the creation fails.
 			return pWnd;
 	}
 
@@ -583,7 +573,6 @@ BOOL uiWindow::StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, IN
 	}
 }
 
-
 void uiWindow::RedrawImp(const uiRect* pRect)
 {
 	InvalidateRect(m_Handle, (const RECT*)pRect, FALSE);
@@ -591,13 +580,11 @@ void uiWindow::RedrawImp(const uiRect* pRect)
 
 void uiWindow::ResizeImp(INT x, INT y)
 {
-	INT iRegion;
+	INT iRegion = -1;
+	const UINT mask = uiFormBase::CAT_ALL_DRF;
 
-	switch (m_AreaType)
+	switch (m_AreaType & mask)
 	{
-//	case uiFormBase::CAT_CLIENT:
-//		iRegion = HTCLIENT;
-//		break;
 	case uiFormBase::CAT_TOP:
 		iRegion = HTTOP;
 		break;
@@ -624,12 +611,13 @@ void uiWindow::ResizeImp(INT x, INT y)
 		break;
 	}
 
+	ASSERT(iRegion != -1);
 	::PostMessage(m_Handle, WM_NCLBUTTONDOWN, iRegion, MAKELPARAM(x, y));
 }
 
 void uiWindow::PostMsgHandler(UINT msg)
 {
-	BOOL bUpdateMouse = FALSE;
+	BOOL bUpdateCursor = FALSE;
 	uiPoint ptWS, ptSS, ptCS;
 
 	if (bRetrackMouse)
@@ -644,7 +632,7 @@ void uiWindow::PostMsgHandler(UINT msg)
 		do
 		{
 			bRetrackMouse = false;
-			bUpdateMouse = TRUE;
+			bUpdateCursor = TRUE;
 			//	printx("Start tracking: %d\n", ++TrackCount);
 
 			if ((m_AreaType = m_pForm->FindByPos(&m_pGrayForm, ptWS.x, ptWS.y, &ptCS)) != uiFormBase::CAT_CLIENT)
@@ -680,7 +668,7 @@ void uiWindow::PostMsgHandler(UINT msg)
 		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing with this message.
 	}
 
-	if (bUpdateMouse)
+	if (bUpdateCursor)
 		UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 }
 
@@ -729,12 +717,40 @@ void uiWindow::UpdateCursor(uiFormBase *pForm, INT csX, INT csY)
 	IAreaCursor *pIAC = pForm->GetIAreaCursor();
 	if (pIAC == nullptr)
 	{
-		uiGetCursor().Update((uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+		const UINT mask = uiFormBase::CAT_ALL_DRF | uiFormBase::CAT_DRAG_BAR_H | uiFormBase::CAT_DRAG_BAR_V;
+		uiWinCursor::DEFAULT_CURSOR_TYPE dct = uiWinCursor::DCT_NORMAL;
+
+		switch (m_AreaType & mask)
+		{
+		case uiFormBase::CAT_CLIENT:
+			dct = uiWinCursor::DCT_NORMAL;
+			break;
+		case uiFormBase::CAT_TOP:
+		case uiFormBase::CAT_BOTTOM:
+			dct = uiWinCursor::DCT_SIZE_NS;
+			break;
+		case uiFormBase::CAT_LEFT:
+		case uiFormBase::CAT_RIGHT:
+			dct = uiWinCursor::DCT_SIZE_EW;
+			break;
+		case uiFormBase::CAT_TOP | uiFormBase::CAT_LEFT:
+		case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_RIGHT:
+			dct = uiWinCursor::DCT_SIZE_NWSE;
+			break;
+		case uiFormBase::CAT_TOP | uiFormBase::CAT_RIGHT:
+		case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_LEFT:
+			dct = uiWinCursor::DCT_SIZE_NESW;
+			break;
+		}
+
+		uiGetCursor().Update(dct);
 	}
 	else
 	{
-		uiImage NewCursor = pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
-		uiGetCursor().Set(NewCursor);
+		uiImage& NewCursor = pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
+		uiGetCursor().Set(std::move(NewCursor));
+
+	//	uiGetCursor().Set(pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType));
 	}
 }
 
@@ -999,27 +1015,6 @@ void uiWindow::OnMove(INT scx, INT scy)
 void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
 {
 	// This doesn't work totally.
-/*	HDC hdc;
-	RECT rect;
-	RGNDATA rdata;
-
-	//	VERIFY(GetRgnBox(hRgn, &rect) != 0);
-	//	GetRgnBox(hRgn, &rect);
-	//	DWORD ec = GetLastError();
-
-	//VERIFY(GetRegionData(hRgn, sizeof(rdata), &rdata) == 0);
-
-	::GetWindowRect(hWnd, &rect);
-	//	hdc = GetDCEx(hWnd, 0, DCX_WINDOW);
-	hdc = GetWindowDC(hWnd);
-
-
-	//HBRUSH hOldBrush = (HBRUSH)::SelectObject(hdc, );
-
-	FillRect(hdc, &rect, (HBRUSH)::GetStockObject(WHITE_BRUSH));
-
-	ReleaseDC(hWnd, hdc);
-	//*/
 }
 
 void uiWindow::OnPaint()
@@ -1066,7 +1061,7 @@ void uiWindow::OnLoseKBFocus()
 	printx("---> uiWindow::OnLoseKBFocus.\n");
 	ASSERT(bKBFocusCaptured);
 
-	if (m_pKeyboardFocusForm != nullptr)
+	if (m_pForm != nullptr && m_pKeyboardFocusForm != nullptr)
 		m_pKeyboardFocusForm->EntryOnKBLoseFocus();
 
 	bKBFocusCaptured = false;
@@ -1147,7 +1142,7 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 
 void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
 {
-	printx("---> uiWindow::OnTimer. ID: %p Callback: 0x%p\n", TimerID, lParam);
+	//printx("---> uiWindow::OnTimer. ID: %p Callback: 0x%p\n", TimerID, lParam);
 	UINT index = TimerID - 1;
 	ASSERT(index < m_TimerTable.size());
 
@@ -1180,6 +1175,7 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 	// Just determine the area type. Don't do much.
 	uiPoint ptCS;
 	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
+	uiFormBase::CLIENT_AREA_TYPE cat = (uiFormBase::CLIENT_AREA_TYPE)m_AreaType;
 	UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 
 	return HTCLIENT;
@@ -1632,13 +1628,13 @@ void uiWinMenu::ChangeStyle()
 
 uiWinCursor::uiWinCursor()
 {
-	m_CurrentType = CT_TOTAL; // Specify an invalid value to force updating cursor when mouse goes inside the window first time.
+	m_CurrentType = DCT_TOTAL; // Specify an invalid value to force updating cursor when mouse goes inside the window first time.
 
-	m_hArray[CT_NORMAL] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_NORMAL), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	m_hArray[CT_SIZE_NS] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENS), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	m_hArray[CT_SIZE_EW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZEWE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	m_hArray[CT_SIZE_NESW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENESW), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	m_hArray[CT_SIZE_NWSE] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENWSE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	m_hArray[DCT_NORMAL] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_NORMAL), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	m_hArray[DCT_SIZE_NS] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENS), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	m_hArray[DCT_SIZE_EW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZEWE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	m_hArray[DCT_SIZE_NESW] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENESW), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	m_hArray[DCT_SIZE_NWSE] = (HCURSOR)LoadImage(NULL, MAKEINTRESOURCE(OCR_SIZENWSE), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 }
 
 uiWinCursor::~uiWinCursor()
@@ -1654,7 +1650,7 @@ uiWinCursor::~uiWinCursor()
 	::SetCursor(NULL); // Must call this to remove the using cursor.
 }
 
-BOOL uiWinCursor::Set(uiImage &img)
+BOOL uiWinCursor::Set(uiImage&& img)
 {
 	if (!img.IsValid() || img.GetType() != WIT_CURSOR)
 		return FALSE;
@@ -1666,36 +1662,15 @@ BOOL uiWinCursor::Set(uiImage &img)
 	return TRUE;
 }
 
-void uiWinCursor::Update(uiFormBase::CLIENT_AREA_TYPE nca)
+void uiWinCursor::Update(DEFAULT_CURSOR_TYPE dct)
 {
-	INT iOldType = m_CurrentType;
-	switch (nca)
-	{
-	case uiFormBase::CAT_CLIENT:
-		m_CurrentType = uiWinCursor::CT_NORMAL;
-		break;
-	case uiFormBase::CAT_TOP:
-	case uiFormBase::CAT_BOTTOM:
-		m_CurrentType = uiWinCursor::CT_SIZE_NS;
-		break;
-	case uiFormBase::CAT_LEFT:
-	case uiFormBase::CAT_RIGHT:
-		m_CurrentType = uiWinCursor::CT_SIZE_EW;
-		break;
-	case uiFormBase::CAT_TOP | uiFormBase::CAT_LEFT:
-	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_RIGHT:
-		m_CurrentType = uiWinCursor::CT_SIZE_NWSE;
-		break;
-	case uiFormBase::CAT_TOP | uiFormBase::CAT_RIGHT:
-	case uiFormBase::CAT_BOTTOM | uiFormBase::CAT_LEFT:
-		m_CurrentType = uiWinCursor::CT_SIZE_NESW;
-		break;
-	}
+	ASSERT(dct < DCT_TOTAL);
 
-	if (iOldType != m_CurrentType || m_CustomCursor.IsValid())
+	if (dct != m_CurrentType || m_CustomCursor.IsValid())
 	{
-		::SetCursor(m_hArray[m_CurrentType]); // Muse set first to release internal reference count to the image.
+		::SetCursor(m_hArray[dct]); // Muse set first to release internal reference count to the image.
 		m_CustomCursor.Release();
+		m_CurrentType = dct;
 	}
 }
 

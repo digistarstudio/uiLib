@@ -83,7 +83,7 @@ struct uiRect
 
 	INLINE void Inflate(INT x, INT y) { Left -= x; Right += x; Top -= y; Bottom += y; }
 	INLINE void Inflate(INT l, INT t, INT r, INT b) { Left -= l; Right += r; Top -= t; Bottom += b; }
-	INLINE uiRect InflateRV(INT l, INT t, INT r, INT b) const { return uiRect(Left + l, Top + t, Right + r, Bottom + b); }
+	INLINE uiRect InflateRV(INT l, INT t, INT r, INT b) const { return uiRect(Left - l, Top - t, Right + r, Bottom + b); }
 
 	INLINE void GetPos(INT &x, INT &y) const { x = Left; y = Top; }
 	INLINE void SetPos(INT x, INT y) { Left = x; Top = y; }
@@ -186,8 +186,8 @@ public:
 	uiMenu();
 	~uiMenu();
 
-	BOOL AddItem(INT index, TCHAR *pStr, UINT type);
-	BOOL AppendItem(TCHAR *pStr, UINT type);
+	BOOL AddItem(INT index, TCHAR* pStr, UINT type);
+	BOOL AppendItem(TCHAR* pStr, UINT type);
 
 	void Release();
 
@@ -211,9 +211,9 @@ public:
 
 	uiString() :m_pStr(nullptr) {}
 	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, (UINT)_tcslen(pstrIn)); }
-	uiString(const uiString &src) :m_pStr(nullptr) { StoreString(src.m_pStr, src.Length()); }
+	uiString(const uiString& src) :m_pStr(nullptr) { StoreString(src.m_pStr, src.Length()); }
 
-	uiString(uiString &&SrcStr)
+	uiString(uiString&& SrcStr)
 	{
 		m_pStr = SrcStr.m_pStr;
 		m_len = SrcStr.m_len;
@@ -223,7 +223,10 @@ public:
 	~uiString()
 	{
 		if (m_pStr != nullptr)
+		{
 			free(m_pStr);
+			m_pStr = nullptr; // Must reset now.
+		}
 	}
 
 	INT Format()
@@ -304,15 +307,17 @@ public:
 		StoreString(src.m_pStr, src.Length());
 		return *this;
 	}
-	uiString& operator=(uiString &&rstr)
+	uiString& operator=(uiString&& rstr) noexcept
 	{
-	//	printx("---> Move assignment called!\n");
-		if (m_pStr != nullptr)
-			free(m_pStr);
-		m_pStr = rstr.m_pStr;
-		m_len = rstr.m_len;
-		rstr.m_pStr = nullptr; // Must clean the pointer. 
-		rstr.m_len = 0;
+		/*
+		uiString& temp = uiString(std::move(rstr));
+		std::swap(m_pStr, temp.m_pStr);
+		std::swap(m_len, temp.m_len);
+		/*/
+		std::swap(m_pStr, rstr.m_pStr);
+		std::swap(m_len, rstr.m_len);
+		rstr.~uiString();
+		//*/
 		return *this;
 	}
 

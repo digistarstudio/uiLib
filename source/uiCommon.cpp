@@ -46,13 +46,13 @@ uiMenu::~uiMenu()
 //	SAFE_DELETE_ARRAY(m_pItemArray);
 }
 
-BOOL uiMenu::AddItem(INT index, TCHAR *pStr, UINT type)
+BOOL uiMenu::AddItem(INT index, TCHAR* pStr, UINT type)
 {
 
 	return TRUE;
 }
 
-BOOL uiMenu::AppendItem(TCHAR *pStr, UINT type)
+BOOL uiMenu::AppendItem(TCHAR* pStr, UINT type)
 {
 
 	return TRUE;

@@ -244,6 +244,14 @@ public:
 		printx("---> CFormEx::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
 	//	ReleaseCapture();
 	}
+	void OnMouseEnter(INT x, INT y)
+	{
+		printx("--->CFormEx::OnMouseEnter\n");
+	}
+	void OnMouseLeave()
+	{
+		printx("--->CFormEx::OnMouseLeave\n");
+	}
 
 
 protected:
@@ -508,7 +516,7 @@ public:
 
 		if (id == m_pButton->GetID())
 		{
-			m_pSubForm->SetBorder(10, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			m_pSubForm->SetBorder(10, uiForm::FBF_RIGHT); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
 			m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
 
 			SetBorder(-1, 0, -1, -1, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
@@ -640,6 +648,9 @@ void FontTest()
 
 		img2 = (uiImage&&)img;
 		img3 = img2;
+
+		img.LoadFromFile(_T("R:\\test2.cur"));
+		img2 = (uiImage&&)img;
 
 		img4.LoadFromFile(_T("R:\\test4.cur"));
 		img2.LoadFromFile(_T("R:\\test2.cur"));

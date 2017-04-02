@@ -193,7 +193,7 @@ BOOL uiImage::LoadFromFile(uiString str)
 	}
 
 	it = stImgHandleWrapper::PathHandleMap.insert({ str, m_pImg }).first;
-	m_pImg->Set(it, str);
+	m_pImg->Set(it, std::move(str));
 
 	return TRUE;
 }
@@ -210,15 +210,45 @@ WIN_IMAGE_TYPE uiImage::GetType(uiString& str)
 	return WIT_NONE;
 }
 
-
-uiDrawer::uiDrawer()
-:m_OriginX(0), m_OriginY(0)
+BOOL uiImage::GetInfo(stImageInfo& ImgInfo)
 {
+	if (!IsValid())
+		return FALSE;
+
+	WIN_IMAGE_TYPE wit = GetType();
+
+	if (wit == WIT_BMP)
+	{
+		BITMAP bm = { 0 };
+		VERIFY(::GetObject((HBITMAP)GetHandle(), sizeof(bm), &bm));
+		ImgInfo.Width = bm.bmWidth;
+		ImgInfo.Height = bm.bmHeight;
+		return TRUE;
+	}
+
+	ICONINFO ii;
+	HICON hIcon = (HICON)GetHandle();
+	if (::GetIconInfo(hIcon, &ii))
+	{
+		if (!ii.fIcon) // is cursor
+		{
+			GetCursorFrameInfo(hIcon, (DWORD&)ImgInfo.DispRate, (DWORD&)ImgInfo.TotalFrame);
+			ImgInfo.HotSpotX = ii.xHotspot;
+			ImgInfo.HotSpotY = ii.yHotspot;
+		}
+
+		BITMAP bm = { 0 };
+		GetObject(ii.hbmColor, sizeof(bm), &bm);
+		ImgInfo.Width = bm.bmWidth;
+		ImgInfo.Height = bm.bmHeight;
+
+		::DeleteObject(ii.hbmColor);
+		::DeleteObject(ii.hbmMask);
+	}
+
+	return FALSE;
 }
 
-uiDrawer::~uiDrawer()
-{
-}
 
 BOOL uiDrawer::PushDestRect(uiRect rect)
 {
@@ -237,7 +267,7 @@ BOOL uiDrawer::PushDestRect(uiRect rect)
 
 		m_OriginX += pt.x;
 		m_OriginY += pt.y;
-		OnDestRectChanged(FALSE);
+		OnDestRectChanged(DEST_PUSH);
 
 		return TRUE;
 	}
@@ -256,7 +286,7 @@ void uiDrawer::PopDestRect()
 	m_OriginX = RDInfo.OriginX;
 	m_OriginY = RDInfo.OriginY;
 	m_RenderDestRect = RDInfo.rect;
-	OnDestRectChanged(TRUE);
+	OnDestRectChanged(DEST_RESTORE);
 }
 
 
@@ -431,20 +461,22 @@ BOOL uiWndDrawer::DrawImage(const uiImage& img, INT x, INT y, INT width, INT hei
 		if (bRet = m_WndDrawDC.SelectBmp(m_PaintDC, (HBITMAP)img.GetHandle()))
 			m_WndDrawDC.BitBlt(x, y, width, height, 0, 0, NOTSRCCOPY);
 		break;
+
 	case WIT_CURSOR:
-	//	break;
 	case WIT_ICON:
 	//	bRet = DrawIcon(hDestDC, x, y, (HICON)img.GetHandle());
-		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), width, height, 0, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
+		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), width, height, m_FrameIndex, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
+		m_FrameIndex = 0;
 		break;
+
 	default:
 		ASSERT(0);
 	}
 
 	if (!bRet)
 	{
-		printx("uiWndDrawer::DrawImage failed! ec: %d\n", GetLastError());
-		ASSERT(0);
+		printx("Warning! uiWndDrawer::DrawImage failed! type: %d, ec: %d\n", wit, GetLastError());
+	//	ASSERT(0);
 	}
 
 	return bRet;

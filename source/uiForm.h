@@ -127,16 +127,22 @@ public:
 	{
 		CAT_CLIENT = 0, // Don't change this.
 
-		// Border.
+		// draggable region
 		CAT_TOP    = 0x01,
 		CAT_BOTTOM = 0x01 << 1,
 		CAT_LEFT   = 0x01 << 2,
 		CAT_RIGHT  = 0x01 << 3,
 
-		CAT_DRAG_BAR_H = 0x01 << 4,
-		CAT_DRAG_BAR_v = 0x01 << 5,
+		// border
+		CAT_B_TOP    = 0x01 << 4,
+		CAT_B_BOTTOM = 0x01 << 5,
+		CAT_B_LEFT   = 0x01 << 6,
+		CAT_B_RIGHT  = 0x01 << 7,
 
-	//	CAT_EDITABLE = 7,
+		CAT_DRAG_BAR_H = 0x01 << 8,
+		CAT_DRAG_BAR_V = 0x01 << 9,
+
+		CAT_ALL_DRF = CAT_TOP | CAT_BOTTOM | CAT_LEFT | CAT_RIGHT,
 	};
 
 	enum FORM_BASE_FLAGS
@@ -353,11 +359,8 @@ public:
 	INLINE uiPoint ClientToFrameSpace(uiPoint& pt) const { return pt -= FrameToClientSpace(uiPoint()); }
 
 
-	INLINE BOOL IsRootForm() const { return (m_pWnd != nullptr); }
-	INLINE BOOL IsBaseForm() const { return (this == pAppBaseForm); }
-
 	INLINE void SetWindow(uiWindow *pWnd) { ASSERT(m_pWnd == nullptr); m_pWnd = pWnd; }
-	INLINE void SetAsBase() { ASSERT(pAppBaseForm == nullptr); pAppBaseForm = this; }
+	INLINE BOOL IsRootForm() const { return (m_pWnd != nullptr); }
 
 	INLINE BOOL HasChildrenForm() const { return IS_VALID_ENTRY(m_ListChildren.next, m_ListChildren); }
 //	INLINE BOOL HasDockedForm() const { return (m_pFormSplitter != nullptr); }
@@ -421,8 +424,6 @@ protected:
 
 
 private:
-
-	static uiFormBase* pAppBaseForm; // Todo: remove this stupid thing.
 
 //	friend uiFormBase* FindFromSplitter(stFormSplitter *pSplitter, INT x, INT y);
 //	friend uiFormBase* FindByPosImp(uiFormBase *pForm, INT x, INT y);
@@ -499,7 +500,7 @@ public:
 	BOOL SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig);
 
 	static void CBTitleChanged(uiFormBase *pDest, void* ctx);
-	static void CIconChanged(uiFormBase *pDest, void* ctx);
+	static void CBIconChanged(uiFormBase *pDest, void* ctx);
 
 	INLINE uiImage& GetIcon(BOOL bSmall = TRUE) { return bSmall ? m_IconS : m_IconB; }
 
