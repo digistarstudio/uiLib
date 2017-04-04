@@ -837,9 +837,36 @@ BOOL uiWindow::CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY
 	return UICore::GCaret.MoveByOffset(OffsetX, OffsetY);
 }
 
+void DbgTimerCheck(UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx, stWndTimerInfo &ExistedTimer)
+{
+	if (ExistedTimer.msElapsedTime != msElapsedTime)
+		return;
+	if (ExistedTimer.nRunCount != nRunCount)
+		return;
+	if (ExistedTimer.pCtx != pCtx)
+		return;
+	printx("Warning! TimerStart with existed timer id and the same parameters! ID: %d\n", id);
+}
+
 UINT uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx)
 {
 	ASSERT(m_TotalWorkingTimer <= m_TimerTable.size());
+
+	for(UINT i = 0; i < m_TotalWorkingTimer; ++i)
+		if (m_TimerTable[i].TimerHandle && m_TimerTable[i].pFormBase == pFormBase && m_TimerTable[i].id == id)
+		{
+			DEBUG_CHECK(DbgTimerCheck(id, msElapsedTime, nRunCount, pCtx, m_TimerTable[i]));
+
+			UINT_PTR NewTimerHandle;
+			if ((NewTimerHandle = ::SetTimer(m_Handle, i + 1, msElapsedTime, nullptr)) == 0)
+				return 0;
+
+			m_TimerTable[i].msElapsedTime = msElapsedTime;
+			m_TimerTable[i].nRunCount = nRunCount;
+			m_TimerTable[i].pCtx = pCtx;
+			m_TimerTable[i].TimerHandle = NewTimerHandle;
+			return i + 1;
+		}
 
 	INT index = 0;
 	if (m_TotalWorkingTimer == m_TimerTable.size())
@@ -1175,7 +1202,7 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 	// Just determine the area type. Don't do much.
 	uiPoint ptCS;
 	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
-	uiFormBase::CLIENT_AREA_TYPE cat = (uiFormBase::CLIENT_AREA_TYPE)m_AreaType;
+//	uiFormBase::CLIENT_AREA_TYPE cat = (uiFormBase::CLIENT_AREA_TYPE)m_AreaType;
 	UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 
 	return HTCLIENT;

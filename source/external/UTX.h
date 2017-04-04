@@ -38,7 +38,7 @@ iName* Get##iName() override { return static_cast<iName*>(this); }
 
 #ifdef _DEBUG
 	#define VERIFY(statement) ASSERT(statement)
-	#define DEBUG_CHECK(func) func()
+	#define DEBUG_CHECK(func) func
 #else
 	#define VERIFY(statement) ((void)(statement))
 	#define DEBUG_CHECK(func)
@@ -228,12 +228,7 @@ INLINE DOUBLE Abs(DOUBLE in)
 	return in;
 }
 
-INLINE INT Abs(INT in)
-{
-	if(in < 0)
-		return in * -1;
-	return in;
-}
+
 /*
 INLINE sAABB AABBAnd(sAABB &aabb1, sAABB &aabb2)
 {

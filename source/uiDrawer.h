@@ -77,6 +77,18 @@ INLINE size_t HashState(const T* StateDesc, size_t Count = 1, size_t Hash = 2166
 typedef stHandleWrapper<winFontHandleType> FontHandleW;
 
 
+enum SYSTEM_FONT_TYPE
+{
+	SFT_CAPTION,
+	SFT_SM_CAPTION,
+	SFT_MENU,
+	SFT_STATUS,
+	SFT_MESSAGE,
+
+	SFT_TOTAL,
+};
+
+
 class uiFont
 {
 public:
@@ -85,6 +97,7 @@ public:
 
 	uiFont() {}
 	uiFont(const uiFont& src) { m_ptrHandle = src.m_ptrHandle; }
+	uiFont(uiFont&& src) :m_ptrHandle(std::move(src.m_ptrHandle)) {}
 	~uiFont() {}
 
 
@@ -95,9 +108,10 @@ public:
 	INLINE BOOL   IsValid() const { return (bool)m_ptrHandle; }
 	INLINE void   Release() { m_ptrHandle.reset(); }
 
-	INLINE uiFont& operator=(uiFont&& rhs) { m_ptrHandle = std::move(rhs.m_ptrHandle); return *this; }
+	INLINE uiFont& operator=(uiFont&& rhs) noexcept { m_ptrHandle = std::move(rhs.m_ptrHandle); return *this; }
 	INLINE uiFont& operator=(const uiFont& rhs) { m_ptrHandle = rhs.m_ptrHandle; return *this; }
 	INLINE bool    operator==(const uiFont& in) const { return m_ptrHandle == in.m_ptrHandle; }
+	INLINE bool    operator!=(const uiFont& in) const { return m_ptrHandle != in.m_ptrHandle; }
 
 
 protected:
@@ -106,6 +120,9 @@ protected:
 
 
 };
+
+
+uiFont uiGetSysFont(SYSTEM_FONT_TYPE);
 
 
 enum WIN_IMAGE_TYPE
@@ -160,7 +177,7 @@ struct stImgHandleWrapper
 	{
 	//	printx("---> stImgHandleWrapper::~stImgHandleWrapper type: %d\n", Type & WIT_TYPE_MASK);
 
-		DEBUG_CHECK(DebugCheckFunc);
+		DEBUG_CHECK(DebugCheckFunc());
 
 		if (Type & WIT_LOAD_RESOURCE)
 			KeyHandleMap.erase(Key);
@@ -222,6 +239,7 @@ public:
 
 	uiImage() {}
 	uiImage(const uiImage& src) { m_pImg = src.m_pImg; }
+	uiImage(uiImage&& src) :m_pImg(std::move(src.m_pImg)) {}
 	~uiImage() {}
 
 
@@ -233,7 +251,7 @@ public:
 	INLINE BOOL IsValid() const { return (bool)m_pImg; }
 	INLINE void Release() { m_pImg.reset(); }
 
-	INLINE uiImage& operator=(uiImage&& rhs) { m_pImg = std::move(rhs.m_pImg); return *this; }
+	INLINE uiImage& operator=(uiImage&& rhs) noexcept { m_pImg = std::move(rhs.m_pImg); return *this; }
 	INLINE uiImage& operator=(const uiImage& rhs) { m_pImg = rhs.m_pImg; return *this; }
 	INLINE bool     operator==(const uiImage& in) const { return m_pImg == in.m_pImg; }
 	INLINE bool     operator!=(const uiImage& in) const { return m_pImg != in.m_pImg; }
@@ -286,43 +304,24 @@ enum SYS_COLOR_NAME
 UINT32 uiGetSysColor(INT index);
 
 
-class uiDrawer
+class uiDrawerBase
 {
 public:
 
 	enum DEST_CHANGE_TYPE { DEST_RESTORE, DEST_PUSH, DEST_UPDATE };
 
+	uiDrawerBase() :m_OriginX(0), m_OriginY(0), m_FrameIndex(0) {}
+	virtual ~uiDrawerBase() {}
 
-	uiDrawer() :m_OriginX(0), m_OriginY(0), m_FrameIndex(0) {}
-	virtual ~uiDrawer() {}
-
-
-	virtual BOOL Begin(void *pCtx) = 0;
-	virtual void End(void *pCtx) = 0;
-
-	virtual void ResizeBackBuffer(UINT nWidth, UINT nHeight) {}
-
-	virtual void FillRect(uiRect rect, UINT32 color) = 0;
-	virtual void RoundRect(uiRect rect, UINT32 color, INT width, INT height) = 0;
-	virtual void DrawEdge(uiRect &rect, UINT color) = 0;
-	virtual void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) = 0;
-	virtual void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) = 0;
-	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags = 0) = 0;
 
 	INLINE void SetAniFrameIndex(UINT index) { m_FrameIndex = index; }
 
-
-	BOOL PushDestRect(uiRect rect); // Return true if rectangle region is visible.
-	void PopDestRect();
-
-	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE); }
-//	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
-
-	INLINE void UpdateCoordinate(uiRect &rect)
+	//	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
+	INLINE void UpdateCoordinate(uiRect& rect)
 	{
 		rect.Move(m_OriginX, m_OriginY);
 	}
-	INLINE void UpdateCoordinate(INT &x, INT &y)
+	INLINE void UpdateCoordinate(INT& x, INT& y)
 	{
 		x += m_OriginX;
 		y += m_OriginY;
@@ -331,8 +330,6 @@ public:
 
 
 protected:
-
-	virtual void OnDestRectChanged(DEST_CHANGE_TYPE dct) {}
 
 	struct stRenderDestInfo
 	{
@@ -345,6 +342,89 @@ protected:
 	TList<stRenderDestInfo> m_RectList; // x86: 24 Bytes
 
 	UINT m_FrameIndex;
+
+
+};
+
+
+template<typename T>
+class uiDrawerT : public T
+{
+public:
+
+
+	BOOL Text(const TCHAR* pText, const uiRect& rect, UINT flag)
+	{
+		// Retrieve a handle to the variable stock font.
+		HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT); // DEFAULT_GUI_FONT SYSTEM_FONT
+															   //	uiWndFont ftSystem(hFont);
+		return T::Text(pText, rect, flag, uiFont());
+	}
+
+	BOOL PushDestRect(uiRect rect) // Return true if rectangle region is visible.
+	{
+		uiPoint pt = rect.GetLeftTop();
+		stRenderDestInfo RDInfo;
+		RDInfo.rect = m_RenderDestRect;
+
+		rect.Move(m_OriginX, m_OriginY);
+		m_RenderDestRect.IntersectWith(rect);
+
+		if (m_RenderDestRect.IsValidRect())
+		{
+			RDInfo.OriginX = m_OriginX;
+			RDInfo.OriginY = m_OriginY;
+			m_RectList.AddDataHead(RDInfo);
+
+			m_OriginX += pt.x;
+			m_OriginY += pt.y;
+			OnDestRectChanged(DEST_PUSH);
+
+			return TRUE;
+		}
+
+		m_RenderDestRect = RDInfo.rect;
+
+		return FALSE;
+	}
+	void PopDestRect()
+	{
+		stRenderDestInfo RDInfo;
+		ListIndex index = m_RectList.GetHeadIndex();
+		m_RectList.GetAndRemove(index, RDInfo);
+
+		m_OriginX = RDInfo.OriginX;
+		m_OriginY = RDInfo.OriginY;
+		m_RenderDestRect = RDInfo.rect;
+		OnDestRectChanged(DEST_RESTORE);
+	}
+
+	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE); }
+
+
+};
+
+
+class uiDrawerVInterface : public uiDrawerBase
+{
+public:
+
+	virtual BOOL Begin(void* pCtx) = 0;
+	virtual void End(void* pCtx) = 0;
+
+	virtual void ResizeBackBuffer(UINT nWidth, UINT nHeight) {}
+
+	virtual void FillRect(uiRect rect, UINT32 color) = 0;
+	virtual void RoundRect(uiRect rect, UINT32 color, INT width, INT height) = 0;
+	virtual void DrawEdge(uiRect& rect, UINT color) = 0;
+	virtual void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) = 0;
+	virtual BOOL Text(const TCHAR *pText, const uiRect& rect, UINT flag, uiFont& Font) { return TRUE; }
+	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags = 0) = 0;
+
+
+protected:
+
+	virtual void OnDestRectChanged(DEST_CHANGE_TYPE dct) {}
 
 
 };
@@ -483,10 +563,10 @@ class uiWndBackBuffer
 {
 public:
 
-	enum { MAX_WIDTH = 65536, MAX_HEIGHT = 65536, };
+	enum { MAX_WIDTH = 65536, MAX_HEIGHT = 65536, EXTRA_BUFFER_WIDTH = 50, EXTRA_BUFFER_HEIGHT = 50, };
 
 	uiWndBackBuffer()
-	:m_MemDC(NULL), m_hOldBmp(NULL), m_hBmp(NULL)
+	:m_MemDC(NULL), m_hOldBmp(NULL), m_hBmp(NULL), m_CurWidth(0), m_CurHeight(0)
 	{
 	}
 	~uiWndBackBuffer()
@@ -507,6 +587,9 @@ public:
 
 	BOOL Init(HDC hDC, UINT NewWidth, UINT NewHeight)
 	{
+		NewWidth += EXTRA_BUFFER_WIDTH;
+		NewHeight += EXTRA_BUFFER_HEIGHT;
+
 		ASSERT(NewWidth < MAX_WIDTH && NewHeight < MAX_HEIGHT);
 
 		m_MemDC = CreateCompatibleDC(hDC);
@@ -515,6 +598,8 @@ public:
 		if (m_MemDC == NULL || m_hBmp == NULL)
 			return FALSE;
 		m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
+		m_CurWidth = NewWidth;
+		m_CurHeight = NewHeight;
 
 #ifdef _DEBUG
 		m_hOldPen = (HPEN)::GetCurrentObject(m_MemDC, OBJ_PEN);
@@ -526,16 +611,40 @@ public:
 	}
 	BOOL Resize(HDC hDC, UINT NewWidth, UINT NewHeight)
 	{
+		printx("---> Resize() Old Width: %d, New Width: %d, Old Height: %d, New Height: %d\n", m_CurWidth, NewWidth, m_CurHeight, NewHeight);
+
+		INT  bXScaleUp = NewWidth - m_CurWidth, bYScaleUp = NewHeight - m_CurHeight;
+		BOOL bXBuffered = -bXScaleUp <= EXTRA_BUFFER_WIDTH;
+		BOOL bYBuffered = -bYScaleUp <= EXTRA_BUFFER_HEIGHT;
+
+		if (bXScaleUp <= 0 && bXBuffered && bYScaleUp <= 0 && bYBuffered)
+			return TRUE;
+
+		if (bXScaleUp > 0)
+			NewWidth += EXTRA_BUFFER_WIDTH;
+		else if (bXBuffered)
+			NewWidth = m_CurWidth;
+
+		if (bYScaleUp > 0)
+			NewHeight += EXTRA_BUFFER_HEIGHT;
+		else if (bYBuffered)
+			NewHeight = m_CurHeight;
+
 		if (m_hBmp != NULL)
 		{
-			SelectObject(m_MemDC, m_hOldBmp);
+			VERIFY(SelectObject(m_MemDC, m_hOldBmp) != NULL);
 			::DeleteObject(m_hBmp);
-
-			m_hBmp = CreateCompatibleBitmap(hDC, NewWidth, NewHeight);
-			m_hOldBmp = (HBITMAP)SelectObject(m_MemDC, m_hBmp);
-			return (m_hBmp != NULL);
 		}
-		return TRUE;
+		if ((m_hBmp = CreateCompatibleBitmap(hDC, NewWidth, NewHeight)) != NULL)
+		{
+			printx("---> New Width: %d, New Height: %d\n", NewWidth, NewHeight);
+			VERIFY(SelectObject(m_MemDC, m_hBmp) != NULL);
+			m_CurWidth = NewWidth;
+			m_CurHeight = NewHeight;
+			return TRUE;
+		}
+
+		return FALSE;
 	}
 
 	INLINE HDC GetMemDC() const { return m_MemDC; }
@@ -545,6 +654,7 @@ protected:
 
 	HDC     m_MemDC;
 	HBITMAP m_hOldBmp, m_hBmp;
+	UINT    m_CurWidth, m_CurHeight;
 
 #ifdef _DEBUG
 	HPEN   m_hOldPen;
@@ -556,11 +666,25 @@ protected:
 };
 
 
-class uiWndDrawer : public uiDrawer
+//#define DRAWER_NO_VTABLE_LOOKUP
+
+#ifdef DRAWER_NO_VTABLE_LOOKUP
+	//#define DRAWER_BASE_TYPE uiDrawerT<uiDrawerBase>
+	#define DRAWER_BASE_TYPE uiDrawerBase
+	#define OVERRIDE
+#else
+	#define DRAWER_BASE_TYPE uiDrawerT<uiDrawerVInterface>
+	typedef uiDrawerT<uiDrawerVInterface> uiDrawer;
+	#define uiDrawerInsType uiWndDrawer
+	#define OVERRIDE override
+#endif
+
+
+class uiWndDrawer : public DRAWER_BASE_TYPE
 {
 public:
 
-	enum { MAX_BACKBUFFER_COUNT = 3, };
+	enum { MAX_BACKBUFFER_COUNT = 1, };
 
 	uiWndDrawer()
 	:m_hWnd(NULL), m_PaintDC(NULL)
@@ -576,23 +700,29 @@ public:
 		ASSERT(m_hRgn == NULL);
 	}
 
-	BOOL Begin(void *pCtx) override;
-	void End(void *pCtx) override;
-
 	BOOL InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight);
-	void ResizeBackBuffer(UINT nWidth, UINT nHeight) override;
 
-	void FillRect(uiRect rect, UINT32 color) override;
-	void RoundRect(uiRect rect, UINT32 color, INT width, INT height) override;
-	void DrawEdge(uiRect &rect, UINT color) override;
-	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) override;
-	void DrawText(const TCHAR *pText, const uiRect &rect, UINT flag) override;
-	BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) override;
+	BOOL Begin(void *pCtx) OVERRIDE;
+	void End(void *pCtx) OVERRIDE;
+
+	void ResizeBackBuffer(UINT nWidth, UINT nHeight) OVERRIDE;
+
+	void FillRect(uiRect rect, UINT32 color) OVERRIDE;
+	void RoundRect(uiRect rect, UINT32 color, INT width, INT height) OVERRIDE;
+	void DrawEdge(uiRect& rect, UINT color) OVERRIDE;
+	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) OVERRIDE;
+	BOOL Text(const TCHAR *pText, const uiRect& rect, UINT flag, uiFont& Font) OVERRIDE;
+	BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) OVERRIDE;
+	
+	BOOL Text(const TCHAR* pText, const uiRect& rect, UINT flag)
+	{
+		return FALSE;
+	}
 
 
 protected:
 
-	void OnDestRectChanged(DEST_CHANGE_TYPE dct) override
+	void OnDestRectChanged(DEST_CHANGE_TYPE dct) OVERRIDE
 	{
 		if (dct == DEST_RESTORE)
 			return;
@@ -610,10 +740,12 @@ protected:
 	}
 
 	HWND m_hWnd;
-	HDC m_PaintDC;
+	HDC  m_PaintDC;
 
 	uiWndDC m_WndDrawDC;
-	HRGN m_hRgn;
+	HRGN    m_hRgn;
+
+	uiFont m_CurFont;
 
 	INT m_TotalBackBuffer, m_CurrentBackBufferIndex;
 	uiWndBackBuffer m_BackBuffer[MAX_BACKBUFFER_COUNT];
@@ -621,5 +753,11 @@ protected:
 
 
 };
+
+
+#ifdef DRAWER_NO_VTABLE_LOOKUP
+	typedef uiDrawerT<uiWndDrawer> uiDrawer;
+	typedef uiDrawer uiDrawerInsType;
+#endif
 
 

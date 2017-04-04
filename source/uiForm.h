@@ -133,14 +133,14 @@ public:
 		CAT_LEFT   = 0x01 << 2,
 		CAT_RIGHT  = 0x01 << 3,
 
-		// border
-		CAT_B_TOP    = 0x01 << 4,
-		CAT_B_BOTTOM = 0x01 << 5,
-		CAT_B_LEFT   = 0x01 << 6,
-		CAT_B_RIGHT  = 0x01 << 7,
+		CAT_DRAG_BAR_H = 0x01 << 4,
+		CAT_DRAG_BAR_V = 0x01 << 5,
 
-		CAT_DRAG_BAR_H = 0x01 << 8,
-		CAT_DRAG_BAR_V = 0x01 << 9,
+		// border
+		CAT_B_TOP    = 0x01 << 6,
+		CAT_B_BOTTOM = 0x01 << 7,
+		CAT_B_LEFT   = 0x01 << 8,
+		CAT_B_RIGHT  = 0x01 << 9,
 
 		CAT_ALL_DRF = CAT_TOP | CAT_BOTTOM | CAT_LEFT | CAT_RIGHT,
 	};
@@ -210,9 +210,6 @@ public:
 	void PopupMenu(INT x, INT y, uiMenu *pMenu);
 
 	virtual FORM_CLASS GetClass() const { return FC_BASE; }
-
-	virtual BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
-	virtual BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf) { ASSERT(0); return FALSE; }
 
 	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS); // fcX and fcY are in frame space.
 	virtual CLIENT_AREA_TYPE GetAreaType(INT csX, INT csY) { return CAT_CLIENT; }
@@ -411,9 +408,7 @@ protected:
 
 	uiWindow* GetBaseWnd() const
 	{
-		uiFormBase *pPlate = GetPlate();
-		if (pPlate == nullptr)
-			return m_pWnd;
+		const uiFormBase* pPlate = this;
 		for (; pPlate->GetPlate() != nullptr; pPlate = pPlate->GetPlate());
 		return pPlate->m_pWnd;
 	}

@@ -7,6 +7,7 @@
 #include "uiForm.h"
 #include "uiMsWin.h"
 #include "UnitTest.h"
+#include "uiApp.h"
 
 
 #define MAX_LOADSTRING 100
@@ -113,7 +114,7 @@ public:
 		printx("---> CTabFormContext1::OnPaint\n");
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 200, 0));
-		pDrawer->DrawText(_T("Context 1"), rect, DT_CENTER);
+		pDrawer->Text(_T("Context 1"), rect, DT_CENTER);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -145,7 +146,7 @@ public:
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(10, 125, 175));
-		pDrawer->DrawText(_T("Context 2"), rect, DT_CENTER);
+		pDrawer->Text(_T("Context 2"), rect, DT_CENTER);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -178,7 +179,7 @@ public:
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(199, 225, 175));
-		pDrawer->DrawText(_T("Context 3"), rect, DT_CENTER);
+		pDrawer->Text(_T("Context 3"), rect, DT_CENTER);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -273,21 +274,33 @@ public:
 	{
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 30, 100, 120, 30);
+		m_pButton2 = new uiButton;
+		m_pButton2->Create(this, 30, 140, 120, 30);
 
 		Bind(m_pButton->GetID());
+		Bind(m_pButton2->GetID());
 
-		TimerStart(555, 1000, -1, nullptr);
+		m_TimerHandle = TimerStart(555, 1000, -1, nullptr);
 
 		return TRUE;
 	}
 
 	void OnCommand(INT id, BOOL &bDone)
 	{
-		TimerStop(555);
+		if (id == m_pButton->GetID())
+		{
+			//	TimerStop(555);
+			m_TimerHandle = TimerStart(555, 2000, -1, nullptr);
+		}
+		else
+		{
+			VERIFY(TimerStop(m_TimerHandle, FALSE));
+		}
 	}
 	void OnTimer(stTimerInfo* ti)
 	{
-		printx("---> CTimerTestForm::OnTimer ID: %d\n", ti->id);
+		printx("---> CTimerTestForm::OnTimer ID: %d, Time stamp: %u\n", ti->id, GetTickCount());
+
 		if (ti->id == 0)
 			MoveByOffset(0, -20);
 		else if (ti->id == 1)
@@ -295,6 +308,8 @@ public:
 	}
 
 	uiButton *m_pButton, *m_pButton2;
+	UINT m_TimerHandle;
+
 
 };
 
@@ -689,10 +704,68 @@ void FontTest()
 
 }
 
+
+class CMyApp
+{
+public:
+
+	void Run();
+
+
+};
+
+//uiApp t;
+CMyApp GApp;
+
+
+void CMyApp::Run()
+{
+	FontTest();
+	InterfaceTest();
+
+	uiString a, b;
+	a = _T("Unicode string\n");
+
+	printx("sizeof std::shared_ptr<>: %d Bytes\n", sizeof std::shared_ptr<uiString>);
+	printx("sizeof uiSideDockableFrame: %d Bytes\n", sizeof uiSideDockableFrame);
+	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
+	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
+	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
+	printx("sizeof uiWindow: %d Bytes\n", sizeof uiWindow);
+	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
+	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
+
+
+	CMyForm* pForm = new CMyForm;
+	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
+
+	//	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
+
+	//	pForm = new CMyForm;
+	//	pForm->Create(nullptr, 150, 150, 600, 400);
+
+	//	pForm->Show(FSM_SHOW);
+	//	pForm->Move(1000, 680);
+
+	UnitTestMain();
+
+	uiMonitorEvent();
+
+	/*
+	MSG msg;
+	while (GetMessage(&msg, nullptr, 0, 0)) // Main message loop
+	{
+	if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
+	{
+	TranslateMessage(&msg);
+	DispatchMessage(&msg);
+	}
+	} //*/
+}
+
+
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
-	UTXLibraryInit();
-
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
@@ -709,48 +782,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	printx("Console initialized!\n");
 #endif
 
-	FontTest();
-	InterfaceTest();
 
+	UTXLibraryInit();
 
-	uiString a, b;
-	a = _T("Unicode string\n");
-	
-	printx("sizeof std::shared_ptr<>: %d Bytes\n", sizeof std::shared_ptr<uiString>);
-	printx("sizeof uiSideDockableFrame: %d Bytes\n", sizeof uiSideDockableFrame);
-	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);
-	printx("sizeof CSimpleList: %d Bytes\n", sizeof UTX::CSimpleList);
-	printx("sizeof std::vector<UINT>: %d Bytes\n", sizeof std::vector<UINT>);
-	printx("sizeof uiWindow: %d Bytes\n", sizeof uiWindow);
-	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
-	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
-
-
-	CMyForm* pForm = new CMyForm;
-	pForm->Create(nullptr, 150, 150, 600, 400, FCF_CENTER);
-
-//	pForm->Create(nullptr, 150, 150, 600, 400, FCF_INVISIBLE);
-
-//	pForm = new CMyForm;
-//	pForm->Create(nullptr, 150, 150, 600, 400);
-
-//	pForm->Show(FSM_SHOW);
-//	pForm->Move(1000, 680);
-
-	UnitTestMain();
-
-	uiMonitorEvent();
-
-/*
-	MSG msg;
-	while (GetMessage(&msg, nullptr, 0, 0)) // Main message loop
-	{
-		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-	} //*/
+	GApp.Run();
 
 	UTXLibraryEnd();
 

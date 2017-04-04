@@ -10,7 +10,7 @@
 #include "uiControl.h"
 
 
-#define DEFAULT_BACKBUFFER_COUNT 0
+#define DEFAULT_BACKBUFFER_COUNT 1
 
 
 BOOL uiMessageLookUp(UINT message);
@@ -206,7 +206,7 @@ protected:
 	UINT m_TotalWorkingTimer;
 	std::vector<stWndTimerInfo> m_TimerTable;
 
-	uiWndDrawer m_Drawer;
+	uiDrawerInsType m_Drawer;
 
 	bool m_bTrackMouseLeave = false;
 	bool m_bDragging = false;

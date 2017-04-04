@@ -511,7 +511,6 @@ void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 
 	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
-//	m_ClientRect.SetSize(nWidth, nHeight); // Must set the default size for the client rectangle.
 
 	OnCreate();
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
@@ -745,7 +744,7 @@ UINT uiFormBase::EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callb
 
 BOOL IFrameImp::SetTitleImp(uiFormBase* pForm, const uiString& str)
 {
-	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CBTitleChanged, const_cast<void*>((const void*)&str));
+	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CBTitleChanged, const_cast<uiString*>(&str));
 }
 
 BOOL IFrameImp::SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig)
@@ -1204,7 +1203,7 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 	pDrawer->FillRect(rect, color);
 //	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
-	pDrawer->DrawText(GetParent()->GetName(), rect, DT_CENTER);
+	pDrawer->Text(GetParent()->GetName(), rect, DT_CENTER);
 
 //	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
 
@@ -1690,7 +1689,7 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 		else
 			pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? m_ColorHover : m_ColorDefault);
 
-		pDrawer->DrawText(pPaneInfo->pForm->GetName(), tRect, DT_CENTER);
+		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, DT_CENTER);
 	}
 }
 

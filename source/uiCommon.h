@@ -209,24 +209,20 @@ class uiString
 {
 public:
 
-	uiString() :m_pStr(nullptr) {}
-	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, (UINT)_tcslen(pstrIn)); }
+	uiString() :m_pStr(nullptr), m_len(1) {}
+	uiString(const TCHAR* pstrIn) :m_pStr(nullptr) { StoreString(pstrIn, 0); }
 	uiString(const uiString& src) :m_pStr(nullptr) { StoreString(src.m_pStr, src.Length()); }
 
 	uiString(uiString&& SrcStr)
+	:m_pStr(SrcStr.m_pStr), m_len(SrcStr.m_len)
 	{
-		m_pStr = SrcStr.m_pStr;
-		m_len = SrcStr.m_len;
 		SrcStr.m_pStr = nullptr;
-		SrcStr.m_len = 0;
+		SrcStr.m_len = 1;
 	}
 	~uiString()
 	{
-		if (m_pStr != nullptr)
-		{
-			free(m_pStr);
-			m_pStr = nullptr; // Must reset now.
-		}
+		Release();
+		ASSERT(m_len == 1);
 	}
 
 	INT Format()
@@ -235,7 +231,7 @@ public:
 
 	uiString& MakeLower()
 	{
-		for (UINT i = 0; i < m_len; ++i)
+		for (UINT i = 0, tail = m_len - 1; i < tail; ++i)
 			if ('A' <= m_pStr[i] && m_pStr[i] <= 'Z')
 				m_pStr[i] += ('a' - 'A');
 		return *this;
@@ -261,26 +257,21 @@ public:
 	{
 		if (pStrIn == nullptr || *pStrIn == '\0')
 		{
-			if (m_pStr != nullptr)
-			{
-				free(m_pStr);
-				m_pStr = nullptr;
-			}
+			Release();
 			return;
 		}
+
 		if (lenIn == 0)
 			lenIn = (UINT)_tcslen(pStrIn);
+
 		if (m_pStr == nullptr)
-		{
-			m_len = lenIn + 1;
-			m_pStr = (TCHAR*)malloc(sizeof(TCHAR) * m_len);
-		}
+			m_pStr = (TCHAR*)malloc(sizeof(TCHAR) * (lenIn + 1));
 		else if (m_len != lenIn + 1)
-		{
 			m_pStr = (TCHAR*)realloc(m_pStr, sizeof(TCHAR) * (lenIn + 1));
-			assert(m_pStr != nullptr);
-			m_len = lenIn + 1;
-		}
+
+		m_len = lenIn + 1;
+
+		ASSERT(m_pStr != nullptr);
 		memcpy(m_pStr, pStrIn, sizeof(TCHAR) * lenIn);
 		m_pStr[lenIn] = '\0';
 	}
@@ -321,15 +312,26 @@ public:
 		return *this;
 	}
 
-	INLINE UINT Length() const { return (m_pStr == nullptr) ? 0 : m_len - 1; }
-	INLINE BOOL IsEmpty() const { return (m_len <= 1); }
+	INLINE UINT Length() const { return m_len - 1; }
+	INLINE BOOL IsEmpty() const { return (m_len == 1); }
 	operator const TCHAR*() const { return (m_pStr == nullptr) ? _T("") : m_pStr; }
 
 
 protected:
 
+	INLINE void Release()
+	{
+		if (m_pStr != nullptr)
+		{
+			free(m_pStr);
+			m_pStr = nullptr; // Must reset now.
+			m_len = 1;
+		}
+	}
+
+
 	TCHAR *m_pStr;
-	UINT  m_len; // Null-terminator is included. This is valid only when m_pStr != nullptr.
+	UINT  m_len; // Null-terminator is always included.
 
 
 };

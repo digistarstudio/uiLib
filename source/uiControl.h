@@ -22,9 +22,9 @@ public:
 		HMF_ALL  = 0xFFFFFFFF,
 	};
 
-	virtual BOOL OnCreate(uiControl* pCtrl) { DEBUG_CHECK(ShowWarnString); return TRUE; }
-	virtual void OnPaint(uiControl* pCtrl, uiDrawer* pDrawer) { DEBUG_CHECK(ShowWarnString); } // draw control frame
-	virtual void OnControlPaint(uiControl* pCtrl, uiDrawer* pDrawer, const uiRect& rect) { DEBUG_CHECK(ShowWarnString); }
+	virtual BOOL OnCreate(uiControl* pCtrl) { DEBUG_CHECK(ShowWarnString()); return TRUE; }
+	virtual void OnPaint(uiControl* pCtrl, uiDrawer* pDrawer) { DEBUG_CHECK(ShowWarnString()); } // draw control frame
+	virtual void OnControlPaint(uiControl* pCtrl, uiDrawer* pDrawer, const uiRect& rect) { DEBUG_CHECK(ShowWarnString()); }
 
 	virtual BOOL IsMethodHooked(HOOK_METHOD_FLAGS hmf) = 0;
 
@@ -83,7 +83,7 @@ public:
 
 	FORM_CLASS GetClass() const override { return FC_CONTROL; }
 
-	void OnPaint(uiDrawer* pDrawer) override final // draw frame if need.
+	void OnPaint(uiDrawer* pDrawer) override //final // draw frame if need.
 	{
 		IControlHooker *pICH = GetIControlHooker();
 		if (pICH != nullptr && pICH->IsMethodHooked(IControlHooker::HMF_ONPAINT))
@@ -297,6 +297,19 @@ public:
 		//	rect.Inflate(10, 10);
 	//	pDrawer->DrawText(GetName(), rect, );
 	}
+
+
+	void OnPaint(uiDrawer* pDrawer) override
+	{
+	//	pDrawer->Text();
+
+	}
+
+
+protected:
+
+	uiString m_Text;
+
 
 };
 

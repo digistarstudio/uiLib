@@ -31,6 +31,12 @@ UINT32 uiGetSysColor(INT index)
 	return color;
 }
 
+uiFont uiGetSysFont(SYSTEM_FONT_TYPE)
+{
+
+	return uiFont();
+}
+
 
 BOOL uiFont::Create(const TCHAR* pName, INT height, INT width)
 {
@@ -250,45 +256,26 @@ BOOL uiImage::GetInfo(stImageInfo& ImgInfo)
 }
 
 
-BOOL uiDrawer::PushDestRect(uiRect rect)
+BOOL uiWndDrawer::InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight)
 {
-	uiPoint pt = rect.GetLeftTop();
-	stRenderDestInfo RDInfo;
-	RDInfo.rect = m_RenderDestRect;
+	ASSERT(nCount <= MAX_BACKBUFFER_COUNT);
+	ASSERT(m_hWnd == NULL);
 
-	rect.Move(m_OriginX, m_OriginY);
-	m_RenderDestRect.IntersectWith(rect);
+	m_hWnd = hWnd;
+	HDC hDC = GetDC(hWnd);
+	ASSERT(hDC != NULL);
 
-	if (m_RenderDestRect.IsValidRect())
-	{
-		RDInfo.OriginX = m_OriginX;
-		RDInfo.OriginY = m_OriginY;
-		m_RectList.AddDataHead(RDInfo);
+	m_TotalBackBuffer = nCount;
+	for (; nCount; --nCount)
+		m_BackBuffer[nCount - 1].Init(hDC, nWidth, nHeight);
 
-		m_OriginX += pt.x;
-		m_OriginY += pt.y;
-		OnDestRectChanged(DEST_PUSH);
+	VERIFY(ReleaseDC(hWnd, hDC) == 1);
 
-		return TRUE;
-	}
+	m_nWidth = nWidth;
+	m_nHeight = nHeight;
 
-	m_RenderDestRect = RDInfo.rect;
-
-	return FALSE;
+	return TRUE;
 }
-
-void uiDrawer::PopDestRect()
-{
-	stRenderDestInfo RDInfo;
-	ListIndex index = m_RectList.GetHeadIndex();
-	m_RectList.GetAndRemove(index, RDInfo);
-
-	m_OriginX = RDInfo.OriginX;
-	m_OriginY = RDInfo.OriginY;
-	m_RenderDestRect = RDInfo.rect;
-	OnDestRectChanged(DEST_RESTORE);
-}
-
 
 BOOL uiWndDrawer::Begin(void *pCtx)
 {
@@ -336,7 +323,7 @@ void uiWndDrawer::End(void *pCtx)
 
 	if (m_TotalBackBuffer > 0)
 	{
-		BitBlt(m_PaintDC, 0, 0, m_nWidth, m_nHeight, m_WndDrawDC.GetDC(), 0, 0, SRCCOPY);
+		VERIFY(::BitBlt(m_PaintDC, 0, 0, m_nWidth, m_nHeight, m_WndDrawDC.GetDC(), 0, 0, SRCCOPY));
 		if (++m_CurrentBackBufferIndex == m_TotalBackBuffer)
 			m_CurrentBackBufferIndex = 0;
 	}
@@ -344,27 +331,6 @@ void uiWndDrawer::End(void *pCtx)
 	m_WndDrawDC.Detach();
 	EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
 	m_PaintDC = NULL;
-}
-
-BOOL uiWndDrawer::InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight)
-{
-	ASSERT(nCount <= MAX_BACKBUFFER_COUNT);
-	ASSERT(m_hWnd == NULL);
-
-	m_hWnd = hWnd;
-	HDC hDC = GetDC(hWnd);
-	ASSERT(hDC != NULL);
-
-	m_TotalBackBuffer = nCount;
-	for (; nCount; --nCount)
-		m_BackBuffer[nCount - 1].Init(hDC, nWidth, nHeight);
-
-	VERIFY(ReleaseDC(hWnd, hDC) == 1);
-
-	m_nWidth = nWidth;
-	m_nHeight = nHeight;
-
-	return TRUE;
 }
 
 void uiWndDrawer::ResizeBackBuffer(UINT nWidth, UINT nHeight)
@@ -418,33 +384,28 @@ void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWi
 //	::DrawLine(x, y,
 }
 
-void uiWndDrawer::DrawText(const TCHAR *pText, const uiRect &rect, UINT flag)
+BOOL uiWndDrawer::Text(const TCHAR *pText, const uiRect& rect, UINT flag, uiFont& Font)
 {
+	if (!Font.IsValid())
+		return FALSE;
+
 	uiRect temp = rect;
 	UpdateCoordinate(temp);
 
-	HDC hMemDC = m_WndDrawDC.GetDC();
-	SetBkMode(hMemDC, TRANSPARENT);
-	SetTextColor(hMemDC, RGB(128, 128, 128));
+	HDC hDestDC = m_WndDrawDC.GetDC();
+	SetBkMode(hDestDC, TRANSPARENT);
+	SetTextColor(hDestDC, RGB(128, 128, 128));
 
-	HFONT hFont, hOldFont;
-	// Retrieve a handle to the variable stock font.  
-	hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT); // DEFAULT_GUI_FONT SYSTEM_FONT
-/*
-	if (hOldFont = (HFONT)SelectObject(hMemDC, hFont))
+	if (Font != m_CurFont)
 	{
-		uiWndFont ftOld(hOldFont), ftSystem(hFont);
-		LOGFONT old, sys;
-		VERIFY(ftOld.GetLogFont(&old));
-		VERIFY(ftSystem.GetLogFont(&sys));
+		m_CurFont = Font;
+		VERIFY(SelectObject(hDestDC, Font.GetHandle()) != NULL);
+	}
 
+	//BOOL bRet = ::DrawText(hDestDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
+	BOOL bRet = ::TextOut(hDestDC, temp.Left, temp.Top, pText, _tcslen(pText));
 
-	//	::DrawText(hMemDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
-		::TextOut(hMemDC, temp.Left, temp.Top, pText, _tcslen(pText));
-		// Restore the original font.        
-		SelectObject(hMemDC, hOldFont);
-	} //*/
-
+	return bRet;
 }
 
 BOOL uiWndDrawer::DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags)
