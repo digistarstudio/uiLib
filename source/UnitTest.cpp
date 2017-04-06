@@ -5,6 +5,8 @@
 #include "uiDrawer.h"
 #include "UnitTest.h"
 #include "uiControl.h"
+#include "MsWinHelper.h"
+#include "uiMsWin.h"
 
 
 class uiCursorDrawForm : public uiForm
@@ -26,6 +28,8 @@ public:
 
 		uiImage::stImageInfo ii;
 		m_AniCursor.GetInfo(ii);
+
+
 
 	//	TimerStart(1, 1000 / m_ii.DispRate, -1, nullptr);
 		return TRUE;

@@ -3,61 +3,35 @@
 #pragma once
 
 
-//void* 
-
-//#define DEC_INT 
-//#define DECLARE_METHOD virtual
-
-
-class uiAppBase
-{
-	virtual INT Run() abstract;
-
-};
-
-
-template<typename T>
-class uiApp : public T
+class uiApp
 {
 public:
 
-	uiApp() {}
-	~uiApp() {}
+	uiApp() { ASSERT(pAppIns == nullptr); pAppIns = this; }
+	virtual ~uiApp() { ASSERT(pAppIns == this); pAppIns = nullptr; }
 
-	BOOL Init()
-	{
-		UTXLibraryInit();
-		return TRUE;
-	}
-	void Close()
-	{
-	}
+
+	BOOL Init(HINSTANCE hIns);
+	void Close();
+
+	virtual INT  InitApp() { return TRUE; }
+	virtual INT  ExitApp() { return 0; }
+	virtual void Run() = 0;
+
+	static uiApp* GetSingleton() { return pAppIns; }
 
 
 protected:
 
+	friend HINSTANCE uiGetAppIns();
+
+	static uiApp* pAppIns;
+	static HINSTANCE AppIns;
+
 
 };
 
 
-#ifdef NO_VTABLE_LOOKUP
-	#define APP_BASE_TYPE uiApp
-#else
-	#define APP_BASE_TYPE uiApp<uiAppBase>
-#endif
-
-
-class CMyTestApp : public APP_BASE_TYPE
-{
-	INT Run();
-};
-
-
-INLINE INT CMyTestApp::Run()
-{
-	return 0;
-}
-
-//CMyTestApp GMTA;
+INLINE HINSTANCE uiGetAppIns() { return uiApp::AppIns; }
 
 

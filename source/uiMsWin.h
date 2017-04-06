@@ -39,6 +39,27 @@ struct stWndTimerInfo
 };
 
 
+struct stDialogCreateParam
+{
+	stDialogCreateParam(uiFormBase* pFormIn, uiFormBase* pParentIn)
+	:pForm(pFormIn), pParent(pParentIn)
+	{
+	}
+
+	INLINE void Set(INT xIn, INT yIn, UINT cxIn, UINT cyIn, FORM_CREATION_FLAG fcfIn)
+	{
+		x = xIn; y = yIn; cx = cxIn; cy = cyIn;
+		fcf = fcfIn;
+	}
+
+	uiFormBase* pForm;
+	uiFormBase* pParent;
+	INT x, y;
+	UINT cx, cy;
+	FORM_CREATION_FLAG fcf;
+};
+
+
 class uiWindow
 {
 public:
@@ -56,6 +77,7 @@ public:
 	void OnFormHide(uiFormBase *pForm);
 
 	void CloseImp();
+	BOOL CloseDialogImp(INT_PTR ret);
 	BOOL MoveImp(INT scX, INT scY);
 	BOOL MoveByOffsetImp(INT x, INT y);
 	void MoveToCenter();
@@ -65,25 +87,25 @@ public:
 	void RedrawImp(const uiRect* pRect);
 	void ResizeImp(INT x, INT y);
 	void PostMsgHandler(UINT msg);
-	void FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect);
-	void RetrackMouseCheck(uiFormBase *pFormBase);
-	void UpdateCursor(uiFormBase *pForm, INT csX, INT csY);
+	void FormSizingCheck(uiFormBase* pForm, UINT nSide, uiRect* pRect);
+	void RetrackMouseCheck(uiFormBase* pFormBase);
+	void UpdateCursor(uiFormBase* pForm, INT csX, INT csY);
 
 	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
 	BOOL ReleaseMouseFocus(uiFormBase* pForm);
 
-	BOOL CaretShowImp(uiFormBase *pFormBase, INT x, INT y, INT width, INT height);
-	BOOL CaretHideImp(uiFormBase *pFormBase);
-	BOOL CaretMoveImp(uiFormBase *pFormBase, INT x, INT y);
-	BOOL CaretMoveByOffset(uiFormBase *pFormBase, INT OffsetX, INT OffsetY);
+	BOOL CaretShowImp(uiFormBase* pFormBase, INT x, INT y, INT width, INT height);
+	BOOL CaretHideImp(uiFormBase* pFormBase);
+	BOOL CaretMoveImp(uiFormBase* pFormBase, INT x, INT y);
+	BOOL CaretMoveByOffset(uiFormBase* pFormBase, INT OffsetX, INT OffsetY);
 
-	UINT TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx);
-	BOOL TimerClose(uiFormBase *pFormBase, UINT key, BOOL bByID);
+	UINT TimerAdd(uiFormBase* pFormBase, UINT id, UINT msElapsedTime, INT nRunCount, void* pCtx);
+	BOOL TimerClose(uiFormBase* pFormBase, UINT key, BOOL bByID);
 	void TimerRemoveAll(uiFormBase* const pFormBase);
 
 	void OnActivate(WPARAM wParam, LPARAM LParam);
 	BOOL OnClose();
-	BOOL OnCreate();
+	BOOL OnCreate(const uiRect* pRect);
 	void OnDestroy();
 	void OnKeyDown(INT iKey);
 	void OnKeyUp(INT iKey);
@@ -93,10 +115,10 @@ public:
 	void OnGetKBFocus(HWND hOldFocusWnd);
 	void OnLoseKBFocus();
 	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
-	void OnSizing(INT fwSide, RECT *pRect);
+	void OnSizing(INT fwSide, RECT* pRect);
 	void OnTimer(const UINT_PTR TimerID, LPARAM lParam);
 
-	LRESULT OnNCHitTest(INT x, INT y);
+	LRESULT OnNCHitTest(INT scX, INT scY);
 
 	BOOL DragSizingEventCheck(INT x, INT y);
 	BOOL DragEventForMouseBtnUp(INT wcX, INT wcY);
@@ -115,6 +137,8 @@ public:
 
 
 	INLINE void RetrackMouse() { if (!m_bDragging) bRetrackMouse = true; }
+	INLINE BOOL IsDialog() const { return bIsDialog; }
+	INLINE void SetAsDialog() { ASSERT(!bIsDialog); bIsDialog = true; }
 
 	INLINE HWND GetHandle() const { return m_Handle; }
 	INLINE void SetHandle(HWND hWnd) { m_Handle = hWnd; }
@@ -214,6 +238,7 @@ protected:
 	bool bRetrackMouse = false;
 	bool bMouseFocusCaptured = false;
 	bool bKBFocusCaptured = false;
+	bool bIsDialog = false;
 
 
 };
@@ -340,8 +365,15 @@ protected:
 };
 
 
+struct stMsgProcRetInfo
+{
+	stMsgProcRetInfo() :bProcessed(FALSE), ret(0) {}
+	BOOL    bProcessed;
+	LRESULT ret;
+};
+
+
 uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
-
-
+void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 

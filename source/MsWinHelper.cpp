@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "uiCommon.h"
 #include "MsWinHelper.h"
+#include "Resource.h"
 
 
 HCURSOR WINAPI fnLoader(HCURSOR, LPCWSTR, DWORD, DWORD*, DWORD*);
@@ -85,6 +86,144 @@ BOOL SaveResourceToTempFile(uiString& FullPath, const TCHAR* SaveName, UINT ResI
 	}
 
 	return FALSE;
+}
+
+INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	case WM_INITDIALOG:
+		printx("---> DialogProc:: WM_INITDIALOG (ID: %p)\n", hDlg);
+		return FALSE;
+		break;
+
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDOK)
+			EndDialog(hDlg, 0);
+		break;
+	}
+
+	/*
+	stHandlerRetInfo rInfo;
+	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+	if (rInfo.bProcessed)
+	return rInfo.ret;
+	*/
+
+	return FALSE;
+}
+
+LPWORD lpwAlign(LPWORD lpIn)
+{
+	ULONG ul;
+	ul = (ULONG)lpIn;
+	ul++;
+	ul >>= 1;
+	ul <<= 1;
+	return (LPWORD)ul;
+}
+
+#define ID_HELP   150
+#define ID_TEXT   200
+
+
+
+
+LRESULT CreateDialogHelper(HINSTANCE hIns, HWND hParent)
+{
+	HGLOBAL hMem;
+	LPDLGTEMPLATE lpdt;
+	LPDLGITEMTEMPLATE lpdit;
+	LPWORD lpw;
+	LPWSTR lpwsz;
+	LRESULT ret;
+//	HWND hRet;
+	int nchar;
+
+	hMem = GlobalAlloc(GMEM_ZEROINIT, 1024);
+	if (!hMem)
+		return -1;
+
+	lpdt = (LPDLGTEMPLATE)GlobalLock(hMem);
+
+	// Define a dialog box.
+
+	lpdt->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION;
+	lpdt->cdit = 3;         // Number of controls
+	lpdt->x = 10;  lpdt->y = 10;
+	lpdt->cx = 100; lpdt->cy = 100;
+
+	lpw = (LPWORD)(lpdt + 1);
+	*lpw++ = 0;             // No menu
+	*lpw++ = 0;             // Predefined dialog box class (by default)
+
+	lpwsz = (LPWSTR)lpw;
+	nchar = 1 + MultiByteToWideChar(CP_ACP, 0, "My Dialog", -1, lpwsz, 50);
+	lpw += nchar;
+
+	//-----------------------
+	// Define an OK button.
+	//-----------------------
+	lpw = lpwAlign(lpw);    // Align DLGITEMTEMPLATE on DWORD boundary
+	lpdit = (LPDLGITEMTEMPLATE)lpw;
+	lpdit->x = 10; lpdit->y = 70;
+	lpdit->cx = 80; lpdit->cy = 20;
+	lpdit->id = IDOK;       // OK button identifier
+	lpdit->style = WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON;
+
+	lpw = (LPWORD)(lpdit + 1);
+	*lpw++ = 0xFFFF;
+	*lpw++ = 0x0080;        // Button class
+
+	lpwsz = (LPWSTR)lpw;
+	nchar = 1 + MultiByteToWideChar(CP_ACP, 0, "OK", -1, lpwsz, 50);
+	lpw += nchar;
+	*lpw++ = 0;             // No creation data
+
+	//-----------------------
+	// Define a Help button.
+	//-----------------------
+	lpw = lpwAlign(lpw);    // Align DLGITEMTEMPLATE on DWORD boundary
+	lpdit = (LPDLGITEMTEMPLATE)lpw;
+	lpdit->x = 55; lpdit->y = 10;
+	lpdit->cx = 40; lpdit->cy = 20;
+	lpdit->id = ID_HELP;    // Help button identifier
+	lpdit->style = WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON;
+
+	lpw = (LPWORD)(lpdit + 1);
+	*lpw++ = 0xFFFF;
+	*lpw++ = 0x0080;        // Button class atom
+
+	lpwsz = (LPWSTR)lpw;
+	nchar = 1 + MultiByteToWideChar(CP_ACP, 0, "Help", -1, lpwsz, 50);
+	lpw += nchar;
+	*lpw++ = 0;             // No creation data
+
+	//-----------------------
+	// Define a static text control.
+	//-----------------------
+	lpw = lpwAlign(lpw);    // Align DLGITEMTEMPLATE on DWORD boundary
+	lpdit = (LPDLGITEMTEMPLATE)lpw;
+	lpdit->x = 10; lpdit->y = 10;
+	lpdit->cx = 40; lpdit->cy = 20;
+	lpdit->id = ID_TEXT;    // Text identifier
+	lpdit->style = WS_CHILD | WS_VISIBLE | SS_LEFT;
+
+	lpw = (LPWORD)(lpdit + 1);
+	*lpw++ = 0xFFFF;
+	*lpw++ = 0x0082;        // Static class
+
+	WCHAR buff[] = L"message!";
+	WCHAR *lpszMessage = buff;
+	for (lpwsz = (LPWSTR)lpw; *lpwsz++ = (WCHAR)*lpszMessage++;);
+	lpw = (LPWORD)lpwsz;
+	*lpw++ = 0;             // No creation data
+
+	GlobalUnlock(hMem);
+	ret = DialogBoxIndirect(hIns, (LPDLGTEMPLATE)hMem, hParent, (DLGPROC)DialogProc); // Modal
+	GlobalFree(hMem);
+
+	return ret;
 }
 
 

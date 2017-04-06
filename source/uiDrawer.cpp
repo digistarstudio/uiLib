@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "uiDrawer.h"
 #include "MsWinHelper.h"
+#include "uiApp.h"
 
 
 IMPLEMENT_WIN_HANDLE_TYPE(winFontHandleType)
@@ -31,10 +32,34 @@ UINT32 uiGetSysColor(INT index)
 	return color;
 }
 
-uiFont uiGetSysFont(SYSTEM_FONT_TYPE)
-{
 
-	return uiFont();
+uiFont GSystemFont[SFT_TOTAL];
+
+void InitSystemFont()
+{
+	NONCLIENTMETRICS ncm;
+	ZeroMemory(&ncm, sizeof(ncm));
+	ncm.cbSize = sizeof(ncm);
+	if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, 0, &ncm, 0) == 0)
+	{
+		printx("ec: %d\n", GetLastError());
+		return;
+	}
+
+	VERIFY(GSystemFont[SFT_CAPTION].Create(ncm.lfCaptionFont));
+	VERIFY(GSystemFont[SFT_SM_CAPTION].Create(ncm.lfSmCaptionFont));
+	VERIFY(GSystemFont[SFT_MENU].Create(ncm.lfMenuFont));
+	VERIFY(GSystemFont[SFT_STATUS].Create(ncm.lfStatusFont));
+	VERIFY(GSystemFont[SFT_MESSAGE].Create(ncm.lfMessageFont));
+}
+
+void ReleaseSystemFont()
+{
+	for (INT i = 0; i < SFT_TOTAL; ++i)
+	{
+		GSystemFont[i].Release();
+		ASSERT(!GSystemFont[i].IsValid());
+	}
 }
 
 
@@ -48,12 +73,17 @@ BOOL uiFont::Create(const TCHAR* pName, INT height, INT width)
 		return FALSE;
 	}
 
-	LOGFONT lg = { 0 };
-	lg.lfWidth = width;
-	lg.lfHeight = height;
-	str.CopyTo(lg.lfFaceName, _countof(lg.lfFaceName));
+	LOGFONT lf = { 0 };
+	lf.lfWidth = width;
+	lf.lfHeight = height;
+	str.CopyTo(lf.lfFaceName, _countof(lf.lfFaceName));
 
-	size_t key = HashState(&lg);
+	return Create(lf);
+}
+
+BOOL uiFont::Create(const LOGFONT& logfont)
+{
+	size_t key = HashState(&logfont);
 	auto it = winFontHandleType::HandleMap.find(key);
 	if (it != winFontHandleType::HandleMap.end())
 	{
@@ -62,7 +92,7 @@ BOOL uiFont::Create(const TCHAR* pName, INT height, INT width)
 		ASSERT(0); // Only single thread is supported.
 	}
 
-	HANDLE hFont = CreateFontIndirect(&lg);
+	HANDLE hFont = CreateFontIndirect(&logfont);
 	if (hFont == NULL)
 	{
 		printx("CreateFontIndirect failed! ec: %d\n", GetLastError());
@@ -85,7 +115,7 @@ BOOL uiFont::Create(const TCHAR* pName, INT height, INT width)
 
 BOOL uiImage::LoadCursorRes(UINT ResID, const TCHAR* ResType, HINSTANCE hModule)
 {
-	stImageSourceInfo isi = { (hModule == NULL) ? GetModuleHandle(NULL) : hModule, ResID };
+	stImageSourceInfo isi = { (hModule == NULL) ? uiGetAppIns() : hModule, ResID };
 	const size_t Key = HashState(&isi);
 
 	auto it = stImgHandleWrapper::KeyHandleMap.find(Key);
@@ -132,7 +162,7 @@ BOOL uiImage::LoadCursorRes(UINT ResID, const TCHAR* ResType, HINSTANCE hModule)
 
 BOOL uiImage::LoadIconRes(UINT ResID, HINSTANCE hModule)
 {
-	stImageSourceInfo isi = { (hModule == NULL) ? GetModuleHandle(NULL) : hModule, ResID };
+	stImageSourceInfo isi = { (hModule == NULL) ? uiGetAppIns() : hModule, ResID };
 	const size_t Key = HashState(&isi);
 
 	auto it = stImgHandleWrapper::KeyHandleMap.find(Key);
@@ -271,13 +301,16 @@ BOOL uiWndDrawer::InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeig
 
 	VERIFY(ReleaseDC(hWnd, hDC) == 1);
 
+	m_hMemDC = ::CreateCompatibleDC(NULL);
+	m_hOldBmp = (HBITMAP)::GetCurrentObject(m_hMemDC, OBJ_BITMAP);
+
 	m_nWidth = nWidth;
 	m_nHeight = nHeight;
 
 	return TRUE;
 }
 
-BOOL uiWndDrawer::Begin(void *pCtx)
+BOOL uiWndDrawer::Begin(void* pCtx)
 {
 #ifdef _DEBUG
 	RECT rect;
@@ -293,7 +326,7 @@ BOOL uiWndDrawer::Begin(void *pCtx)
 	ASSERT(m_RectList.GetCounts() == 0);
 	ASSERT(m_PaintDC == NULL);
 
-	PAINTSTRUCT *ps = (PAINTSTRUCT*)pCtx;
+	PAINTSTRUCT* ps = (PAINTSTRUCT*)pCtx;
 	if ((m_PaintDC = BeginPaint(m_hWnd, ps)) == NULL)
 		return FALSE;
 
@@ -310,7 +343,7 @@ BOOL uiWndDrawer::Begin(void *pCtx)
 	return TRUE;
 }
 
-void uiWndDrawer::End(void *pCtx)
+void uiWndDrawer::End(void* pCtx)
 {
 	ASSERT(m_OriginX == 0 && m_OriginY == 0);
 
@@ -328,7 +361,9 @@ void uiWndDrawer::End(void *pCtx)
 			m_CurrentBackBufferIndex = 0;
 	}
 
+	m_CurFont.Release();
 	m_WndDrawDC.Detach();
+	VERIFY(::SelectObject(m_hMemDC, m_hOldBmp) != NULL);
 	EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
 	m_PaintDC = NULL;
 }
@@ -384,7 +419,7 @@ void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWi
 //	::DrawLine(x, y,
 }
 
-BOOL uiWndDrawer::Text(const TCHAR *pText, const uiRect& rect, UINT flag, uiFont& Font)
+BOOL uiWndDrawer::Text(const TCHAR* pText, const uiRect& rect, UINT flag, const uiFont& Font)
 {
 	if (!Font.IsValid())
 		return FALSE;
@@ -394,12 +429,12 @@ BOOL uiWndDrawer::Text(const TCHAR *pText, const uiRect& rect, UINT flag, uiFont
 
 	HDC hDestDC = m_WndDrawDC.GetDC();
 	SetBkMode(hDestDC, TRANSPARENT);
-	SetTextColor(hDestDC, RGB(128, 128, 128));
+	SetTextColor(hDestDC, RGB(0, 0, 0));
 
 	if (Font != m_CurFont)
 	{
 		m_CurFont = Font;
-		VERIFY(SelectObject(hDestDC, Font.GetHandle()) != NULL);
+		VERIFY(::SelectObject(hDestDC, Font.GetHandle()) != NULL);
 	}
 
 	//BOOL bRet = ::DrawText(hDestDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
@@ -419,8 +454,8 @@ BOOL uiWndDrawer::DrawImage(const uiImage& img, INT x, INT y, INT width, INT hei
 	switch (wit)
 	{
 	case WIT_BMP:
-		if (bRet = m_WndDrawDC.SelectBmp(m_PaintDC, (HBITMAP)img.GetHandle()))
-			m_WndDrawDC.BitBlt(x, y, width, height, 0, 0, NOTSRCCOPY);
+		if(bRet = (::SelectObject(m_hMemDC, img.GetHandle()) != NULL))
+			bRet = m_WndDrawDC.BitBlt(m_hMemDC, x, y, width, height, 0, 0, NOTSRCCOPY);
 		break;
 
 	case WIT_CURSOR:

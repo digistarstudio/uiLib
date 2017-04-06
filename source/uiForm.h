@@ -12,6 +12,8 @@ class uiButton;
 class uiFormBase;
 class uiWindow;
 struct uiFormStyle;
+struct stMsgProcRetInfo;
+struct stDialogCreateParam;
 
 
 BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y); // Declare this for inline function.
@@ -33,6 +35,7 @@ enum FORM_SHOW_MODE
 enum UI_WINDOW_TYPE
 {
 	UWT_NORMAL,
+	UWT_DIALOG,
 	UWT_TOOL,
 	UWT_MENU,
 };
@@ -157,6 +160,8 @@ public:
 		FBF_MOUSE_HOVER   = 0x01 << 5,
 		FBF_OWN_CARET     = 0x01 << 6,
 		FBF_SIDE_DOCKED   = 0x01 << 7,
+
+		FBF_MODAL_MODE    = 0x01 << 8,
 	};
 
 	struct stFormMoveInfo
@@ -183,11 +188,13 @@ public:
 	uiFormBase();
 	virtual ~uiFormBase();
 
-//	BOOL Create(uiFormBase *parent, const RECT& rect, FORM_CREATION_FLAG cf);
-	BOOL Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf = FCF_NONE);
+//	BOOL Create(uiFormBase* parent, const RECT& rect, FORM_CREATION_FLAG cf);
+	BOOL Create(uiFormBase* parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf = FCF_NONE);
+	INT_PTR ModalDialog(uiFormBase* pParent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf = FCF_CENTER);
 
 	void Bind(UINT CmdID);
 	void Close();
+	BOOL CloseDialog(INT_PTR iResult);
 	void DePlate();
 	void Move(INT x, INT y);
 	void MoveToCenter();
@@ -197,8 +204,8 @@ public:
 	UINT TimerStart(UINT id, UINT msElapsedTime, INT nRundCount, void* pCtx); // Return timer handle.
 	BOOL TimerStop(UINT key, BOOL bByID = TRUE);
 
-	void RedrawForm(const uiRect *pUpdateRect = nullptr);
-	void RedrawFrame(const uiRect *pUpdateRect = nullptr);
+	void RedrawForm(const uiRect* pUpdateRect = nullptr);
+	void RedrawFrame(const uiRect* pUpdateRect = nullptr);
 
 	uiFormBase* SetCapture();
 	BOOL ReleaseCapture();
@@ -424,7 +431,8 @@ private:
 //	friend uiFormBase* FindByPosImp(uiFormBase *pForm, INT x, INT y);
 	friend void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingBarWidth, uiRect &RectPlate, uiFormBase *pDocking, uiFormBase *pPlate);
 	friend uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
-	friend LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+	friend INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP);
+	friend void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 	friend class uiSideDockableFrame;
 	friend class uiForm;

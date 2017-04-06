@@ -110,6 +110,20 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	return bResult;
 }
 
+INT_PTR uiFormBase::ModalDialog(uiFormBase* pParent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf)
+{
+	const FORM_CREATION_FLAG mask = FCF_CENTER;
+	fcf &= mask;
+
+	stDialogCreateParam DCP(this, pParent);
+	DCP.Set(x, y, nWidth, nHeight, fcf);
+	FBSetFlag(FBF_MODAL_MODE);
+
+	INT_PTR iRet = CreateModalDialog(&DCP);
+
+	return iRet;
+}
+
 void uiFormBase::Bind(UINT CmdID)
 {
 #ifdef _DEBUG
@@ -146,6 +160,16 @@ void uiFormBase::Close()
 		if (pWnd != nullptr)
 			pWnd->CloseImp();
 	}
+}
+
+BOOL uiFormBase::CloseDialog(INT_PTR iResult)
+{
+	if (!IsRootForm() || !m_pWnd->IsDialog())
+	{
+		ASSERT(0);
+		return -1;
+	}
+	return m_pWnd->CloseDialogImp(iResult);
 }
 
 void uiFormBase::DePlate()
@@ -291,7 +315,7 @@ BOOL uiFormBase::TimerStop(UINT key, BOOL bByID)
 	return GetBaseWnd()->TimerClose(this, key, bByID);
 }
 
-void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
+void uiFormBase::RedrawForm(const uiRect* pUpdateRect)
 {
 	if (!IsVisible())
 		return;
@@ -312,7 +336,7 @@ void uiFormBase::RedrawForm(const uiRect *pUpdateRect)
 		GetBaseWnd()->RedrawImp(&dest);
 }
 
-void uiFormBase::RedrawFrame(const uiRect *pUpdateRect)
+void uiFormBase::RedrawFrame(const uiRect* pUpdateRect)
 {
 	if (!IsVisible())
 		return;
@@ -555,6 +579,9 @@ void uiFormBase::EntryOnDestroy(uiWindow *pWnd)
 
 	OnDestroy();
 	pWnd->OnFormDestroy(this);
+
+	if (FBTestFlag(FBF_MODAL_MODE))
+		return;
 
 	delete this;
 }
@@ -947,6 +974,17 @@ BOOL uiSideDockableFrame::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
 {
 	ASSERT(!pDockingForm->IsSideDocked());
+	ASSERT(pDockingForm->GetParent() == this);
+
+	if (!FBTestFlag(FBF_CREATED | FBF_CREATING))
+		return FALSE;
+
+	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
+	pDockingForm->m_DockFlag = fdf;
+	m_SideDockedFormList.push_back(pDockingForm);
+
+	if (IsCreating())
+		return TRUE;
 
 	const uiRect& ClientRect = GetClientRectFS();
 	uiRect rect = ClientRect;
@@ -960,27 +998,25 @@ BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 		if (fdf & FDF_AUTO_SIZE)
 			pDockingForm->Size(rect.Width(), -1);
 		break;
+
 	case FDF_BOTTOM:
 		rect.Inflate(0, 0, 0, -pDockingForm->m_FrameRect.Height());
 		if (fdf & FDF_AUTO_SIZE)
 			pDockingForm->Size(rect.Width(), -1);
 		break;
+
 	case FDF_LEFT:
 		rect.Inflate(-pDockingForm->m_FrameRect.Width(), 0, 0, 0);
 		if (fdf & FDF_AUTO_SIZE)
 			pDockingForm->Size(-1, rect.Height());
 		break;
+
 	case FDF_RIGHT:
 		rect.Inflate(0, 0, -pDockingForm->m_FrameRect.Width(), 0);
 		if (fdf & FDF_AUTO_SIZE)
 			pDockingForm->Size(-1, rect.Height());
 		break;
 	}
-
-	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
-	pDockingForm->m_DockFlag = fdf;
-	ASSERT(pDockingForm->GetParent() == this);
-	m_SideDockedFormList.push_back(pDockingForm);
 
 	SetClientRect(rect);
 	RedrawForm();
@@ -1203,7 +1239,8 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 	pDrawer->FillRect(rect, color);
 //	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
-	pDrawer->Text(GetParent()->GetName(), rect, DT_CENTER);
+	const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
+	pDrawer->Text(GetParent()->GetName(), rect, DT_CENTER, f);
 
 //	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
 
@@ -1689,7 +1726,8 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 		else
 			pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? m_ColorHover : m_ColorDefault);
 
-		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, DT_CENTER);
+		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
+		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, DT_CENTER, f);
 	}
 }
 

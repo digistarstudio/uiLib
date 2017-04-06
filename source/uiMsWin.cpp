@@ -2,7 +2,8 @@
 
 #include "stdafx.h"
 #include "uiMsWin.h"
-
+#include "uiApp.h"
+#include "MsWinHelper.h"
 #include <Windowsx.h>
 
 
@@ -124,14 +125,16 @@ static INLINE uiWindow* uiWindowGet(HWND hWnd)
 #define MOUSE_KEY_UP(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnUp(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
 #define MOUSE_KEY_DBCLK(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnDbClk(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
 
-static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+
+void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	uiPoint pt;
-	LRESULT lRet = 0;
-	BOOL bProcessed = FALSE;
+	BOOL& bProcessed = ret.bProcessed;
+	LRESULT& lRet = ret.ret;
 	uiWindow *pWnd = nullptr;
 	uiFormBase *pForm;
+
 	MSG_TRACE(hWnd, message, wParam, lParam);
+	ASSERT(!bProcessed && lRet == 0);
 
 	switch (message)
 	{
@@ -140,7 +143,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		pWnd->SetHandle(hWnd);
 		WndAddMap(hWnd, pWnd);
 		::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWnd);
-		lRet = pWnd->OnCreate();
+		RECT rect;
+		::GetWindowRect(hWnd, &rect);
+		lRet = pWnd->OnCreate((uiRect*)&rect);
 		bProcessed = TRUE;
 		break;
 
@@ -151,7 +156,8 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 			PostQuitMessage(0);
 		pWnd->SetHandle(NULL);
 		delete pWnd;
-		return 0;
+		bProcessed = TRUE;
+		return;
 
 	case WM_MOVE:
 	//	LogWndMsg("Msg: WM_MOVE Type:%d X:%d Y:%d\n", wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -204,18 +210,15 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 		LogWndMsg("Msg: WM_ACTIVATEAPP 0x%p 0x%p\n", wParam, lParam);
 		break;
 
-	//case WM_SETCURSOR: // Just set hCursor in struct WNDCLASSEXW to NULL.
+	case WM_SETCURSOR: // Just set hCursor in struct WNDCLASSEXW to NULL.
 	//	LogWndMsg("Msg: WM_SETCURSOR\n");
-	//	lRet = bProcessed = TRUE;
-	//	break;
+	//	lRet = bProcessed = TRUE; // Must let DefWindowProc handle this, or cause problem when creating modal dialog.
+		break;
 
 	case WM_NCHITTEST:
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		pWnd = uiWindowGet(hWnd);
-		pt.x = GET_X_LPARAM(lParam); pt.y = GET_Y_LPARAM(lParam);
-		pWnd->ScreenToClient(pt.x, pt.y);
-	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", pt.x, pt.y);
-		lRet = pWnd->OnNCHitTest(pt.x, pt.y);
+		lRet = pWnd->OnNCHitTest(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		pWnd = nullptr;
 		bProcessed = TRUE;
 		break;
@@ -326,17 +329,75 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 	if (pWnd != nullptr)
 		pWnd->PostMsgHandler(message);
-	if (bProcessed)
-		return lRet;
+}
+
+
+static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	stMsgProcRetInfo rInfo;
+	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+	if (rInfo.bProcessed)
+		return rInfo.ret;
 
 	return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible)
+BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
+{
+	uiFormBase* pForm = pDCP->pForm;
+	uiWindow* pWnd = new uiWindow(pForm);
+	if (pWnd == nullptr)
+		return FALSE;
+
+	pForm->SetWindow(pWnd);
+	pWnd->SetAsDialog();
+
+	pWnd->SetHandle(hDlg);
+	WndAddMap(hDlg, pWnd);
+	::SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pWnd);
+
+	uiRect rect;
+	pWnd->GetWindowRect(rect);
+	if (pWnd->OnCreate(&rect) == -1)
+		return FALSE;
+
+	// Simulate normal window.
+	pWnd->OnSize(0, rect.Width(), rect.Height());
+	pWnd->OnMove(rect.Left, rect.Top);
+
+	pForm->EntryOnCreate(TRUE, rect.Width(), rect.Height());
+
+	return TRUE;
+}
+
+static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	case WM_INITDIALOG:
+		printx("---> DialogProc() Msg: WM_INITDIALOG, HWND: %p\n", hDlg);
+		if (!OnInitDialog((stDialogCreateParam*)lParam, hDlg))
+			EndDialog(hDlg, -1);
+		return FALSE;
+	}
+
+	stMsgProcRetInfo rInfo;
+	uiMsgProc(rInfo, hDlg, uMsg, wParam, lParam);
+
+	if (rInfo.bProcessed)
+	{
+		SetWindowLong(hDlg, DWL_MSGRESULT, rInfo.ret);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible)
 {
 	static BOOL bRegistered = FALSE;
 	const TCHAR *pWndClass = _T("WndClass");
-	HINSTANCE hInstance = GetModuleHandle(NULL);
+	HINSTANCE hInstance = uiGetAppIns();
 
 	if (!bRegistered)
 	{
@@ -392,14 +453,63 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase
 	return nullptr;
 }
 
+INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
+{
+//*
+	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATE)); // Must use protected system memory.
+	if (!hMem)
+		return -1;
 
-BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y)
+	LPDLGTEMPLATE pDlgTemp = (LPDLGTEMPLATE)GlobalLock(hMem);
+	//pDlgTemp->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION; // Define a dialog box.
+	pDlgTemp->style = WS_POPUP;
+	pDlgTemp->dwExtendedStyle = WS_EX_LTRREADING;
+	pDlgTemp->cdit = 0; // Number of controls
+	pDlgTemp->x = 100;
+	pDlgTemp->y = 100;
+	pDlgTemp->cx = 250;
+	pDlgTemp->cy = 100;
+	GlobalUnlock(hMem);
+
+	HWND hParentWnd = (pDCP->pParent != nullptr) ? pDCP->pParent->GetBaseWnd()->GetHandle() : NULL;
+	LPARAM lParam = (LPARAM)const_cast<stDialogCreateParam*>(pDCP);
+	INT_PTR ret = DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)hMem, hParentWnd, DialogProc, lParam);
+	//printx("ec: %d\n", GetLastError());
+	GlobalFree(hMem);
+/*/
+
+	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATEEX2)); // Must use protected system memory.
+	if (!hMem)
+		return -1;
+
+	DLGTEMPLATEEX2* pDlgTemp = (DLGTEMPLATEEX2*)GlobalLock(hMem);
+	//pDlgTemp->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION; // Define a dialog box.
+	pDlgTemp->style = WS_POPUP;
+	pDlgTemp->cDlgItems = 0; // Number of controls
+	pDlgTemp->x = 100;
+	pDlgTemp->y = 100;
+	pDlgTemp->cx = 250;
+	pDlgTemp->cy = 100;
+	GlobalUnlock(hMem);
+
+	HWND hParentWnd = (pDCP->pParent != nullptr) ? pDCP->pParent->GetBaseWnd()->GetHandle() : NULL;
+	LPARAM lParam = (LPARAM)const_cast<stDialogCreateParam*>(pDCP);
+	INT_PTR ret = DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)hMem, hParentWnd, DialogProc, lParam);
+	printx("ec: %d\n", GetLastError());
+	GlobalFree(hMem);
+
+//*/
+	return ret;
+}
+
+
+BOOL WndClientToScreen(uiWindow* pWnd, INT& x, INT& y)
 {
 	pWnd->ClientToScreen(x, y);
 	return TRUE;
 }
 
-BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id)
+BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT id)
 {
 	BOOL bResult = (pWnd->PostMessage(WM_CTRL_MSG, (WPARAM)pSrc, id) != 0);
 	VERIFY(bResult);
@@ -469,8 +579,19 @@ void uiWindow::CloseImp()
 {
 //	TrackMouseLeave(FALSE);
 //	::DestroyWindow(m_Handle); // Don't call this here.
-	::PostMessage(m_Handle, WM_CLOSE, NULL, NULL);
-//	PostMessage(m_Handle, WM_DESTROY, NULL, NULL); // This won't work for tool windows.
+
+	if (IsDialog())
+		::EndDialog(m_Handle, 0);
+	else
+		::PostMessage(m_Handle, WM_CLOSE, NULL, NULL);
+
+//	::PostMessage(m_Handle, WM_DESTROY, NULL, NULL); // This won't work for tool windows.
+}
+
+BOOL uiWindow::CloseDialogImp(INT_PTR ret)
+{
+	ASSERT(IsDialog());
+	return ::EndDialog(m_Handle, ret);
 }
 
 BOOL uiWindow::MoveImp(INT scX, INT scY)
@@ -665,14 +786,14 @@ void uiWindow::PostMsgHandler(UINT msg)
 			//	printx("Leave tracking: %d\n", TrackCount);
 		} while (bRetrackMouse);
 
-		ASSERT(msg != WM_PAINT); // Can't send redraw command while dealing with this message.
+		ASSERT(msg != WM_PAINT); // Can't send redraw command when dealing with this message.
 	}
 
 	if (bUpdateCursor)
 		UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 }
 
-void uiWindow::FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect)
+void uiWindow::FormSizingCheck(uiFormBase* pForm, UINT nSide, uiRect *pRect)
 {
 	uiSize si = pForm->GetMinSize();
 
@@ -692,7 +813,7 @@ void uiWindow::FormSizingCheck(uiFormBase *pForm, UINT nSide, uiRect *pRect)
 	}
 }
 
-void uiWindow::RetrackMouseCheck(uiFormBase *pFormBase) // For form size and move function.
+void uiWindow::RetrackMouseCheck(uiFormBase* pFormBase) // For form size and move function.
 {
 	if (bRetrackMouse || m_bDragging || m_pHoverForm == nullptr)
 		return;
@@ -994,12 +1115,13 @@ BOOL uiWindow::OnClose()
 	return FALSE;
 }
 
-BOOL uiWindow::OnCreate()
+BOOL uiWindow::OnCreate(const uiRect* pRect)
 {
-	uiRect rect;
-	GetClientRect(rect);
-	if (m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, rect.Width(), rect.Height()))
+	//printx("---> uiWindow::OnCreate\n");
+
+	if (m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, pRect->Width(), pRect->Height()))
 		return 0;
+
 	m_pForm = nullptr;
 	return -1;
 }
@@ -1193,7 +1315,7 @@ void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
 	}
 }
 
-LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message if the window captured the mouse focus.
+LRESULT uiWindow::OnNCHitTest(INT scX, INT scY) // Windows stops sending the message if the window captured the mouse focus.
 {
 	//	printx("---> uiWindow::OnNCHitTest. X:%d Y:%d\n", x, y);
 //	ASSERT(!m_bDragging);
@@ -1201,7 +1323,8 @@ LRESULT uiWindow::OnNCHitTest(INT x, INT y) // Windows stops sending the message
 
 	// Just determine the area type. Don't do much.
 	uiPoint ptCS;
-	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, x, y, &ptCS);
+	ScreenToClient(scX, scY);
+	m_AreaType = m_pForm->FindByPos(&m_pGrayForm, scX, scY, &ptCS);
 //	uiFormBase::CLIENT_AREA_TYPE cat = (uiFormBase::CLIENT_AREA_TYPE)m_AreaType;
 	UpdateCursor(m_pGrayForm, ptCS.x, ptCS.y);
 

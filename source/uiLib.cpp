@@ -8,6 +8,7 @@
 #include "uiMsWin.h"
 #include "UnitTest.h"
 #include "uiApp.h"
+#include "MsWinHelper.h"
 
 
 #define MAX_LOADSTRING 100
@@ -114,7 +115,8 @@ public:
 		printx("---> CTabFormContext1::OnPaint\n");
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 200, 0));
-		pDrawer->Text(_T("Context 1"), rect, DT_CENTER);
+		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
+		pDrawer->Text(_T("Context 1"), rect, DT_CENTER, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -146,7 +148,8 @@ public:
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(10, 125, 175));
-		pDrawer->Text(_T("Context 2"), rect, DT_CENTER);
+		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
+		pDrawer->Text(_T("Context 2"), rect, DT_CENTER, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -179,7 +182,8 @@ public:
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(199, 225, 175));
-		pDrawer->Text(_T("Context 3"), rect, DT_CENTER);
+		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
+		pDrawer->Text(_T("Context 3"), rect, DT_CENTER, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -204,7 +208,7 @@ public:
 		uiForm::OnCreate();
 		printx("---> CFormEx::OnCreate\n");
 
-		SetHeaderBar(_T("test child form"));
+		SetHeaderBar(_T("test child form TechPowerUp"));
 
 		m_pButton = new uiButton2;
 		m_pButton->Create(this, 10, 10, 80, 80, FCF_CENTER);
@@ -528,24 +532,39 @@ public:
 	virtual void OnCommand(INT id, BOOL &bDone)
 	{
 		printx("---> CMyForm::OnCommand ID: %d\n", id);
-
+		static INT i = 0;
 		if (id == m_pButton->GetID())
 		{
-			m_pSubForm->SetBorder(10, uiForm::FBF_RIGHT); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
-			m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
-
-			SetBorder(-1, 0, -1, -1, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			if (i % 2 == 0)
+			{
+				m_pSubForm->SetBorder(10, uiForm::FBF_RIGHT); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+				m_pSubForm->SetDraggableThickness(10, 10, 10, 10);
+				SetBorder(-1, 0, -1, -1, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+			}
+			else
+			{
+				m_pSubForm->SetBorder(3, uiForm::FBF_ALL); // FBF_LEFT FBF_RIGHT FBF_TOP FBF_BOTTOM
+				SetBorder(-1, 3, -1, -1, uiForm::FBF_ALL);
+			}
+			++i;
 
 		//	uiForm *pToolForm = new uiForm;
 		//	pToolForm->Create(this, 100, 100, 200, 200, FCF_TOOL);
 		//	pToolForm->SetHeaderBar(_T("test"));
+
+			CMyForm temp;
+			INT_PTR ret = temp.ModalDialog(this, 50, 50, 300, 50);
+
+		//	CreateDialogHelper(uiGetAppIns(), GetBaseWnd()->GetHandle());
 		}
 		else if (id == m_pButton2->GetID())
 		{
 			printx("Button 2 was clicked!\n");
 
 			uiForm *pForm = new CFormEx2;
-			pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER);
+			if (!pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER))
+				return;
+
 			pForm->SetHeaderBar(_T("test"));
 		}
 		else if (id == m_pButton3->GetID())
@@ -577,7 +596,6 @@ public:
 
 		uiRect rect1 = GetFrameRect();
 		uiRect rect2 = GetClientRect();
-		printx("---> CMyForm::OnSize nw: %d, nh: %d\n", nw, nh);
 	}
 
 
@@ -705,16 +723,15 @@ void FontTest()
 }
 
 
-class CMyApp
+class CMyApp : public uiApp
 {
 public:
 
-	void Run();
+	void Run() override;
 
 
 };
 
-//uiApp t;
 CMyApp GApp;
 
 
@@ -782,12 +799,13 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 	printx("Console initialized!\n");
 #endif
 
+	uiApp* pApp = uiApp::GetSingleton();
 
-	UTXLibraryInit();
-
-	GApp.Run();
-
-	UTXLibraryEnd();
+	pApp->Init(hInstance);
+	pApp->InitApp();
+	pApp->Run();
+	pApp->ExitApp();
+	pApp->Close();
 
 	return 0;
 //	return (int) msg.wParam;
