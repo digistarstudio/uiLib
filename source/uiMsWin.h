@@ -3,14 +3,17 @@
 #pragma once
 
 
-#include <Windows.h>
-#include <WinUser.h>
+//#include <Windows.h>
+//#include <WinUser.h>
 #include "uiCommon.h"
 #include "uiForm.h"
 #include "uiControl.h"
 
 
 #define DEFAULT_BACKBUFFER_COUNT 1
+
+#define WM_CUSTOM   (WM_USER + 0x0001)
+#define WM_CTRL_MSG (WM_USER + 0x0002)
 
 
 BOOL uiMessageLookUp(UINT message);
@@ -225,7 +228,7 @@ protected:
 
 	MOUSE_KEY_TYPE m_MouseDragKey;
 	UINT64 m_MouseKeyDownTime[MKT_TOTAL];
-	uiFormBase *m_pFirstClickedForm[MKT_TOTAL];
+	uiFormBase* m_pFirstClickedForm[MKT_TOTAL];
 
 	UINT m_TotalWorkingTimer;
 	std::vector<stWndTimerInfo> m_TimerTable;
@@ -373,7 +376,22 @@ struct stMsgProcRetInfo
 };
 
 
+INLINE BOOL WndClientToScreen(uiWindow* pWnd, INT& x, INT& y)
+{
+	pWnd->ClientToScreen(x, y);
+	return TRUE;
+}
+
+INLINE BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT id)
+{
+	BOOL bResult = (pWnd->PostMessage(WM_CTRL_MSG, (WPARAM)pSrc, id) != 0);
+	VERIFY(bResult);
+	return bResult;
+}
+
+
 uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
+
 void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 

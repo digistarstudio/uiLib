@@ -25,8 +25,7 @@ BOOL uiApp::Init(HINSTANCE hIns)
 
 void uiApp::Close()
 {
-
-
+	uiGDIObjCacher::Release(); // TODO
 
 	ReleaseSystemFont();
 	UTXLibraryEnd();

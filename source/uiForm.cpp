@@ -1229,7 +1229,7 @@ void uiHeaderForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//printx("---> uiHeaderForm::OnMouseBtnUp\n");
 }
 
-#include "Resource.h"
+
 void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 {
 //	printx("---> uiHeaderForm::OnPaint\n");
@@ -1240,14 +1240,16 @@ void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
 //	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
 	const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
-	pDrawer->Text(GetParent()->GetName(), rect, DT_CENTER, f);
+	pDrawer->Text(GetParent()->GetName(), rect, f);
 
 //	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
 
 	if (!m_temp.IsValid())
 	//	m_temp.LoadIconRes(IDI_SMALL);
 		m_temp.LoadFromFile(_T("R:\\tt.bmp"));
-	pDrawer->DrawImage(m_temp, m_rectIcon.Left, m_rectIcon.Top, m_rectIcon.Width(), m_rectIcon.Height(), 0);
+
+	stDrawImageParam param(m_rectIcon.Left, m_rectIcon.Top, m_rectIcon.Width(), m_rectIcon.Height());
+	pDrawer->DrawImage(m_temp, param);
 
 //	pDrawer->FillRect(m_rectIcon, RGB(255, 0, 255));
 }
@@ -1727,7 +1729,7 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 			pDrawer->FillRect(tRect, (m_HighlightIndex == i) ? m_ColorHover : m_ColorDefault);
 
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
-		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, DT_CENTER, f);
+		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, f);
 	}
 }
 

@@ -728,10 +728,10 @@ public:
 
 	struct stObjEntry
 	{
-		stObjPool *pPool;
+		stObjPool* pPool;
 		union
 		{
-			stObjEntry *pNext;
+			stObjEntry* pNext;
 			T TData;
 		};
 	};
@@ -1004,8 +1004,11 @@ public:
 	INLINE static void mfree(stSimpleListNode *ptr) { m_ObjectPool.FreeObj(ptr); }
 	INLINE operator list_entry*() { return &list; }
 
+	INLINE void Detach() { list_remove(&list); }
+
 	list_entry list;
 	void* pData;
+	void* pData2;
 
 
 private:

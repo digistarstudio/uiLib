@@ -116,7 +116,7 @@ public:
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 200, 0));
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
-		pDrawer->Text(_T("Context 1"), rect, DT_CENTER, f);
+		pDrawer->Text(uiString(_T("Context 1")), rect, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -149,7 +149,7 @@ public:
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(10, 125, 175));
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
-		pDrawer->Text(_T("Context 2"), rect, DT_CENTER, f);
+		pDrawer->Text(uiString(_T("Context 2")), rect, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -183,7 +183,7 @@ public:
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(199, 225, 175));
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
-		pDrawer->Text(_T("Context 3"), rect, DT_CENTER, f);
+		pDrawer->Text(uiString(_T("Context 3")), rect, f);
 	}
 	void OnMouseEnter(INT x, INT y)
 	{
@@ -743,6 +743,7 @@ void CMyApp::Run()
 	uiString a, b;
 	a = _T("Unicode string\n");
 
+	printx("sizeof uiDrawerInsType: %d Bytes\n", sizeof uiDrawerInsType);
 	printx("sizeof std::shared_ptr<>: %d Bytes\n", sizeof std::shared_ptr<uiString>);
 	printx("sizeof uiSideDockableFrame: %d Bytes\n", sizeof uiSideDockableFrame);
 	printx("sizeof CMyForm: %d Bytes\n", sizeof CMyForm);

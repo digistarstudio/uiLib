@@ -96,7 +96,6 @@ public:
 //	#define DRAWER_BASE_TYPE uiDrawerBase
 #else
 	#define _BASE_TYPE CTypeT<CVInterface>
-	typedef uiDrawerT<uiDrawerVInterface> uiDrawer;
 	#define OVERRIDE override
 #endif
 
@@ -125,6 +124,18 @@ void SetInterface(_BASE_TYPE*& pI)
 	++i;
 #endif
 }
+struct T {
+	int a;
+	union {
+		struct {
+			int a;
+		} s1;
+		struct {
+			char b[1024];
+		} s2;
+	};
+};
+
 
 void GUITest()
 {
@@ -145,6 +156,12 @@ void GUITest()
 #endif
 
 	printx("\n\n\n");
+
+
+	T x = T();
+
+	printx("\n\n\n");
+
 }
 
 void uiImageTest()
@@ -179,6 +196,15 @@ void uiStringTest()
 	us1 = pStr3;
 	us2.MakeLower();
 
+	TCHAR buf[6];
+	CHAR  ABuf[10];
+	INT iLen;
+
+	ASSERT(uiString::GetBufferLength(_T("%d"), 123) == 4);
+	ASSERT(uiString::GetBufferLength("%d", 123) == 4);
+
+	iLen = uiString::Format(buf, _countof(buf), _T("%d"), 45678);
+	iLen = uiString::Format(ABuf, _countof(ABuf), "%d", 45678);
 }
 
 void LogicalTest()

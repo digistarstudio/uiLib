@@ -341,8 +341,8 @@ public:
 
 	void OnControlPaint(uiControl* pCtrl, uiDrawer* pDrawer, const uiRect& rect)
 	{
-		pDrawer->DrawImage(m_Img, 0, 0, 0, 0, 0);
-	
+		stDrawImageParam param(0, 0, 0, 0);
+		pDrawer->DrawImage(m_Img, param);
 	}
 
 	BOOL IsMethodHooked(HOOK_METHOD_FLAGS hmf) override

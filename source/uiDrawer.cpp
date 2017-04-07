@@ -286,6 +286,92 @@ BOOL uiImage::GetInfo(stImageInfo& ImgInfo)
 }
 
 
+uiGDIObjCacher::~uiGDIObjCacher()
+{
+	ASSERT(HandleMap.size() == 0);
+	ASSERT(CurCacheCount == 0);
+}
+
+HGDIOBJ uiGDIObjCacher::Find(const stGDIObjectName& ObjName)
+{
+	size_t key = HashState(&ObjName);
+	auto it = HandleMap.find(key);
+	if (it != HandleMap.end())
+	{
+		it->second->Detach();
+		list_add(*it->second, &ListHead);
+		return it->second->pData;
+	}
+
+	stSimpleListNode* pListNode;
+	if (CurCacheCount < MaxCacheCount)
+	{
+		pListNode = stSimpleListNode::alloc();
+		++CurCacheCount;
+	}
+	else
+	{
+		pListNode = (stSimpleListNode*)LIST_GET_TAIL(ListHead);
+		pListNode->Detach();
+		HandleMap.erase((size_t)pListNode->pData2);
+		VERIFY(::DeleteObject(pListNode->pData));
+	}
+
+	HGDIOBJ hObj;
+	switch (ObjName.ot)
+	{
+	case TYPE_BRUSH:
+		hObj = ::CreateSolidBrush(ObjName.BrushColor);
+		break;
+
+	case TYPE_PEN:
+		hObj = ::CreatePen(ObjName.Style, ObjName.Width, ObjName.PenColor);
+		break;
+
+	case TYPE_REGION:
+		ASSERT(0);
+		break;
+	}
+
+	if (hObj == NULL)
+	{
+		printx("Failed to creat GDI object(%d)! ec: %d\n", ObjName.ot, GetLastError());
+		stSimpleListNode::mfree(pListNode);
+		--CurCacheCount;
+		return NULL;
+	}
+
+	pListNode->pData = hObj;
+	pListNode->pData2 = (void*)key;
+	list_add(*pListNode, &ListHead);
+
+	HandleMap.insert({ key, pListNode });
+
+	return hObj;
+}
+
+void uiGDIObjCacher::Release()
+{
+	for (auto it = HandleMap.begin(); it != HandleMap.end(); ++it)
+	{
+		VERIFY(::DeleteObject(it->second->pData));
+		stSimpleListNode::mfree(it->second);
+		--CurCacheCount;
+	}
+
+	HandleMap.clear();
+}
+
+
+UINT uiGDIObjCacher::MaxCacheCount = 0;
+UINT uiGDIObjCacher::CurCacheCount = 0;
+list_head uiGDIObjCacher::ListHead;
+std::unordered_map<std::size_t, stSimpleListNode*> uiGDIObjCacher::HandleMap;
+
+
+uiGDIObjCacher GGDIObjCacher;
+
+
 BOOL uiWndDrawer::InitBackBuffer(UINT nCount, HWND hWnd, UINT nWidth, UINT nHeight)
 {
 	ASSERT(nCount <= MAX_BACKBUFFER_COUNT);
@@ -419,17 +505,16 @@ void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWi
 //	::DrawLine(x, y,
 }
 
-BOOL uiWndDrawer::Text(const TCHAR* pText, const uiRect& rect, UINT flag, const uiFont& Font)
+BOOL uiWndDrawer::Text(const uiString& str, uiRect rect, const uiFont& Font, const stTextParam* pParam)
 {
 	if (!Font.IsValid())
 		return FALSE;
 
-	uiRect temp = rect;
-	UpdateCoordinate(temp);
+	UpdateCoordinate(rect);
 
 	HDC hDestDC = m_WndDrawDC.GetDC();
-	SetBkMode(hDestDC, TRANSPARENT);
-	SetTextColor(hDestDC, RGB(0, 0, 0));
+	::SetBkMode(hDestDC, TRANSPARENT);
+	::SetTextColor(hDestDC, pParam == nullptr ? RGB(0, 0, 0) : pParam->color);
 
 	if (Font != m_CurFont)
 	{
@@ -437,32 +522,32 @@ BOOL uiWndDrawer::Text(const TCHAR* pText, const uiRect& rect, UINT flag, const 
 		VERIFY(::SelectObject(hDestDC, Font.GetHandle()) != NULL);
 	}
 
-	//BOOL bRet = ::DrawText(hDestDC, pText, _tcslen(pText), (LPRECT)&temp, flag);
-	BOOL bRet = ::TextOut(hDestDC, temp.Left, temp.Top, pText, _tcslen(pText));
+	//BOOL bRet = ::DrawText(hDestDC, str, str.Length(), (LPRECT)&rect, flag);
+	BOOL bRet = ::TextOut(hDestDC, rect.Left, rect.Top, str, str.Length());
 
 	return bRet;
 }
 
-BOOL uiWndDrawer::DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags)
+BOOL uiWndDrawer::DrawImage(const uiImage& img, const stDrawImageParam& param)
 {
 	BOOL bRet;
 	HDC hDestDC = m_WndDrawDC.GetDC();
 	WIN_IMAGE_TYPE wit = img.GetType();
 
+	INT x = param.X, y = param.Y;
 	UpdateCoordinate(x, y);
 
 	switch (wit)
 	{
 	case WIT_BMP:
 		if(bRet = (::SelectObject(m_hMemDC, img.GetHandle()) != NULL))
-			bRet = m_WndDrawDC.BitBlt(m_hMemDC, x, y, width, height, 0, 0, NOTSRCCOPY);
+			bRet = m_WndDrawDC.BitBlt(m_hMemDC, x, y, param.Width, param.Height, 0, 0, NOTSRCCOPY);
 		break;
 
 	case WIT_CURSOR:
 	case WIT_ICON:
 	//	bRet = DrawIcon(hDestDC, x, y, (HICON)img.GetHandle());
-		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), width, height, m_FrameIndex, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
-		m_FrameIndex = 0;
+		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), param.Width, param.Height, param.AniIndex, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
 		break;
 
 	default:

@@ -318,11 +318,8 @@ public:
 
 	enum DEST_CHANGE_TYPE { DEST_RESTORE, DEST_PUSH, DEST_UPDATE };
 
-	uiDrawerBase() :m_OriginX(0), m_OriginY(0), m_FrameIndex(0) {}
+	uiDrawerBase() :m_OriginX(0), m_OriginY(0) {}
 	//~uiDrawerBase() {}
-
-
-	INLINE void SetAniFrameIndex(UINT index) { m_FrameIndex = index; }
 
 	//INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
 	INLINE void UpdateCoordinate(uiRect& rect)
@@ -348,8 +345,6 @@ protected:
 	uiRect m_RenderDestRect;
 	INT m_OriginX, m_OriginY;
 	TList<stRenderDestInfo> m_RectList; // x86: 24 Bytes
-
-	UINT m_FrameIndex;
 
 
 };
@@ -404,6 +399,27 @@ public:
 };
 
 
+struct stTextParam
+{
+	UINT color;
+	UINT flag;  //TODO
+};
+
+struct stDrawImageParam
+{
+	stDrawImageParam(INT xIn, INT yIn, INT widthIn, INT heightIn, UINT flagsIn = 0, UINT AniIndexIn = 0);
+
+	INT  X, Y, Width, Height;
+	UINT Flags;
+	UINT AniIndex;
+};
+
+INLINE stDrawImageParam::stDrawImageParam(INT xIn, INT yIn, INT widthIn, INT heightIn, UINT flagsIn, UINT AniIndexIn)
+:X(xIn), Y(yIn), Width(widthIn), Height(heightIn), Flags(flagsIn), AniIndex(AniIndexIn)
+{
+}
+
+
 class uiDrawerVInterface : public uiDrawerBase
 {
 public:
@@ -419,8 +435,8 @@ public:
 	virtual void RoundRect(uiRect rect, UINT32 color, INT width, INT height) = 0;
 	virtual void DrawEdge(uiRect& rect, UINT color) = 0;
 	virtual void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) = 0;
-	virtual BOOL Text(const TCHAR *pText, const uiRect& rect, UINT flag, const uiFont& Font) = 0;
-	virtual BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags = 0) = 0;
+	virtual BOOL Text(const uiString& str, uiRect rect, const uiFont& Font, const stTextParam* pParam = nullptr) = 0;
+	virtual BOOL DrawImage(const uiImage& img, const stDrawImageParam& param) = 0;
 
 
 protected:
@@ -430,6 +446,70 @@ protected:
 
 };
 
+
+class uiGDIObjCacher // Save almost 80% time if cache hit.
+{
+public:
+
+	enum { DEFAULT_MAX_CACHE_COUNT = 5, };
+	enum OBJECT_TYPE { TYPE_BRUSH, TYPE_PEN, TYPE_REGION };
+
+	struct stGDIObjectName
+	{
+		INLINE stGDIObjectName(OBJECT_TYPE otIn, uiRect& rectIn)
+		:ot(otIn), rect(rectIn)
+		{
+		}
+		INLINE stGDIObjectName(OBJECT_TYPE otIn, INT StyleIn, INT WidthIn, UINT PenColorIn)
+		:ot(otIn), Style(StyleIn), Width(WidthIn), PenColor(PenColorIn), padding(0)
+		{
+		}
+		INLINE stGDIObjectName(OBJECT_TYPE otIn, UINT BrushColorIn)
+		:ot(otIn), rect()
+		{
+			BrushColor = BrushColorIn;
+		}
+
+		OBJECT_TYPE ot;
+		union
+		{
+			UINT BrushColor;
+			struct
+			{
+				UINT PenColor;
+				INT  Style;
+				INT  Width;
+				INT  padding;
+			};
+			uiRect rect;
+		};
+	};
+
+
+	uiGDIObjCacher()
+	{
+		ASSERT(MaxCacheCount == 0);
+		MaxCacheCount = DEFAULT_MAX_CACHE_COUNT;
+		INIT_LIST_HEAD(&ListHead);
+	}
+	~uiGDIObjCacher();
+
+	static HGDIOBJ Find(const stGDIObjectName& ObjName);
+	static void Release();
+
+
+protected:
+
+	static UINT MaxCacheCount;
+	static UINT CurCacheCount;
+	static list_head ListHead;
+	static std::unordered_map<std::size_t, stSimpleListNode*> HandleMap;
+
+
+};
+
+
+BOOL SaveFile(const TCHAR* pFileName, void *pData, UINT nSize); // delete me
 
 class uiWndDC
 {
@@ -453,9 +533,9 @@ public:
 		ASSERT(hDC != NULL);
 		ASSERT(m_hDC == NULL);
 		m_hDC = hDC;
-		m_hOldPen = (HPEN)::GetCurrentObject(m_hDC, OBJ_PEN);
-		m_hOldBrush = (HBRUSH)::GetCurrentObject(m_hDC, OBJ_BRUSH);
-		m_hOldFont = (HFONT)::GetCurrentObject(m_hDC, OBJ_FONT);
+		m_hOldPen = (HPEN)::GetCurrentObject(hDC, OBJ_PEN);
+		m_hOldBrush = (HBRUSH)::GetCurrentObject(hDC, OBJ_BRUSH);
+		m_hOldFont = (HFONT)::GetCurrentObject(hDC, OBJ_FONT);
 		return TRUE;
 	}
 	BOOL Detach()
@@ -465,22 +545,20 @@ public:
 			HPEN hPen = (HPEN)::SelectObject(m_hDC, m_hOldPen);
 			HBRUSH hBrush = (HBRUSH)::SelectObject(m_hDC, m_hOldBrush);
 			HFONT hFont = (HFONT)::SelectObject(m_hDC, m_hOldFont);
-
+			/*
 			if (hPen != m_hOldPen)
 				::DeleteObject(hPen);
 			if (hBrush != m_hOldBrush)
 				::DeleteObject(hBrush);
-		//	if (hFont != m_hOldFont)
-		//		::DeleteObject(hFont);
-
+			//*/
 			m_hDC = NULL;
 			return TRUE;
 		}
 		return FALSE;
 	}
 
-
-	BOOL SetPen(INT width, UINT32 color, INT style = PS_SOLID)
+//*
+	BOOL SetPenOld(INT width, UINT32 color, INT style = PS_SOLID)
 	{
 		HPEN hPen = ::CreatePen(style, width, color), hOldPen;
 		if (hPen == NULL)
@@ -489,7 +567,7 @@ public:
 			::DeleteObject(hOldPen);
 		return TRUE;
 	}
-	BOOL SetBrush(UINT32 color, BOOL bHollow)
+	BOOL SetBrushOld(UINT32 color, BOOL bHollow)
 	{
 		HBRUSH hBrush, hOldBrush;
 
@@ -503,6 +581,61 @@ public:
 			::DeleteObject(hOldBrush);
 		return TRUE;
 	}
+//*/
+
+	BOOL SetBrushNew(UINT32 color, BOOL bHollow)
+	{
+		if (bHollow)
+			return ::SelectObject(m_hDC, GetStockObject(HOLLOW_BRUSH)) != NULL;
+
+		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_BRUSH, color);
+		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
+	}
+
+	void Bench(UINT32 color, BOOL bHollow)
+	{
+		const INT test = 100;
+		CPerformanceCounter pc, pc2;
+		pc.Start();
+		for (INT i = 0; i < test; ++i)
+		{
+			SetBrushOld(color, bHollow);
+		}
+		pc.End();
+
+		pc2.Start();
+		for (INT i = 0; i < test; ++i)
+		{
+			SetBrushNew(color, bHollow);
+		}
+		pc2.End();
+
+
+		DOUBLE t = pc.Get(), t2 = pc2.Get();
+		TCHAR string[2048];
+		INT len = uiString::Format(string, _countof(string), _T("old: %f, new :%f\n"), t, t2);
+		SaveFile(_T("R:\\result.txt"), string, sizeof(TCHAR) * len);
+
+		printx("Old: %f, New %f\n", pc.Get(), pc2.Get());
+	}
+
+	BOOL SetPen(INT width, UINT32 color, INT style = PS_SOLID)
+	{
+		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_PEN, style, width, color);
+		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
+	}
+	BOOL SetBrush(UINT32 color, BOOL bHollow)
+	{
+		if (GetKeyState(VK_F2) < 0)
+			Bench(color, bHollow);
+
+		if (bHollow)
+			return ::SelectObject(m_hDC, GetStockObject(HOLLOW_BRUSH)) != NULL;
+
+		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_BRUSH, color);
+		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
+	}
+//*/
 	BOOL SetFont(HFONT hFont)
 	{
 		ASSERT(m_hDC != NULL);
@@ -700,8 +833,8 @@ public:
 	void RoundRect(uiRect rect, UINT32 color, INT width, INT height) OVERRIDE;
 	void DrawEdge(uiRect& rect, UINT color) OVERRIDE;
 	void DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth) OVERRIDE;
-	BOOL Text(const TCHAR *pText, const uiRect& rect, UINT flag, const uiFont& Font) OVERRIDE;
-	BOOL DrawImage(const uiImage& img, INT x, INT y, INT width, INT height, UINT32 flags) OVERRIDE;
+	BOOL Text(const uiString& str, uiRect rect, const uiFont& Font, const stTextParam* pParam = nullptr) OVERRIDE;
+	BOOL DrawImage(const uiImage& img, const stDrawImageParam& param) OVERRIDE;
 
 
 protected:

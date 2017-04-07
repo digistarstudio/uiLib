@@ -14,12 +14,6 @@
 #endif
 
 
-#define WM_CUSTOM   (WM_USER + 0x0001)
-#define WM_CTRL_MSG (WM_USER + 0x0002)
-
-#define WM_NOP      (WM_USER + 0x7FFF)
-
-
 std::map<void*, uiWindow*> GWindowsHandleMap;
 
 
@@ -130,8 +124,8 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 {
 	BOOL& bProcessed = ret.bProcessed;
 	LRESULT& lRet = ret.ret;
-	uiWindow *pWnd = nullptr;
-	uiFormBase *pForm;
+	uiWindow* pWnd = nullptr;
+	uiFormBase* pForm;
 
 	MSG_TRACE(hWnd, message, wParam, lParam);
 	ASSERT(!bProcessed && lRet == 0);
@@ -316,7 +310,7 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		break;
 
 	case WM_CUSTOM:
-		LogWndMsg("Msg: WM_CUSTOM\n");
+	//	LogWndMsg("Msg: WM_CUSTOM\n");
 		break;
 
 	case WM_CTRL_MSG:
@@ -382,6 +376,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 		if (!OnInitDialog((stDialogCreateParam*)lParam, hDlg))
 			EndDialog(hDlg, -1);
 		return FALSE;
+
 	case WM_ERASEBKGND:
 		return TRUE;
 	}
@@ -401,7 +396,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible)
 {
 	static BOOL bRegistered = FALSE;
-	const TCHAR *pWndClass = _T("WndClass");
+	const TCHAR *pWndClass = _T("vuiWndClass");
 	HINSTANCE hInstance = uiGetAppIns();
 
 	if (!bRegistered)
@@ -482,20 +477,6 @@ INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
 	GlobalFree(hMem);
 
 	return ret;
-}
-
-
-BOOL WndClientToScreen(uiWindow* pWnd, INT& x, INT& y)
-{
-	pWnd->ClientToScreen(x, y);
-	return TRUE;
-}
-
-BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT id)
-{
-	BOOL bResult = (pWnd->PostMessage(WM_CTRL_MSG, (WPARAM)pSrc, id) != 0);
-	VERIFY(bResult);
-	return bResult;
 }
 
 

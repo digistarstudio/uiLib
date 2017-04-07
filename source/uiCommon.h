@@ -317,6 +317,50 @@ public:
 	operator const TCHAR*() const { return (m_pStr == nullptr) ? _T("") : m_pStr; }
 
 
+	static INT Format(WCHAR* pBuf, INT nMaxCharCount, const TCHAR* format, ...) // Return length donesn't include null terminator.
+	{
+		ASSERT(pBuf != nullptr);
+
+		va_list vlist;
+		INT nCharacters;
+		va_start(vlist, format);
+		nCharacters = vswprintf_s(pBuf, nMaxCharCount, format, vlist);
+		va_end(vlist);
+		ASSERT(nCharacters <= nMaxCharCount);
+		return nCharacters;
+	}
+	static INT Format(CHAR* pBuf, INT nMaxCharCount, const CHAR* format, ...) // Return length donesn't include null terminator.
+	{
+		ASSERT(pBuf != nullptr);
+
+		va_list vlist;
+		INT nCharacters;
+		va_start(vlist, format);
+		nCharacters = vsprintf_s(pBuf, nMaxCharCount, format, vlist);
+		va_end(vlist);
+		ASSERT(nCharacters <= nMaxCharCount);
+		return nCharacters;
+	}
+	static INT GetBufferLength(const WCHAR* format, ...)  // Return length includes null terminator.
+	{
+		INT iLen;
+		va_list vlist;
+		va_start(vlist, format);
+		iLen = _vscwprintf(format, vlist) + 1; // _vscprintf doesn't count terminating '\0'
+		va_end(vlist);
+		return iLen;
+	}
+	static INT GetBufferLength(const CHAR* format, ...) // Return length includes null terminator.
+	{
+		INT iLen;
+		va_list vlist;
+		va_start(vlist, format);
+		iLen = _vscprintf(format, vlist) + 1; // _vscprintf doesn't count terminating '\0'
+		va_end(vlist);
+		return iLen;
+	}
+
+
 protected:
 
 	INLINE void Release()
