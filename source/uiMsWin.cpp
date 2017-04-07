@@ -331,11 +331,11 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		pWnd->PostMsgHandler(message);
 }
 
-
 static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	stMsgProcRetInfo rInfo;
 	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+
 	if (rInfo.bProcessed)
 		return rInfo.ret;
 
@@ -355,6 +355,9 @@ BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
 	pWnd->SetHandle(hDlg);
 	WndAddMap(hDlg, pWnd);
 	::SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pWnd);
+	::SetClassLongPtr(hDlg, GCL_STYLE, CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS);
+	::SetClassLongPtr(hDlg, GCLP_HCURSOR, NULL);
+//	::SetClassLongPtr(hDlg, GCLP_HBRBACKGROUND, NULL);
 
 	uiRect rect;
 	pWnd->GetWindowRect(rect);
@@ -379,6 +382,8 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 		if (!OnInitDialog((stDialogCreateParam*)lParam, hDlg))
 			EndDialog(hDlg, -1);
 		return FALSE;
+	case WM_ERASEBKGND:
+		return TRUE;
 	}
 
 	stMsgProcRetInfo rInfo;
@@ -455,7 +460,6 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase
 
 INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
 {
-//*
 	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATE)); // Must use protected system memory.
 	if (!hMem)
 		return -1;
@@ -467,7 +471,7 @@ INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
 	pDlgTemp->cdit = 0; // Number of controls
 	pDlgTemp->x = 100;
 	pDlgTemp->y = 100;
-	pDlgTemp->cx = 250;
+	pDlgTemp->cx = 250; // size will be double for dialog.
 	pDlgTemp->cy = 100;
 	GlobalUnlock(hMem);
 
@@ -476,29 +480,7 @@ INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
 	INT_PTR ret = DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)hMem, hParentWnd, DialogProc, lParam);
 	//printx("ec: %d\n", GetLastError());
 	GlobalFree(hMem);
-/*/
 
-	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATEEX2)); // Must use protected system memory.
-	if (!hMem)
-		return -1;
-
-	DLGTEMPLATEEX2* pDlgTemp = (DLGTEMPLATEEX2*)GlobalLock(hMem);
-	//pDlgTemp->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION; // Define a dialog box.
-	pDlgTemp->style = WS_POPUP;
-	pDlgTemp->cDlgItems = 0; // Number of controls
-	pDlgTemp->x = 100;
-	pDlgTemp->y = 100;
-	pDlgTemp->cx = 250;
-	pDlgTemp->cy = 100;
-	GlobalUnlock(hMem);
-
-	HWND hParentWnd = (pDCP->pParent != nullptr) ? pDCP->pParent->GetBaseWnd()->GetHandle() : NULL;
-	LPARAM lParam = (LPARAM)const_cast<stDialogCreateParam*>(pDCP);
-	INT_PTR ret = DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)hMem, hParentWnd, DialogProc, lParam);
-	printx("ec: %d\n", GetLastError());
-	GlobalFree(hMem);
-
-//*/
 	return ret;
 }
 
