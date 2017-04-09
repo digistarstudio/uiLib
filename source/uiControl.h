@@ -149,30 +149,30 @@ public:
 	~uiButton() {}
 
 
-	virtual FORM_CLASS GetClass() { return FC_BUTTON; }
+	FORM_CLASS GetClass() const override { return FC_BUTTON; }
 
-	void OnMouseEnter(INT x, INT y)
+	void OnMouseEnter(INT x, INT y) override
 	{
 		printx("---> uiButton::OnMouseEnter x:%d y:%d\n", x, y);
 		RedrawForm();
 	}
-	void OnMouseLeave()
+	void OnMouseLeave() override
 	{
 		printx("---> uiButton::OnMouseLeave\n");
 		RedrawForm();
 	}
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override
 	{
 		//	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y);
 	}
 
-	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("---> uiButton::OnMouseBtnDown. Client pos x:%d, y:%d\n", x, y);
 		if (KeyType == MKT_LEFT)
 			m_bMouseDown = true;
 	}
-	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		if (KeyType == MKT_LEFT && m_bMouseDown)
 		{
@@ -182,12 +182,12 @@ public:
 		}
 	}
 
-	virtual void EntryOnCommand(UINT id)
+	void EntryOnCommand(UINT_PTR id) override
 	{
 		GetParent()->EntryOnCommand(id);
 	}
 
-	void OnControlPaint(uiDrawer* pDrawer, const uiRect& rect)
+	void OnControlPaint(uiDrawer* pDrawer, const uiRect& rect) override
 	{
 		//	printx("---> uiButton::OnPaint\n");
 
@@ -199,11 +199,11 @@ public:
 		pDrawer->FillRect(rect.InflateRV(-2, -2, -2, -2), RGB(30, 50, 30));
 	}
 
-	void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("button clicked!\n");
 	}
-	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("button double clicked!\n");
 	}

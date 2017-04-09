@@ -26,6 +26,9 @@ UINT32 uiGetSysColor(INT index)
 
 		case SCN_FRAME:
 		//	color = RGB();
+			color = GetSysColor(COLOR_ACTIVECAPTION);
+			color = GetSysColor(COLOR_3DHILIGHT);
+			color = GetSysColor(COLOR_3DLIGHT);
 			break;
 	}
 
@@ -432,13 +435,7 @@ BOOL uiWndDrawer::Begin(void* pCtx)
 void uiWndDrawer::End(void* pCtx)
 {
 	ASSERT(m_OriginX == 0 && m_OriginY == 0);
-
-	if (m_hRgn != NULL)
-	{
-		SelectClipRgn(m_WndDrawDC.GetDC(), NULL);
-		DeleteObject(m_hRgn);
-		m_hRgn = NULL;
-	}
+	ASSERT(m_hRgn == NULL);
 
 	if (m_TotalBackBuffer > 0)
 	{
@@ -472,20 +469,18 @@ void uiWndDrawer::ResizeBackBuffer(UINT nWidth, UINT nHeight)
 
 void uiWndDrawer::FillRect(uiRect rect, UINT32 color)
 {
-	//rect.Move(m_OriginX, m_OriginY);
 	UpdateCoordinate(rect);
 
-	m_WndDrawDC.SetBrush(color, FALSE);
+	m_WndDrawDC.SetBrush(color);
 	m_WndDrawDC.FillRect((RECT*)&rect);
 }
 
 void uiWndDrawer::RoundRect(uiRect rect, UINT32 color, INT width, INT height)
 {
-	//rect.Move(m_OriginX, m_OriginY);
 	UpdateCoordinate(rect);
 
 	m_WndDrawDC.SetPen(1, color);
-	m_WndDrawDC.SetBrush(0, TRUE);
+	m_WndDrawDC.SetHollowBrush();
 	m_WndDrawDC.RoundRect((RECT*)&rect, width, height);
 }
 
@@ -499,10 +494,12 @@ void uiWndDrawer::DrawEdge(uiRect &rect, UINT color)
 
 void uiWndDrawer::DrawLine(INT x, INT y, INT x2, INT y2, UINT color, UINT LineWidth)
 {
-//	HPEN hPen = CreatePen(PS_SOLID, LineWidth, color);
-//	HPEN *hOldPen = (HPEN*)SelectObject(m_WndDrawDC.GetDC(), hPen);
+	UpdateCoordinate(x, y);
+	UpdateCoordinate(x2, y2);
 
-//	::DrawLine(x, y,
+	m_WndDrawDC.SetPen(LineWidth, color, PS_SOLID);
+	::MoveToEx(m_WndDrawDC.GetDC(), x, y, nullptr);
+	::LineTo(m_WndDrawDC.GetDC(), x2, y2);
 }
 
 BOOL uiWndDrawer::Text(const uiString& str, uiRect rect, const uiFont& Font, const stTextParam* pParam)
@@ -534,20 +531,20 @@ BOOL uiWndDrawer::DrawImage(const uiImage& img, const stDrawImageParam& param)
 	HDC hDestDC = m_WndDrawDC.GetDC();
 	WIN_IMAGE_TYPE wit = img.GetType();
 
-	INT x = param.X, y = param.Y;
+	INT x = param.x, y = param.y;
 	UpdateCoordinate(x, y);
 
 	switch (wit)
 	{
 	case WIT_BMP:
 		if(bRet = (::SelectObject(m_hMemDC, img.GetHandle()) != NULL))
-			bRet = m_WndDrawDC.BitBlt(m_hMemDC, x, y, param.Width, param.Height, 0, 0, NOTSRCCOPY);
+			bRet = m_WndDrawDC.BitBlt(m_hMemDC, x, y, param.width, param.height, 0, 0, NOTSRCCOPY);
 		break;
 
 	case WIT_CURSOR:
 	case WIT_ICON:
 	//	bRet = DrawIcon(hDestDC, x, y, (HICON)img.GetHandle());
-		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), param.Width, param.Height, param.AniIndex, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
+		bRet = DrawIconEx(hDestDC, x, y, (HICON)img.GetHandle(), param.width, param.height, param.aniIndex, NULL, DI_NORMAL | DI_COMPAT | DI_MASK);
 		break;
 
 	default:

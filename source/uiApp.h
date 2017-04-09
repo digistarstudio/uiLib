@@ -34,4 +34,6 @@ protected:
 
 INLINE HINSTANCE uiGetAppIns() { return uiApp::AppIns; }
 
+void uiMonitorEvent();
+
 

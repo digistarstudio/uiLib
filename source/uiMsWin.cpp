@@ -1,10 +1,10 @@
 
 
 #include "stdafx.h"
-#include "uiMsWin.h"
-#include "uiApp.h"
-#include "MsWinHelper.h"
 #include <Windowsx.h>
+#include "uiApp.h"
+#include "uiMsWin.h"
+#include "MsWinHelper.h"
 
 
 #ifdef _DEBUG
@@ -34,7 +34,7 @@ struct INIT_UI
 
 INIT_UI init_ui;
 uiWinCursor GCursor;
-uiWinCaret GCaret;
+uiWinCaret  GCaret;
 
 class MsgRecorder
 {
@@ -120,7 +120,45 @@ static INLINE uiWindow* uiWindowGet(HWND hWnd)
 #define MOUSE_KEY_DBCLK(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnDbClk(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
 
 
-void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+BOOL InitWindowSystem()
+{
+	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATE)); // Must use protected system memory.
+	if (!hMem)
+		return FALSE;
+
+	LPDLGTEMPLATE pDlgTemp = (LPDLGTEMPLATE)GlobalLock(hMem);
+	//pDlgTemp->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION; // Define a dialog box.
+	pDlgTemp->style = WS_POPUP;
+	pDlgTemp->dwExtendedStyle = WS_EX_LTRREADING;
+	pDlgTemp->cdit = 0; // Number of controls
+	pDlgTemp->x = 100;
+	pDlgTemp->y = 100;
+	pDlgTemp->cx = 250; // size will be double for dialog.
+	pDlgTemp->cy = 100;
+	GlobalUnlock(hMem);
+
+	ASSERT(uiWindow::GetDialogTemplate() == NULL);
+	uiWindow::SetDialogTemplate(hMem);
+
+	return TRUE;
+}
+
+BOOL CloseWindowSystem()
+{
+	if (uiWindow::GetDialogTemplate() != NULL)
+	{
+		GlobalFree(uiWindow::GetDialogTemplate());
+		uiWindow::SetDialogTemplate(NULL);
+	}
+
+	return TRUE;
+}
+
+
+HGLOBAL uiWindow::hGDialogTemplate = NULL;
+
+
+void uiWindow::uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	BOOL& bProcessed = ret.bProcessed;
 	LRESULT& lRet = ret.ret;
@@ -217,11 +255,12 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		bProcessed = TRUE;
 		break;
 
-/*	case WM_NCPAINT:
+	case WM_NCACTIVATE:
 		pWnd = uiWindowGet(hWnd);
-		pWnd->OnNCPaint(hWnd, (HRGN)wParam);
-		bProcessed = TRUE;
-		break; //*/
+		pWnd->OnNCActivate(wParam, lParam);
+		pWnd = nullptr;
+	//	bProcessed = TRUE;
+		break;
 
 	case WM_KEYDOWN:
 		pWnd = uiWindowGet(hWnd);
@@ -314,8 +353,9 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		break;
 
 	case WM_CTRL_MSG:
+		LogWndMsg("Msg: WM_CTRL_MSG\n");
+		pWnd = uiWindowGet(hWnd);
 		pForm = (uiFormBase*)wParam;
-		pWnd = pForm->GetBaseWnd();
 		pForm->EntryOnCommand(lParam); // pForm might be destroyed after calling this method.
 		bProcessed = TRUE;
 		break;
@@ -328,7 +368,7 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	stMsgProcRetInfo rInfo;
-	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+	uiWindow::uiMsgProc(rInfo, hWnd, message, wParam, lParam);
 
 	if (rInfo.bProcessed)
 		return rInfo.ret;
@@ -353,14 +393,19 @@ BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
 	::SetClassLongPtr(hDlg, GCLP_HCURSOR, NULL);
 //	::SetClassLongPtr(hDlg, GCLP_HBRBACKGROUND, NULL);
 
+	pWnd->SizeImp(pDCP->cx, pDCP->cy);
+	if (pDCP->fcf & FCF_CENTER)
+		pWnd->MoveToCenter();
+	else
+		pWnd->MoveImp(pDCP->x, pDCP->y);
+
 	uiRect rect;
 	pWnd->GetWindowRect(rect);
 	if (pWnd->OnCreate(&rect) == -1)
 		return FALSE;
 
-	// Simulate normal window.
-	pWnd->OnSize(0, rect.Width(), rect.Height());
-	pWnd->OnMove(rect.Left, rect.Top);
+	if (pDCP->pParent != nullptr)
+		pDCP->pParent->AddChild(pDCP->pForm);
 
 	pForm->EntryOnCreate(TRUE, rect.Width(), rect.Height());
 
@@ -372,7 +417,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
-		printx("---> DialogProc() Msg: WM_INITDIALOG, HWND: %p\n", hDlg);
+		//printx("---> DialogProc() Msg: WM_INITDIALOG, HWND: %p\n", hDlg);
 		if (!OnInitDialog((stDialogCreateParam*)lParam, hDlg))
 			EndDialog(hDlg, -1);
 		return FALSE;
@@ -382,18 +427,18 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 	}
 
 	stMsgProcRetInfo rInfo;
-	uiMsgProc(rInfo, hDlg, uMsg, wParam, lParam);
+	uiWindow::uiMsgProc(rInfo, hDlg, uMsg, wParam, lParam);
 
 	if (rInfo.bProcessed)
 	{
-		SetWindowLong(hDlg, DWL_MSGRESULT, rInfo.ret);
+		SetWindowLongPtr(hDlg, DWLP_MSGRESULT, rInfo.ret);
 		return TRUE;
 	}
 
 	return FALSE;
 }
 
-uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible)
+uiWindow* uiWindow::CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, const stWindowCreateParam& wcp)
 {
 	static BOOL bRegistered = FALSE;
 	const TCHAR *pWndClass = _T("vuiWndClass");
@@ -420,9 +465,9 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase
 	}
 
 	HWND hParent = (ParentForm == nullptr) ? NULL : (HWND)ParentForm->GetBaseWnd()->GetHandle();
-	RECT r = { x, y, (LONG)(x + nWidth), (LONG)(y + nHeight) };
-	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX | WS_MAXIMIZEBOX*/;
-//	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME | WS_SYSMENU | WS_VISIBLE;
+	RECT r = { wcp.x, wcp.y, (LONG)(wcp.x + wcp.cx), (LONG)(wcp.y + wcp.cy) };
+	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (wcp.bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX */;
+//	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_VISIBLE;
 
 	switch (uwt)
 	{
@@ -437,8 +482,8 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase
 	}
 
 	AdjustWindowRectEx(&r, Style, FALSE, ExStyle);
-	nWidth = r.right - r.left;
-	nHeight = r.bottom - r.top;
+	UINT nWidth = r.right - r.left;
+	UINT nHeight = r.bottom - r.top;
 
 	uiWindow *pWnd = new uiWindow(pForm);
 	if (pWnd != nullptr)
@@ -453,30 +498,11 @@ uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase
 	return nullptr;
 }
 
-INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP)
+INT_PTR uiWindow::CreateModalDialog(const stDialogCreateParam* pDCP)
 {
-	HGLOBAL hMem = GlobalAlloc(GMEM_ZEROINIT, sizeof(DLGTEMPLATE)); // Must use protected system memory.
-	if (!hMem)
-		return -1;
-
-	LPDLGTEMPLATE pDlgTemp = (LPDLGTEMPLATE)GlobalLock(hMem);
-	//pDlgTemp->style = WS_POPUP | WS_BORDER | WS_SYSMENU | DS_MODALFRAME | WS_CAPTION; // Define a dialog box.
-	pDlgTemp->style = WS_POPUP;
-	pDlgTemp->dwExtendedStyle = WS_EX_LTRREADING;
-	pDlgTemp->cdit = 0; // Number of controls
-	pDlgTemp->x = 100;
-	pDlgTemp->y = 100;
-	pDlgTemp->cx = 250; // size will be double for dialog.
-	pDlgTemp->cy = 100;
-	GlobalUnlock(hMem);
-
 	HWND hParentWnd = (pDCP->pParent != nullptr) ? pDCP->pParent->GetBaseWnd()->GetHandle() : NULL;
 	LPARAM lParam = (LPARAM)const_cast<stDialogCreateParam*>(pDCP);
-	INT_PTR ret = DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)hMem, hParentWnd, DialogProc, lParam);
-	//printx("ec: %d\n", GetLastError());
-	GlobalFree(hMem);
-
-	return ret;
+	return DialogBoxIndirectParam(uiGetAppIns(), (LPDLGTEMPLATE)uiWindow::GetDialogTemplate(), hParentWnd, DialogProc, lParam);
 }
 
 
@@ -799,7 +825,10 @@ void uiWindow::UpdateCursor(uiFormBase *pForm, INT csX, INT csY)
 
 	uiImage NewCursor;
 	IAreaCursor *pIAC = pForm->GetIAreaCursor();
-	if (pIAC == nullptr)
+
+	if (pIAC != nullptr)
+		uiGetCursor().Set(pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType));
+	else
 	{
 		const UINT mask = uiFormBase::CAT_ALL_DRF | uiFormBase::CAT_DRAG_BAR_H | uiFormBase::CAT_DRAG_BAR_V;
 		uiWinCursor::DEFAULT_CURSOR_TYPE dct = uiWinCursor::DCT_NORMAL;
@@ -828,13 +857,6 @@ void uiWindow::UpdateCursor(uiFormBase *pForm, INT csX, INT csY)
 		}
 
 		uiGetCursor().Update(dct);
-	}
-	else
-	{
-		uiImage& NewCursor = pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType);
-		uiGetCursor().Set(std::move(NewCursor));
-
-	//	uiGetCursor().Set(pIAC->GetCursorImage(pForm, csX, csY, (uiFormBase::CLIENT_AREA_TYPE)m_AreaType));
 	}
 }
 
@@ -952,12 +974,12 @@ UINT uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT 
 			return i + 1;
 		}
 
-	INT index = 0;
+	size_t index = 0;
 	if (m_TotalWorkingTimer == m_TimerTable.size())
 		index = m_TimerTable.size();
 	else
 	{
-		INT ArraySize = (INT)m_TimerTable.size();
+		size_t ArraySize = m_TimerTable.size();
 		for (; index < ArraySize; ++index)
 			if (m_TimerTable[index].TimerHandle == 0)
 				break;
@@ -984,7 +1006,7 @@ UINT uiWindow::TimerAdd(uiFormBase *pFormBase, UINT id, UINT msElapsedTime, INT 
 	++m_TotalWorkingTimer;
 	pFormBase->SetTimerCount(TRUE);
 
-	return index + 1;
+	return (UINT)index + 1;
 }
 
 BOOL uiWindow::TimerClose(uiFormBase *pFormBase, UINT key, BOOL bByID)
@@ -1026,7 +1048,7 @@ BOOL uiWindow::TimerClose(uiFormBase *pFormBase, UINT key, BOOL bByID)
 
 void uiWindow::TimerRemoveAll(uiFormBase* const pFormBase)
 {
-	INT iTableSize = m_TimerTable.size();
+	INT iTableSize = (INT)m_TimerTable.size();
 	for (INT i = 0; i < iTableSize; ++i)
 	{
 		stWndTimerInfo &wti = m_TimerTable[i];
@@ -1063,6 +1085,14 @@ void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
 
 	if (m_pKeyboardFocusForm == nullptr)
 		m_pKeyboardFocusForm = m_pForm;
+}
+
+void uiWindow::OnNCActivate(WPARAM wParam, LPARAM lParam)
+{
+	printx("---> uiWindow::OnNCActivate. Activate: %d\n", wParam);
+
+
+
 }
 
 BOOL uiWindow::OnClose()
@@ -1124,11 +1154,6 @@ void uiWindow::OnMove(INT scx, INT scy)
 	m_ScreenCoordinateY = scy;
 }
 
-void uiWindow::OnNCPaint(HWND hWnd, HRGN hRgn)
-{
-	// This doesn't work totally.
-}
-
 void uiWindow::OnPaint()
 {
 	PAINTSTRUCT ps;
@@ -1179,7 +1204,7 @@ void uiWindow::OnLoseKBFocus()
 	bKBFocusCaptured = false;
 }
 
-void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
+void uiWindow::OnSize(UINT_PTR nType, UINT nNewWidth, UINT nNewHeight)
 {
 	//printx("---> uiWindow::OnSize. New width:%d New height:%d\n", nNewWidth, nNewHeight);
 
@@ -1202,7 +1227,7 @@ void uiWindow::OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight)
 		m_pForm->EntryOnSize(nNewWidth, nNewHeight);
 }
 
-void uiWindow::OnSizing(INT fwSide, RECT *pRect)
+void uiWindow::OnSizing(INT_PTR fwSide, RECT *pRect)
 {
 /*
 	switch (fwSide)
@@ -1255,7 +1280,7 @@ void uiWindow::OnSizing(INT fwSide, RECT *pRect)
 void uiWindow::OnTimer(const UINT_PTR TimerID, LPARAM lParam)
 {
 	//printx("---> uiWindow::OnTimer. ID: %p Callback: 0x%p\n", TimerID, lParam);
-	UINT index = TimerID - 1;
+	UINT index = static_cast<UINT>(TimerID - 1);
 	ASSERT(index < m_TimerTable.size());
 
 	stWndTimerInfo &wti = m_TimerTable[index];
@@ -1316,7 +1341,7 @@ BOOL uiWindow::DragSizingEventCheck(INT x, INT y)
 		SetCapture();
 
 		uiRect MouseMoveRect;
-		m_pDraggingForm->GetPlate()->GetClientRectWS(MouseMoveRect);
+		m_pDraggingForm->GetPlate()->GetClientRectWS(MouseMoveRect, TRUE);
 		MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
 		ClipCursor((RECT*)&MouseMoveRect);
 
@@ -1460,7 +1485,7 @@ void uiWindow::OnMouseLeave()
 	}
 }
 
-void uiWindow::OnMouseMove(UINT nType, const INT x, const INT y)
+void uiWindow::OnMouseMove(UINT_PTR nType, const INT x, const INT y)
 {
 //	printx("---> uiWindow::OnMouseMove. m_AreaType: %d\n", m_AreaType);
 
@@ -1703,7 +1728,7 @@ BOOL uiWinMenu::InsertItem(TCHAR* pText, UINT id, INT index)
 	mii.hbmpUnchecked;
 	mii.dwItemData;
 	mii.dwTypeData = pText;
-	mii.cch = _tcslen(pText);
+	mii.cch = static_cast<UINT>(_tcslen(pText));
 	mii.hbmpItem;
 
 	BOOL bResult = ::InsertMenuItem(m_hMenu, 1, FALSE, &mii);

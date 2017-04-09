@@ -41,6 +41,24 @@ struct stWndTimerInfo
 
 };
 
+struct stMsgProcRetInfo
+{
+	stMsgProcRetInfo() :bProcessed(FALSE), ret(0) {}
+	BOOL    bProcessed;
+	LRESULT ret;
+};
+
+struct stWindowCreateParam
+{
+	stWindowCreateParam(INT xIn, INT yIn, UINT cxIn, UINT cyIn, BOOL bVisibleIn)
+	:x(xIn), y(yIn), cx(cxIn), cy(cyIn), bVisible(bVisibleIn)
+	{
+	}
+
+	INT  x, y;
+	UINT cx, cy;
+	BOOL bVisible;
+};
 
 struct stDialogCreateParam
 {
@@ -106,19 +124,19 @@ public:
 	BOOL TimerClose(uiFormBase* pFormBase, UINT key, BOOL bByID);
 	void TimerRemoveAll(uiFormBase* const pFormBase);
 
-	void OnActivate(WPARAM wParam, LPARAM LParam);
+	void OnActivate(WPARAM wParam, LPARAM lParam);
+	void OnNCActivate(WPARAM wParam, LPARAM lParam);
 	BOOL OnClose();
 	BOOL OnCreate(const uiRect* pRect);
 	void OnDestroy();
 	void OnKeyDown(INT iKey);
 	void OnKeyUp(INT iKey);
 	void OnMove(INT scx, INT scy);
-	void OnNCPaint(HWND hWnd, HRGN hRgn);
 	void OnPaint();
 	void OnGetKBFocus(HWND hOldFocusWnd);
 	void OnLoseKBFocus();
-	void OnSize(UINT nType, UINT nNewWidth, UINT nNewHeight);
-	void OnSizing(INT fwSide, RECT* pRect);
+	void OnSize(UINT_PTR nType, UINT nNewWidth, UINT nNewHeight);
+	void OnSizing(INT_PTR fwSide, RECT* pRect);
 	void OnTimer(const UINT_PTR TimerID, LPARAM lParam);
 
 	LRESULT OnNCHitTest(INT scX, INT scY);
@@ -129,7 +147,7 @@ public:
 	void OnDragging(INT x, INT y);
 
 	void OnMouseLeave();
-	void OnMouseMove(UINT nType, const INT x, const INT y);
+	void OnMouseMove(UINT_PTR nType, const INT x, const INT y);
 	void OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 	void OnMouseBtnUp(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
 	void OnMouseBtnDbClk(const MOUSE_KEY_TYPE KeyType, const INT x, const INT y);
@@ -156,6 +174,15 @@ public:
 	INLINE HWND SetCapture() const { return ::SetCapture(m_Handle); }
 	INLINE BOOL ReleaseCapture() const { return ::ReleaseCapture(); }
 
+
+	INLINE static HGLOBAL GetDialogTemplate() { return hGDialogTemplate; }
+	INLINE static void SetDialogTemplate(HGLOBAL hMem) { hGDialogTemplate = hMem; }
+
+	static uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, const stWindowCreateParam& wcp);
+	static void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+	static INT_PTR uiWindow::CreateModalDialog(const stDialogCreateParam* pDCP);
+
+
 	// For debugging.
 	// Don't use SetWindowPos to show windows.
 //	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { return ::SendMessage(m_Handle, Msg, wParam, lParam); }
@@ -170,9 +197,9 @@ protected:
 
 	enum MOUSE_CLICKING_KEY_TRACK
 	{
-		MCKT_LEFT = 0x01,
+		MCKT_LEFT   = 0x01,
 		MCKT_MIDDLE = 0x01 << 1,
-		MCKT_RIGHT = 0x01 << 2,
+		MCKT_RIGHT  = 0x01 << 2,
 	};
 
 	void TrackMouseLeave(BOOL bOn)
@@ -185,7 +212,7 @@ protected:
 			tme.dwFlags = TME_LEAVE; // TME_HOVER | TME_LEAVE
 			tme.dwHoverTime = HOVER_DEFAULT;
 			tme.hwndTrack = m_Handle;
-			VERIFY(::TrackMouseEvent(&tme) != 0);
+			VERIFY(::TrackMouseEvent(&tme));
 			m_bTrackMouseLeave = true;
 			return;
 		}
@@ -196,7 +223,7 @@ protected:
 			tme.dwFlags = TME_LEAVE | TME_CANCEL;
 			tme.dwHoverTime = HOVER_DEFAULT;
 			tme.hwndTrack = m_Handle;
-			VERIFY(::TrackMouseEvent(&tme) != 0);
+			VERIFY(::TrackMouseEvent(&tme));
 			m_bTrackMouseLeave = true;
 		}
 	}
@@ -208,6 +235,8 @@ protected:
 		GetSystemTimeAsFileTime(&filetime);
 		return ((((UINT64)filetime.dwHighDateTime) << 32) + filetime.dwLowDateTime) / 10000; // Convert to millisecond.
 	}
+
+	static HGLOBAL hGDialogTemplate;
 
 
 	HWND m_Handle;
@@ -368,21 +397,13 @@ protected:
 };
 
 
-struct stMsgProcRetInfo
-{
-	stMsgProcRetInfo() :bProcessed(FALSE), ret(0) {}
-	BOOL    bProcessed;
-	LRESULT ret;
-};
-
-
 INLINE BOOL WndClientToScreen(uiWindow* pWnd, INT& x, INT& y)
 {
 	pWnd->ClientToScreen(x, y);
 	return TRUE;
 }
 
-INLINE BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT id)
+INLINE BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT_PTR id)
 {
 	BOOL bResult = (pWnd->PostMessage(WM_CTRL_MSG, (WPARAM)pSrc, id) != 0);
 	VERIFY(bResult);
@@ -390,8 +411,7 @@ INLINE BOOL WndCreateMessage(uiWindow* pWnd, uiFormBase* pSrc, UINT id)
 }
 
 
-uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
-
-void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+BOOL InitWindowSystem();
+BOOL CloseWindowSystem();
 
 

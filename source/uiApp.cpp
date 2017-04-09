@@ -3,13 +3,12 @@
 #include "stdafx.h"
 #include "uiApp.h"
 #include "uiDrawer.h"
+#include "uiMsWin.h"
 
 
 uiApp* uiApp::pAppIns = nullptr;
 HINSTANCE uiApp::AppIns = NULL;
 
-
-void DbgShowIns(HINSTANCE hIns) { printx("App instance: %p\n", hIns); }
 
 BOOL uiApp::Init(HINSTANCE hIns)
 {
@@ -17,8 +16,7 @@ BOOL uiApp::Init(HINSTANCE hIns)
 	AppIns = hIns;
 	UTXLibraryInit();
 	InitSystemFont();
-
-	DEBUG_CHECK(DbgShowIns(hIns));
+	InitWindowSystem();
 
 	return TRUE;
 }
@@ -27,8 +25,20 @@ void uiApp::Close()
 {
 	uiGDIObjCacher::Release(); // TODO
 
+	CloseWindowSystem();
 	ReleaseSystemFont();
 	UTXLibraryEnd();
+}
+
+
+void uiMonitorEvent()
+{
+	MSG msg;
+	while (GetMessage(&msg, NULL, 0U, 0U))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
 }
 
 

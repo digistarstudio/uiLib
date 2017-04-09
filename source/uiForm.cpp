@@ -8,17 +8,6 @@
 #include "FormStyle.h"
 
 
-void uiMonitorEvent()
-{
-	MSG msg;
-	while (GetMessage(&msg, NULL, 0U, 0U))
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}
-}
-
-
 static void FreeSplitter(stFormSplitter *pSplitter)
 {
 	if (pSplitter->pTopLeft != nullptr)
@@ -57,7 +46,8 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 
 	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
-		uiWindow *pWnd = CreateTemplateWindow(UWT_NORMAL, this, nullptr, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
+		stWindowCreateParam wcp(x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
+		uiWindow *pWnd = uiWindow::CreateTemplateWindow(UWT_NORMAL, this, nullptr, wcp);
 		if (pWnd == nullptr)
 			bResult = FALSE;
 		else
@@ -69,7 +59,8 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	else if (fcf & FCF_TOOL)
 	{
 		ASSERT(parent != nullptr);
-		uiWindow *pWnd = CreateTemplateWindow(UWT_TOOL, this, parent, x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
+		stWindowCreateParam wcp(x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
+		uiWindow *pWnd = uiWindow::CreateTemplateWindow(UWT_TOOL, this, parent, wcp);
 		if (pWnd == nullptr)
 			bResult = FALSE;
 		else
@@ -119,7 +110,7 @@ INT_PTR uiFormBase::ModalDialog(uiFormBase* pParent, INT x, INT y, UINT nWidth, 
 	DCP.Set(x, y, nWidth, nHeight, fcf);
 	FBSetFlag(FBF_MODAL_MODE);
 
-	INT_PTR iRet = CreateModalDialog(&DCP);
+	INT_PTR iRet = uiWindow::CreateModalDialog(&DCP);
 
 	return iRet;
 }
@@ -369,7 +360,7 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 	{
 		ASSERT(width != -1 && height != -1);
 		uiRect rect;
-		GetClientRectWS(rect);
+		GetClientRectWS(rect, FALSE);
 		GetBaseWnd()->CaretShowImp(this, x + rect.Left, y + rect.Top, width, height);
 		FBSetFlag(FBF_OWN_CARET);
 	}
@@ -390,11 +381,11 @@ BOOL uiFormBase::CaretMove(INT x, INT y)
 		return FALSE;
 
 	uiRect rect;
-	GetClientRectWS(rect);
+	GetClientRectWS(rect, FALSE);
 	return GetBaseWnd()->CaretMoveImp(this, x + rect.Left, y + rect.Top);
 }
 
-void uiFormBase::PopupMenu(INT x, INT y, uiMenu *pMenu)
+void uiFormBase::PopupMenu(INT x, INT y, uiMenu* pMenu)
 {
 	uiPoint pt(x, y);
 	ClientToScreen(pt);
@@ -471,7 +462,7 @@ void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingB
 	}
 }
 
-INT uiFormBase::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS)
+INT uiFormBase::FindByPos(uiFormBase** pDest, INT fcX, INT fcY, uiPoint* ptCS)
 {
 	for (list_entry *pEntry = LIST_GET_TAIL(m_ListChildren); IS_VALID_ENTRY(pEntry, m_ListChildren); pEntry = pEntry->prev)
 	{
@@ -488,13 +479,13 @@ INT uiFormBase::FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS)
 	return CAT_CLIENT;
 }
 
-void uiFormBase::ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const
+void uiFormBase::ToPlateSpace(const uiFormBase* pForm, INT& x, INT& y) const
 {
 	x += m_FrameRect.Left;
 	y += m_FrameRect.Top;
 }
 
-void uiFormBase::ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const
+void uiFormBase::ToPlateSpace(const uiFormBase* pForm, uiRect& rect, BOOL bClip) const
 {
 	rect.Move(m_FrameRect.Left, m_FrameRect.Top);
 	if (bClip)
@@ -512,7 +503,7 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 		}
 		else
 		{
-			GetPlate()->GetClientRectWS(rect);
+			GetPlate()->GetClientRectWS(rect, TRUE);
 		}
 	}
 
@@ -562,7 +553,7 @@ BOOL uiFormBase::EntryOnClose()
 	return TRUE;
 }
 
-void uiFormBase::EntryOnDestroy(uiWindow *pWnd)
+void uiFormBase::EntryOnDestroy(uiWindow* pWnd)
 {
 	uiFormBase *pChild;
 	list_entry *pCurrent, *pNext;
@@ -586,7 +577,7 @@ void uiFormBase::EntryOnDestroy(uiWindow *pWnd)
 	delete this;
 }
 
-void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo)
+void uiFormBase::EntryOnMove(INT x, INT y, const stFormMoveInfo* pInfo)
 {
 	OnMove(x, y, pInfo);
 
@@ -613,7 +604,7 @@ void uiFormBase::EntryOnKBLoseFocus()
 		CaretShow(FALSE);
 }
 
-void uiFormBase::EntryOnCommand(UINT id)
+void uiFormBase::EntryOnCommand(UINT_PTR id)
 {
 	BOOL bDone = FALSE;
 	std::vector<UINT> &IDList = GetIDList();
@@ -660,7 +651,7 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 	}
 }
 
-void uiFormBase::OnCommand(INT id, BOOL &bDone)
+void uiFormBase::OnCommand(INT_PTR id, BOOL &bDone)
 {
 	ASSERT(!bDone);
 	bDone = TRUE;
@@ -726,7 +717,7 @@ void uiFormBase::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
 }
 
-void uiFormBase::OnMove(INT x, INT y, const stFormMoveInfo *pInfo)
+void uiFormBase::OnMove(INT x, INT y, const stFormMoveInfo* pInfo)
 {
 //	printx("---> uiFormBase::OnMove x: %d, y: %d.\n", x, y);
 }
@@ -945,9 +936,19 @@ void uiSideDockableFrame::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 
 void uiSideDockableFrame::OnFramePaint(uiDrawer* pDrawer)
 {
+	INT    offset;
+	DWORD  color = uiGetSysColor(SCN_FRAME);
 	uiRect rect = GetFrameRect();
-	DWORD color = uiGetSysColor(SCN_FRAME);
-	pDrawer->FillRect(rect, color);
+	//pDrawer->FillRect(rect, RGB(255, 255, 255));
+
+	offset = m_BTLeft >> 1;
+	pDrawer->DrawLine(offset, 0, offset, rect.Bottom, color, m_BTLeft);
+	offset = rect.Right - m_BTRight + (m_BTRight >> 1);
+	pDrawer->DrawLine(offset, 0, offset, rect.Bottom, color, m_BTRight);
+	offset = m_BTTop >> 1;
+	pDrawer->DrawLine(0, offset, rect.Right, offset, color, m_BTTop);
+	offset = rect.Bottom - m_BTBottom + (m_BTBottom >> 1);
+	pDrawer->DrawLine(0, offset, rect.Right, offset, color, m_BTBottom);
 }
 
 BOOL uiSideDockableFrame::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
@@ -1133,7 +1134,7 @@ BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 }
 
 
-void uiHeaderForm::EntryOnCommand(UINT id)
+void uiHeaderForm::EntryOnCommand(UINT_PTR id)
 {
 	ASSERT(GetParent() != nullptr);
 	GetParent()->EntryOnCommand(id);

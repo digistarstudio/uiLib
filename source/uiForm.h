@@ -12,13 +12,10 @@ class uiButton;
 class uiFormBase;
 class uiWindow;
 struct uiFormStyle;
-struct stMsgProcRetInfo;
-struct stDialogCreateParam;
 
 
 BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y); // Declare this for inline function.
-BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT id);
-void uiMonitorEvent();
+BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT_PTR id);
 
 
 enum FORM_SHOW_MODE
@@ -214,15 +211,15 @@ public:
 	BOOL CaretMoveByOffset(INT OffsetX, INT OffsetY);
 	BOOL CaretMove(INT x, INT y);
 
-	void PopupMenu(INT x, INT y, uiMenu *pMenu);
+	void PopupMenu(INT x, INT y, uiMenu* pMenu);
 
 	virtual FORM_CLASS GetClass() const { return FC_BASE; }
 
-	virtual INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS); // fcX and fcY are in frame space.
+	virtual INT FindByPos(uiFormBase** pDest, INT fcX, INT fcY, uiPoint* ptCS); // fcX and fcY are in frame space.
 	virtual CLIENT_AREA_TYPE GetAreaType(INT csX, INT csY) { return CAT_CLIENT; }
 
-	virtual void ToPlateSpace(const uiFormBase *pForm, INT& x, INT& y) const;
-	virtual void ToPlateSpace(const uiFormBase *pForm, uiRect& rect, BOOL bClip) const;
+	virtual void ToPlateSpace(const uiFormBase* pForm, INT& x, INT& y) const;
+	virtual void ToPlateSpace(const uiFormBase* pForm, uiRect& rect, BOOL bClip) const;
 	virtual uiPoint FrameToClientSpace(uiPoint& pt) const { return pt; }
 	virtual uiRect GetClientRectFS() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
 	virtual uiRect GetClientRect() const { return uiRect(m_FrameRect.Width(), m_FrameRect.Height()); }
@@ -232,14 +229,14 @@ public:
 
 	void EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight);
 	BOOL EntryOnClose();
-	void EntryOnDestroy(uiWindow *pWnd);
-	void EntryOnMove(INT x, INT y, const stFormMoveInfo *pInfo);
+	void EntryOnDestroy(uiWindow* pWnd);
+	void EntryOnMove(INT x, INT y, const stFormMoveInfo* pInfo);
 	void EntryOnSize(UINT nNewWidth, UINT nNewHeight);
 
 	void EntryOnKBGetFocus();
 	void EntryOnKBLoseFocus();
 
-	virtual void EntryOnCommand(UINT id);
+	virtual void EntryOnCommand(UINT_PTR id);
 	virtual void EntryOnPaint(uiDrawer* pDrawer, INT depth);
 
 	virtual uiSize GetMinSize() { return uiSize(-1, -1); }
@@ -250,7 +247,7 @@ public:
 	virtual void OnDestroy() {}
 	virtual void OnActivate(BOOL bActive) {}
 
-	virtual void OnCommand(INT id, BOOL &bDone);
+	virtual void OnCommand(INT_PTR id, BOOL &bDone);
 
 	virtual BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
 
@@ -262,7 +259,7 @@ public:
 	virtual void OnMouseLeave();
 	virtual void OnMouseFocusLost();
 	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
-	virtual void OnMove(INT x, INT y, const stFormMoveInfo *pInfo);
+	virtual void OnMove(INT x, INT y, const stFormMoveInfo* pInfo);
 	virtual void OnPaint(uiDrawer* pDrawer);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
@@ -339,11 +336,11 @@ public:
 		rect = m_FrameRect;
 		ToWindowSpace(rect, FALSE);
 	}
-	INLINE void GetClientRectWS(uiRect &rect) const
+	INLINE void GetClientRectWS(uiRect &rect, BOOL bClip) const
 	{
 		rect = GetClientRectFS();
 		rect.Move(m_FrameRect.Left, m_FrameRect.Top);
-		ToWindowSpace(rect, FALSE);
+		ToWindowSpace(rect, bClip);
 	}
 	INLINE uiPoint ClientToWindow(uiPoint& ptIn) const
 	{
@@ -430,12 +427,9 @@ private:
 //	friend uiFormBase* FindFromSplitter(stFormSplitter *pSplitter, INT x, INT y);
 //	friend uiFormBase* FindByPosImp(uiFormBase *pForm, INT x, INT y);
 	friend void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingBarWidth, uiRect &RectPlate, uiFormBase *pDocking, uiFormBase *pPlate);
-	friend uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, INT32 x, INT32 y, UINT32 nWidth, UINT32 nHeight, BOOL bVisible);
-	friend INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP);
-	friend void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-	friend class uiSideDockableFrame;
 	friend class uiForm;
+	friend class uiSideDockableFrame;
 	friend class uiWindow;
 
 
@@ -591,7 +585,7 @@ class IMessageHandler : virtual public uiFormBase
 {
 public:
 
-	void EntryOnCommand(UINT id) override
+	void EntryOnCommand(UINT_PTR id) override
 	{
 	}
 
@@ -703,10 +697,10 @@ public:
 	virtual ~uiHeaderForm() {}
 
 
-	void EntryOnCommand(UINT id);
+	void EntryOnCommand(UINT_PTR id) override;
 	BOOL ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose);
 
-	void OnMouseEnter(INT x, INT y);
+	void OnMouseEnter(INT x, INT y) override;
 	void OnMouseLeave();
 
 	BOOL OnCreate();
@@ -742,6 +736,8 @@ protected:
 	uiRect m_rectIcon, m_rectTitle;
 
 	uiImage m_temp;
+
+
 };
 
 
@@ -854,11 +850,11 @@ public:
 	void UpdateTabsRect();
 	void RedrawTabs(INT index1, INT index2 = -1);
 
-	void OnMouseEnter(INT x, INT y)
+	void OnMouseEnter(INT x, INT y) override
 	{
 		printx("---> uiTabForm::OnMouseEnter\n");
 	}
-	void OnMouseLeave()
+	void OnMouseLeave() override
 	{
 		printx("---> uiTabForm::OnMouseLeave\n");
 
@@ -869,23 +865,23 @@ public:
 			m_HighlightIndex = -1;
 		}
 	}
-	void OnMouseFocusLost()
+	void OnMouseFocusLost() override
 	{
 		printx("---> uiTabForm::OnMouseFocusLost\n");
 		m_bDraggingTab = false;
 	}
 
-	void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
 	{
 		printx("---> uiTabForm::OnMouseBtnClk x: %d, y: %d\n", x, y);
 	}
 
-	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
-	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override;
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override;
 	void GetBufferRect(const uiRect &OldRect, const uiRect &NewRect, uiRect &out);
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
-	void OnSize(UINT nNewWidth, UINT nNewHeight);
-	void OnPaint(uiDrawer* pDrawer);
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override;
+	void OnSize(UINT nNewWidth, UINT nNewHeight) override;
+	void OnPaint(uiDrawer* pDrawer) override;
 
 
 	INLINE BOOL TestFlag(TAB_FORM_FLAGS flag) { return m_Flag & flag; }
@@ -929,9 +925,9 @@ private:
 	INT AddPaneInfo(stPaneInfo *pNewPaneInfo, INT index = -1)
 	{
 		if (index == -1)
-			index = m_PaneInfoArray.size();
+			index = (INT)m_PaneInfoArray.size();
 		m_PaneInfoArray.insert(m_PaneInfoArray.begin() + index, 1, *pNewPaneInfo);
-		m_TotalPane = m_PaneInfoArray.size();
+		m_TotalPane = (INT)m_PaneInfoArray.size();
 		return index;
 	}
 	stPaneInfo* GetPaneInfo(INT index)

@@ -230,7 +230,7 @@ public:
 		pDrawer->FillRect(rect, RGB(100, 125, 125));
 	}
 
-	void OnCommand(INT id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone)
 	{
 		ASSERT(id == m_pButton->GetID());
 		CaretShow(TRUE, 5, 5, 5, 15);
@@ -289,7 +289,7 @@ public:
 		return TRUE;
 	}
 
-	void OnCommand(INT id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone)
 	{
 		if (id == m_pButton->GetID())
 		{
@@ -366,7 +366,7 @@ public:
 			MoveByOffset(20, 0);
 	}
 
-	virtual void OnCommand(INT id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone)
 	{
 		printx("---> CFormEx2::OnCommand ID: %d\n", id);
 		static INT CalledCount = 0;
@@ -529,7 +529,7 @@ public:
 	//*/
 	}
 
-	virtual void OnCommand(INT id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone) override
 	{
 		printx("---> CMyForm::OnCommand ID: %d\n", id);
 		static INT i = 0;
@@ -553,7 +553,7 @@ public:
 		//	pToolForm->SetHeaderBar(_T("test"));
 
 			CMyForm temp;
-			INT_PTR ret = temp.ModalDialog(this, 50, 50, 300, 50);
+			INT_PTR ret = temp.ModalDialog(this, 500, 500, 300, 50);
 
 		//	CreateDialogHelper(uiGetAppIns(), GetBaseWnd()->GetHandle());
 		}

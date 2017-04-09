@@ -124,18 +124,6 @@ void SetInterface(_BASE_TYPE*& pI)
 	++i;
 #endif
 }
-struct T {
-	int a;
-	union {
-		struct {
-			int a;
-		} s1;
-		struct {
-			char b[1024];
-		} s2;
-	};
-};
-
 
 void GUITest()
 {
@@ -155,12 +143,6 @@ void GUITest()
 	mt.Print();
 #endif
 
-	printx("\n\n\n");
-
-
-	T x = T();
-
-	printx("\n\n\n");
 
 }
 

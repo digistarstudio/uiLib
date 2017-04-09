@@ -86,8 +86,6 @@ INT uiMenu::GetCount(BOOL bCountSeparator)
 	INT count = 0;
 	for (INT i = 0, Total = m_ItemArray.size(); i < Total; ++i)
 	{
-
-
 	}
 
 	return count;

@@ -213,7 +213,7 @@ struct stImgHandleWrapper
 
 	void DebugCheckFunc()
 	{
-		ASSERT((Type & WIT_TYPE_MASK)< WIT_TOTAL);
+		ASSERT((Type & WIT_TYPE_MASK) < WIT_TOTAL);
 		if (Type & WIT_LOAD_RESOURCE)
 			ASSERT(KeyHandleMap[Key].expired());
 		else
@@ -338,8 +338,9 @@ protected:
 
 	struct stRenderDestInfo
 	{
-		INT OriginX, OriginY;
+		INT    OriginX, OriginY;
 		uiRect rect;
+		void*  ctx;
 	};
 
 	uiRect m_RenderDestRect;
@@ -368,11 +369,11 @@ public:
 		{
 			RDInfo.OriginX = m_OriginX;
 			RDInfo.OriginY = m_OriginY;
+			OnDestRectChanged(DEST_PUSH, RDInfo.ctx);
 			m_RectList.AddDataHead(RDInfo);
 
 			m_OriginX += pt.x;
 			m_OriginY += pt.y;
-			OnDestRectChanged(DEST_PUSH);
 
 			return TRUE;
 		}
@@ -390,10 +391,10 @@ public:
 		m_OriginX = RDInfo.OriginX;
 		m_OriginY = RDInfo.OriginY;
 		m_RenderDestRect = RDInfo.rect;
-		OnDestRectChanged(DEST_RESTORE);
+		OnDestRectChanged(DEST_RESTORE, RDInfo.ctx);
 	}
 
-	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE); }
+//	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE, void*()); }
 
 
 };
@@ -409,13 +410,13 @@ struct stDrawImageParam
 {
 	stDrawImageParam(INT xIn, INT yIn, INT widthIn, INT heightIn, UINT flagsIn = 0, UINT AniIndexIn = 0);
 
-	INT  X, Y, Width, Height;
-	UINT Flags;
-	UINT AniIndex;
+	INT  x, y, width, height;
+	UINT flags;
+	UINT aniIndex;
 };
 
 INLINE stDrawImageParam::stDrawImageParam(INT xIn, INT yIn, INT widthIn, INT heightIn, UINT flagsIn, UINT AniIndexIn)
-:X(xIn), Y(yIn), Width(widthIn), Height(heightIn), Flags(flagsIn), AniIndex(AniIndexIn)
+:x(xIn), y(yIn), width(widthIn), height(heightIn), flags(flagsIn), aniIndex(AniIndexIn)
 {
 }
 
@@ -441,7 +442,7 @@ public:
 
 protected:
 
-	virtual void OnDestRectChanged(DEST_CHANGE_TYPE dct) {}
+	virtual void OnDestRectChanged(DEST_CHANGE_TYPE dct, void*& ctx) {}
 
 
 };
@@ -509,8 +510,6 @@ protected:
 };
 
 
-BOOL SaveFile(const TCHAR* pFileName, void *pData, UINT nSize); // delete me
-
 class uiWndDC
 {
 public:
@@ -545,101 +544,26 @@ public:
 			HPEN hPen = (HPEN)::SelectObject(m_hDC, m_hOldPen);
 			HBRUSH hBrush = (HBRUSH)::SelectObject(m_hDC, m_hOldBrush);
 			HFONT hFont = (HFONT)::SelectObject(m_hDC, m_hOldFont);
-			/*
-			if (hPen != m_hOldPen)
-				::DeleteObject(hPen);
-			if (hBrush != m_hOldBrush)
-				::DeleteObject(hBrush);
-			//*/
 			m_hDC = NULL;
 			return TRUE;
 		}
 		return FALSE;
 	}
 
-//*
-	BOOL SetPenOld(INT width, UINT32 color, INT style = PS_SOLID)
-	{
-		HPEN hPen = ::CreatePen(style, width, color), hOldPen;
-		if (hPen == NULL)
-			return FALSE;
-		if ((hOldPen = (HPEN)::SelectObject(m_hDC, hPen)) != m_hOldPen)
-			::DeleteObject(hOldPen);
-		return TRUE;
-	}
-	BOOL SetBrushOld(UINT32 color, BOOL bHollow)
-	{
-		HBRUSH hBrush, hOldBrush;
-
-		if (bHollow)
-			hBrush = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
-		else
-			hBrush = CreateSolidBrush(color);
-		if (hBrush == NULL)
-			return FALSE;
-		if ((hOldBrush = (HBRUSH)::SelectObject(m_hDC, hBrush)) != m_hOldBrush)
-			::DeleteObject(hOldBrush);
-		return TRUE;
-	}
-//*/
-
-	BOOL SetBrushNew(UINT32 color, BOOL bHollow)
-	{
-		if (bHollow)
-			return ::SelectObject(m_hDC, GetStockObject(HOLLOW_BRUSH)) != NULL;
-
-		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_BRUSH, color);
-		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
-	}
-
-	void Bench(UINT32 color, BOOL bHollow)
-	{
-		const INT test = 100;
-		CPerformanceCounter pc, pc2;
-		pc.Start();
-		for (INT i = 0; i < test; ++i)
-		{
-			SetBrushOld(color, bHollow);
-		}
-		pc.End();
-
-		pc2.Start();
-		for (INT i = 0; i < test; ++i)
-		{
-			SetBrushNew(color, bHollow);
-		}
-		pc2.End();
-
-
-		DOUBLE t = pc.Get(), t2 = pc2.Get();
-		TCHAR string[2048];
-		INT len = uiString::Format(string, _countof(string), _T("old: %f, new :%f\n"), t, t2);
-		SaveFile(_T("R:\\result.txt"), string, sizeof(TCHAR) * len);
-
-		printx("Old: %f, New %f\n", pc.Get(), pc2.Get());
-	}
 
 	BOOL SetPen(INT width, UINT32 color, INT style = PS_SOLID)
 	{
 		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_PEN, style, width, color);
 		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
 	}
-	BOOL SetBrush(UINT32 color, BOOL bHollow)
+	BOOL SetHollowBrush()
 	{
-		if (GetKeyState(VK_F2) < 0)
-			Bench(color, bHollow);
-
-		if (bHollow)
-			return ::SelectObject(m_hDC, GetStockObject(HOLLOW_BRUSH)) != NULL;
-
+		return ::SelectObject(m_hDC, ::GetStockObject(HOLLOW_BRUSH)) != NULL;
+	}
+	BOOL SetBrush(UINT32 color)
+	{
 		uiGDIObjCacher::stGDIObjectName gon(uiGDIObjCacher::TYPE_BRUSH, color);
 		return ::SelectObject(m_hDC, uiGDIObjCacher::Find(gon)) != NULL;
-	}
-//*/
-	BOOL SetFont(HFONT hFont)
-	{
-		ASSERT(m_hDC != NULL);
-		::SelectObject(m_hDC, (hFont == NULL) ? m_hOldFont : hFont);
 	}
 
 	BOOL FillRect(const RECT* pRect)
@@ -839,20 +763,22 @@ public:
 
 protected:
 
-	void OnDestRectChanged(DEST_CHANGE_TYPE dct) OVERRIDE
+	void OnDestRectChanged(DEST_CHANGE_TYPE dct, void*& ctx) OVERRIDE
 	{
-		if (dct == DEST_RESTORE)
-			return;
 #ifdef USE_GDI_CLIPPING
 		HDC hMemDC = m_WndDrawDC.GetDC();
-		if (m_hRgn != NULL)
+		if (dct == DEST_RESTORE)
 		{
-			SelectClipRgn(hMemDC, NULL);
+			VERIFY(::SelectClipRgn(hMemDC, (HRGN)ctx) != ERROR);
 			VERIFY(DeleteObject(m_hRgn));
+			m_hRgn = (HRGN)ctx;
 		}
-		m_hRgn = CreateRectRgn(m_RenderDestRect.Left, m_RenderDestRect.Top, m_RenderDestRect.Right, m_RenderDestRect.Bottom);
-		INT i = SelectClipRgn(hMemDC, m_hRgn);
-		ASSERT(i != ERROR);
+		else if (dct == DEST_PUSH)
+		{
+			ctx = m_hRgn;
+			m_hRgn = CreateRectRgn(m_RenderDestRect.Left, m_RenderDestRect.Top, m_RenderDestRect.Right, m_RenderDestRect.Bottom);
+			VERIFY(::SelectClipRgn(hMemDC, m_hRgn) != ERROR);
+		}
 #endif
 	}
 
