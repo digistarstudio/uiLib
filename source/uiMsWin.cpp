@@ -158,7 +158,7 @@ BOOL CloseWindowSystem()
 HGLOBAL uiWindow::hGDialogTemplate = NULL;
 
 
-void uiWindow::uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	BOOL& bProcessed = ret.bProcessed;
 	LRESULT& lRet = ret.ret;
@@ -209,7 +209,7 @@ void uiWindow::uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM 
 		LogWndMsg("Msg: WM_ACTIVATE 0x%p 0x%p\n", wParam, lParam);
 		pWnd = uiWindowGet(hWnd);
 		pWnd->OnActivate(wParam, lParam);
-		bProcessed = TRUE;
+	//	bProcessed = TRUE;
 		break;
 
 	case WM_SETFOCUS:
@@ -246,6 +246,22 @@ void uiWindow::uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM 
 	//	LogWndMsg("Msg: WM_SETCURSOR\n");
 	//	lRet = bProcessed = TRUE; // Must let DefWindowProc handle this, or cause problem when creating modal dialog.
 		break;
+
+	case WM_MOUSEACTIVATE:
+		LogWndMsg("Msg: WM_MOUSEACTIVATE\n");
+		pWnd = uiWindowGet(hWnd);
+		pWnd->OnMouseActivate(wParam, lParam);
+		pWnd = nullptr;
+		break;
+
+	//case WM_GETMINMAXINFO:
+	//	LogWndMsg("Msg: WM_GETMINMAXINFO\n");
+	//	{
+	//		DefWindowProc(hWnd, message, wParam, lParam);
+	//		MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+	//		LogWndMsg("Msg: WM_GETMINMAXINFO\n");
+	//	}
+	//	break;
 
 	case WM_NCHITTEST:
 	//	LogWndMsg("Msg: WM_NCHITTEST x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
@@ -368,7 +384,7 @@ void uiWindow::uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM 
 static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	stMsgProcRetInfo rInfo;
-	uiWindow::uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
 
 	if (rInfo.bProcessed)
 		return rInfo.ret;
@@ -394,6 +410,8 @@ BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
 //	::SetClassLongPtr(hDlg, GCLP_HBRBACKGROUND, NULL);
 
 	pWnd->SizeImp(pDCP->cx, pDCP->cy);
+
+	ASSERT(!(pDCP->fcf & FCF_NO_ACTIVATE));
 	if (pDCP->fcf & FCF_CENTER)
 		pWnd->MoveToCenter();
 	else
@@ -407,7 +425,7 @@ BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
 	if (pDCP->pParent != nullptr)
 		pDCP->pParent->AddChild(pDCP->pForm);
 
-	pForm->EntryOnCreate(TRUE, rect.Width(), rect.Height());
+	pForm->EntryOnCreate(pDCP->fcf, rect.Width(), rect.Height());
 
 	return TRUE;
 }
@@ -427,7 +445,7 @@ static INT_PTR CALLBACK DialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM l
 	}
 
 	stMsgProcRetInfo rInfo;
-	uiWindow::uiMsgProc(rInfo, hDlg, uMsg, wParam, lParam);
+	uiMsgProc(rInfo, hDlg, uMsg, wParam, lParam);
 
 	if (rInfo.bProcessed)
 	{
@@ -466,7 +484,8 @@ uiWindow* uiWindow::CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, 
 
 	HWND hParent = (ParentForm == nullptr) ? NULL : (HWND)ParentForm->GetBaseWnd()->GetHandle();
 	RECT r = { wcp.x, wcp.y, (LONG)(wcp.x + wcp.cx), (LONG)(wcp.y + wcp.cy) };
-	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (wcp.bVisible) ? WS_POPUP| WS_VISIBLE : WS_POPUP /*| WS_SIZEBOX */;
+	const DWORD deStyle = WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_POPUP; // | WS_SIZEBOX | WS_SYSMENU | WS_CAPTION;
+	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = (wcp.bVisible) ? deStyle | WS_VISIBLE : deStyle;
 //	DWORD ExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE, Style = WS_CAPTION | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_VISIBLE;
 
 	switch (uwt)
@@ -506,11 +525,12 @@ INT_PTR uiWindow::CreateModalDialog(const stDialogCreateParam* pDCP)
 }
 
 
-uiWindow::uiWindow(uiFormBase *pFormIn)
+uiWindow::uiWindow(uiFormBase* pFormIn)
 :m_pFirstClickedForm()
 {
 	m_Handle = NULL;
 	m_pForm = pFormIn;
+	m_pActiveForm = pFormIn;
 	m_pHoverForm = nullptr;
 	m_pGrayForm = nullptr;
 	m_pDraggingForm = nullptr;
@@ -526,6 +546,8 @@ uiWindow::uiWindow(uiFormBase *pFormIn)
 	ZeroMemory(m_MouseKeyDownTime, sizeof(m_MouseKeyDownTime));
 
 	m_TotalWorkingTimer = 0;
+
+	pFormIn->FBSetFlag(uiFormBase::FBF_ACTIVE_TRAIL);
 }
 
 uiWindow::~uiWindow()
@@ -536,10 +558,55 @@ uiWindow::~uiWindow()
 }
 
 
-void uiWindow::OnFormDestroy(uiFormBase *pForm)
+void uiWindow::OnFormPreClose(uiFormBase* pForm)
+{
+	if (m_pActiveForm->IsSubnode(pForm))
+	{
+		if (m_pActiveForm->FBTestFlag(uiFormBase::FBF_ACTIVATED))
+		{
+			ASSERT(IsActive());
+			m_pActiveForm->OnActivate(FALSE);
+		}
+	}
+}
+
+void uiWindow::OnFormPostClose(uiFormBase* pForm)
+{
+	if (m_pActiveForm == nullptr && pForm != nullptr)
+	{
+		uiFormBase* pNewActive = pForm->TryActivate();
+
+		ASSERT(pNewActive != nullptr);
+
+		if (pNewActive == pForm)
+		{
+			ASSERT(pNewActive->FBTestFlag(uiFormBase::FBF_ACTIVE_TRAIL));
+			ASSERT(!pNewActive->FBTestFlag(uiFormBase::FBF_ACTIVATED));
+		}
+		else
+		{
+			ASSERT(!pNewActive->FBTestFlag(uiFormBase::FBF_ACTIVE_TRAIL | uiFormBase::FBF_ACTIVATED));
+			ASSERT(pForm->FBTestFlag(uiFormBase::FBF_ACTIVE_TRAIL));
+			pNewActive->EntryOnUpdateAT(uiFormBase::AS_ACTIVE, nullptr);
+		}
+
+		m_pActiveForm = pNewActive;
+
+		if (IsActive())
+		{
+			m_pActiveForm->FBSetFlag(uiFormBase::FBF_ACTIVATED);
+			m_pActiveForm->OnActivate(TRUE);
+		}
+	}
+}
+
+void uiWindow::OnFormDestroy(uiFormBase* pForm)
 {
 	if (pForm->GetTimerCount() != 0)
 		TimerRemoveAll(pForm);
+
+	if (m_pActiveForm == pForm)
+		m_pActiveForm = nullptr;
 
 	if (m_pHoverForm == pForm)
 	{
@@ -548,19 +615,20 @@ void uiWindow::OnFormDestroy(uiFormBase *pForm)
 	}
 	if (m_pMouseFocusForm == pForm)
 	{
-		m_pMouseFocusForm = nullptr;
+		m_pMouseFocusForm = nullptr; // TODO
 		bRetrackMouse = true;
 	}
 	if (m_pKeyboardFocusForm == pForm)
 		m_pKeyboardFocusForm = nullptr;
-	if (m_pForm == pForm)
+
+	if (m_pForm == pForm) // Check this at last.
 	{
 		m_pForm = nullptr;
 		bRetrackMouse = false;
 	}
 }
 
-void uiWindow::OnFormHide(uiFormBase *pForm)
+void uiWindow::OnFormHide(uiFormBase* pForm)
 {
 }
 
@@ -605,6 +673,42 @@ void uiWindow::MoveToCenter()
 	INT mx = (rect.left + rect.right - ur.Width()) / 2;
 	INT my = (rect.top + rect.bottom - ur.Height()) / 2;
 	MoveImp(mx, my);
+}
+
+BOOL uiWindow::UpdateAT(uiFormBase* pActiveForm, uiFormBase*& pPrevForm)
+{
+	if (pActiveForm->FBTestFlag(uiFormBase::FBF_ACTIVATED))
+	{
+		pPrevForm = nullptr;
+		return FALSE;
+	}
+	if (pActiveForm == m_pActiveForm)
+	{
+		pPrevForm = nullptr;
+		return TRUE;
+	}
+
+	ASSERT(m_pActiveForm != nullptr);
+	pPrevForm = m_pActiveForm;
+
+	uiFormBase* const pParentForm = uiFormBase::FindTheParent(m_pActiveForm, pActiveForm), * pSubNode;
+
+	pSubNode = nullptr;
+	for (uiFormBase* pTemp = pPrevForm; pTemp != pParentForm; pTemp = pTemp->GetPlate())
+	{
+		pTemp->EntryOnUpdateAT(uiFormBase::AS_INACTIVE, pSubNode);
+		pSubNode = pTemp;
+	}
+	pSubNode = nullptr;
+	for (uiFormBase* pTemp = pActiveForm; pTemp != pParentForm; pTemp = pTemp->GetPlate())
+	{
+		pTemp->EntryOnUpdateAT(uiFormBase::AS_ACTIVE, pSubNode);
+		pSubNode = pTemp;
+	}
+	pParentForm->EntryOnUpdateAT(uiFormBase::AS_NOTIFY, pSubNode);
+	m_pActiveForm = pActiveForm;
+
+	return TRUE;
 }
 
 void uiWindow::ShowImp(FORM_SHOW_MODE sm)
@@ -660,9 +764,14 @@ BOOL uiWindow::StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, IN
 	}
 #endif
 
-	if (pForm == m_pForm)
-		return ::PostMessage(m_Handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(x, y));
-	else
+/*	if (pForm == m_pForm)
+	{
+		bWindowMove = true;
+		ClientToScreen(x, y);
+		::PostMessage(m_Handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(x, y));
+	//	::SendMessage(m_Handle, WM_SYSCOMMAND, 0x0000F012, MAKELPARAM(x, y));
+	}
+	else //*/
 	{
 		if (m_bDragging || m_MouseDragKey != MKT_NONE)
 		{
@@ -673,19 +782,29 @@ BOOL uiWindow::StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, IN
 		m_MouseDragKey = mkt;
 		m_bDragging = true;
 		m_pDraggingForm = pForm;
-		m_MDPosX = x;
-		m_MDPosY = y;
 
-		MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
-		ClipCursor((RECT*)&MouseMoveRect);
+		if (pForm == m_pForm)
+		{
+			m_MDPosX = x + m_ScreenCoordinateX;
+			m_MDPosY = y + m_ScreenCoordinateY;
+		}
+		else
+		{
+			MouseMoveRect.Move(m_ScreenCoordinateX, m_ScreenCoordinateY);
+			ClipCursor((RECT*)&MouseMoveRect);
+			m_MDPosX = x;
+			m_MDPosY = y;
+		}
+
 		SetCapture();
-		return TRUE;
 	}
+
+	return TRUE;
 }
 
 void uiWindow::RedrawImp(const uiRect* pRect)
 {
-	InvalidateRect(m_Handle, (const RECT*)pRect, FALSE);
+	VERIFY(InvalidateRect(m_Handle, (const RECT*)pRect, FALSE));
 }
 
 void uiWindow::ResizeImp(INT x, INT y)
@@ -820,7 +939,7 @@ void uiWindow::RetrackMouseCheck(uiFormBase* pFormBase) // For form size and mov
 
 void uiWindow::UpdateCursor(uiFormBase *pForm, INT csX, INT csY)
 {
-	if (m_bSizing)
+	if (m_bSizing || m_bDragging)
 		return;
 
 	uiImage NewCursor;
@@ -1073,26 +1192,80 @@ void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
 	{
 	case WA_INACTIVE:
 		hActivated = (HWND)lParam;
+		m_bActive = FALSE;
 		break;
 	case WA_ACTIVE:
 		hDeactivated = (HWND)lParam;
+		m_bActive = TRUE;
 		break;
 	case WA_CLICKACTIVE:
 		hDeactivated = (HWND)lParam;
+		m_bActive = TRUE;
 		break;
 	}
-//	BOOL bMinimized = HIWORD(wParam);
+	BOOL bMinimized = HIWORD(wParam);
 
-	if (m_pKeyboardFocusForm == nullptr)
-		m_pKeyboardFocusForm = m_pForm;
+	if (m_pForm == nullptr || !m_pForm->IsCreated())
+		return;
+
+	if (m_bActive)
+	{
+		m_pActiveForm->SetActive();
+	}
+	else
+	{
+		ASSERT(m_pActiveForm->FBTestFlag(uiFormBase::FBF_ACTIVATED));
+		m_pActiveForm->FBClearFlag(uiFormBase::FBF_ACTIVATED);
+		m_pActiveForm->OnActivate(FALSE);
+	//	m_pForm->RedrawFrame();
+	}
+
+//	if (m_pKeyboardFocusForm == nullptr)
+//		m_pKeyboardFocusForm = m_pForm;
 }
 
 void uiWindow::OnNCActivate(WPARAM wParam, LPARAM lParam)
 {
-	printx("---> uiWindow::OnNCActivate. Activate: %d\n", wParam);
+	printx("---> uiWindow::OnNCActivate. Activate: %d, HWND: %p\n", wParam, m_Handle);
 
+	if (m_pForm != nullptr && m_pForm->IsCreated())
+	{
+		//ASSERT(m_pActiveForm != nullptr);
+		//for (uiFormBase* pBase = m_pActiveForm; pBase != nullptr; pBase = pBase->GetPlate())
+		//	pBase->OnActivate(wParam, nullptr);
 
+		uiRect rect;
+		GetClientRect(rect);
+		if (rect.IsValidRect() && m_Drawer.BeginCache(rect))
+		{
+			if (GetKeyState(VK_F2) < 0)
+			{
+				m_Drawer.FillRect(rect, RGB(0, 0, wParam ? 255 : 0));
+			}
+			else
+			{
+				m_Drawer.SetMode(wParam ? (FPM_NCPAINT | FPM_ACTIVE) : FPM_NCPAINT);
+				m_pForm->EntryOnPaint(&m_Drawer);
+			}
+			m_Drawer.EndCache();
+		}
+	}
+}
 
+void uiWindow::OnMouseActivate(WPARAM wParam, LPARAM lParam)
+{
+	printx("---> uiWindow::OnMouseActivate. Top-level Parent: %p, HWND: %p\n", wParam, m_Handle);
+
+	uiFormBase* pNewActiveForm = m_pGrayForm->TryActivate(), *pPrevForm;
+	if (pNewActiveForm != nullptr && pNewActiveForm != m_pActiveForm)
+	{
+		if (UpdateAT(pNewActiveForm, pPrevForm))
+		{
+		//	ASSERT(pPrevForm->FBTestFlag(uiFormBase::FBF_ACTIVATED));
+		//	pPrevForm->FBClearFlag(uiFormBase::FBF_ACTIVATED);
+		}
+		m_pActiveForm = pNewActiveForm;
+	}
 }
 
 BOOL uiWindow::OnClose()
@@ -1156,6 +1329,8 @@ void uiWindow::OnMove(INT scx, INT scy)
 
 void uiWindow::OnPaint()
 {
+	//printx("---> uiWindow::OnPaint. HWND: %p\n", m_Handle);
+
 	PAINTSTRUCT ps;
 	if (m_Drawer.Begin(&ps))
 	{
@@ -1164,11 +1339,11 @@ void uiWindow::OnPaint()
 			uiRect rect;
 			memcpy(&rect, &ps.rcPaint, sizeof(rect));
 			m_Drawer.FillRect(rect, RGB(rand() % 256, rand() % 256, rand() % 256));
-			//	printx("---> uiWindow::OnPaint\n");
 		}
 		else
 		{
-			m_pForm->EntryOnPaint(&m_Drawer, 1);
+			m_Drawer.SetMode(m_bActive ? (FPM_NORMAL | FPM_ACTIVE) : FPM_NORMAL);
+			m_pForm->EntryOnPaint(&m_Drawer);
 		}
 		m_Drawer.End(&ps);
 	}
@@ -1355,20 +1530,15 @@ BOOL uiWindow::DragEventForMouseBtnUp(INT wcX, INT wcY)
 {
 	if (m_bDragging)
 	{
-		if (m_pDraggingForm != m_pForm)
-		{
-			ReleaseCapture();
-			ClipCursor(NULL);
-		}
+		ASSERT(!bMouseFocusCaptured);
+		ReleaseCapture();
 
+		if (m_pDraggingForm != m_pForm)
+			ClipCursor(NULL);
 		m_MouseDragKey = MKT_NONE;
 		m_bDragging = false;
+		m_bSizing = false;
 
-		if (m_bSizing)
-		{
-			m_bSizing = false;
-//			uiGetCursor().StartSizing(TRUE);
-		}
 		return TRUE;
 	}
 	return FALSE;
@@ -1388,12 +1558,7 @@ void uiWindow::OnMouseCaptureLost()
 			ClipCursor(NULL);
 		m_MouseDragKey = MKT_NONE;
 		m_bDragging = false;
-
-		if (m_bSizing)
-		{
-			m_bSizing = false;
-//			uiGetCursor().StartSizing(TRUE);
-		}
+		m_bSizing = false;
 	}
 	else if (m_pMouseFocusForm != nullptr)
 	{
@@ -1409,7 +1574,7 @@ void uiWindow::OnMouseCaptureLost()
 
 void uiWindow::OnDragging(INT x, INT y)
 {
-	ASSERT(m_pDraggingForm != m_pForm);
+//	ASSERT(m_pDraggingForm != m_pForm);
 
 	INT OffsetX = x - m_MDPosX;
 	INT OffsetY = y - m_MDPosY;
@@ -1417,7 +1582,16 @@ void uiWindow::OnDragging(INT x, INT y)
 
 	if (!m_bSizing)
 	{
-		m_pDraggingForm->MoveByOffset(OffsetX, OffsetY, TRUE);
+		if (m_pDraggingForm != m_pForm)
+			m_pDraggingForm->MoveByOffset(OffsetX, OffsetY, TRUE);
+		else
+		{
+			uiPoint pt;
+			uiGetCursor().GetPos(pt);
+			MoveByOffsetImp(pt.x - m_MDPosX, pt.y - m_MDPosY);
+			x = pt.x;
+			y = pt.y;
+		}
 	}
 	else
 	{
@@ -1572,6 +1746,20 @@ void uiWindow::OnMouseBtnDown(const MOUSE_KEY_TYPE KeyType, const INT x, const I
 	if (pDestForm == nullptr)
 		return;
 
+	//*
+	if (m_pActiveForm != pDestForm)
+	{
+		uiFormBase* pTemp;
+		if ((pTemp = pDestForm->TryActivate()) != nullptr)
+		{
+			pTemp->SetActive();
+			m_pForm->RedrawFrame();
+
+			printx("\nActive state changed!\n");
+		}
+	}
+	//*/
+
 	uiPoint ptCS = pDestForm->WindowToClient(uiPoint(x, y));
 	pDestForm->OnMouseBtnDown(KeyType, ptCS.x, ptCS.y);
 }
@@ -1685,7 +1873,7 @@ void uiWindow::MouseEnterForm(uiFormBase *pForm, INT x, INT y)
 void uiWindow::MouseLeaveForm(uiFormBase *pForm)
 {
 	ASSERT(pForm->IsMouseHovering());
-	pForm->FBCleanFlag(uiFormBase::FBF_MOUSE_HOVER); // Must set this flag first.
+	pForm->FBClearFlag(uiFormBase::FBF_MOUSE_HOVER); // Must set this flag first.
 	pForm->OnMouseLeave();
 }
 
@@ -1759,8 +1947,8 @@ void uiWinMenu::ChangeStyle()
 	mi.fMask = MIM_STYLE;
 	VERIFY(GetMenuInfo(m_hMenu, &mi));
 
-	mi.dwStyle |= MNS_MODELESS;
-	VERIFY(SetMenuInfo(m_hMenu, &mi));
+//	mi.dwStyle |= MNS_MODELESS;
+//	VERIFY(SetMenuInfo(m_hMenu, &mi));
 }
 
 

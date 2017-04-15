@@ -10,6 +10,7 @@
 class uiMenu;
 class uiButton;
 class uiFormBase;
+class uiHeaderFormBase;
 class uiWindow;
 struct uiFormStyle;
 
@@ -47,9 +48,9 @@ enum FORM_CREATION_FLAG
 
 	FCF_CENTER      = 0x01 << 3,
 	FCF_CLIENT_RECT = 0x01 << 4, // Create form with specific client rectangle size.
-};
 
-IMPLEMENT_ENUM_FLAG(FORM_CREATION_FLAG)
+	FCF_NO_ACTIVATE = 0x01 << 5,
+};
 
 enum MOUSE_KEY_TYPE
 {
@@ -69,8 +70,6 @@ enum MOVE_DIRECTION
 	MOVE_LEFT  = 0x01 << 2,
 	MOVE_RIGHT = 0x01 << 3,
 };
-
-IMPLEMENT_ENUM_FLAG(MOVE_DIRECTION)
 
 enum FORM_CLASS
 {
@@ -97,7 +96,19 @@ enum FORM_DOCKING_FLAG
 	FDF_AUTO_SIZE = 0x01 << 5,
 };
 
+enum FORM_PAINT_MODE
+{
+	FPM_NORMAL  = 0x01,
+	FPM_NCPAINT = 0x01 << 1,
+	FPM_ACTIVE  = 0x01 << 2,
+};
+
+
+IMPLEMENT_ENUM_FLAG(FORM_CREATION_FLAG)
+IMPLEMENT_ENUM_FLAG(MOVE_DIRECTION)
 IMPLEMENT_ENUM_FLAG(FORM_DOCKING_FLAG)
+IMPLEMENT_ENUM_FLAG(FORM_PAINT_MODE)
+
 
 struct stFormSplitter
 {
@@ -149,17 +160,28 @@ public:
 	{
 		FBF_NONE,
 
-		FBF_ACTIVATED     = 0x01,
-		FBF_CREATING      = 0x01 << 1,
-		FBF_CREATED       = 0x01 << 2,
-		FBF_IS_DESTROYING = 0x01 << 3,
-		FBF_SHOW          = 0x01 << 4,
-		FBF_MOUSE_HOVER   = 0x01 << 5,
-		FBF_OWN_CARET     = 0x01 << 6,
-		FBF_SIDE_DOCKED   = 0x01 << 7,
-
-		FBF_MODAL_MODE    = 0x01 << 8,
+		FBF_ACTIVATED       = 0x01,
+		FBF_CREATING        = 0x01 << 1,
+		FBF_CREATED         = 0x01 << 2,
+		FBF_IS_DESTROYING   = 0x01 << 3,
+		FBF_SHOW            = 0x01 << 4,
+		FBF_MINIMIZED       = 0x01 << 5,
+		FBF_MAXIMIZED       = 0x01 << 6,
+		FBF_MOUSE_HOVER     = 0x01 << 7,
+		FBF_OWN_CARET       = 0x01 << 8,
+		FBF_SIDE_DOCKED     = 0x01 << 9,
+		FBF_MODAL_MODE      = 0x01 << 10,
+		FBF_ACTIVE_TRAIL    = 0x01 << 11,
+		FBF_NO_ACTIVE_TRAIL = 0x01 << 12,
 	};
+
+	enum ACTIVATE_STATE
+	{
+		AS_ACTIVE,
+		AS_INACTIVE,
+		AS_NOTIFY,
+	};
+
 
 	struct stFormMoveInfo
 	{
@@ -181,6 +203,8 @@ public:
 		INT   nRunCount;
 	};
 
+	typedef void(*TimerCallback)(uiFormBase* pForm, stTimerInfo* ti);
+
 
 	uiFormBase();
 	virtual ~uiFormBase();
@@ -199,10 +223,13 @@ public:
 	void Show(FORM_SHOW_MODE sm);
 	BOOL Size(INT NewWidth, INT NewHeight);
 	UINT TimerStart(UINT id, UINT msElapsedTime, INT nRundCount, void* pCtx); // Return timer handle.
+	UINT TimerStart(TimerCallback tcb, UINT msElapsedTime, INT nRundCount, void* pCtx); // Return timer handle.
 	BOOL TimerStop(UINT key, BOOL bByID = TRUE);
 
 	void RedrawForm(const uiRect* pUpdateRect = nullptr);
 	void RedrawFrame(const uiRect* pUpdateRect = nullptr);
+
+	uiFormBase* SetActive();
 
 	uiFormBase* SetCapture();
 	BOOL ReleaseCapture();
@@ -227,7 +254,8 @@ public:
 	void StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY);
 	uiPoint GetCursorPos() const;
 
-	void EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight);
+	void EntryOnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode);
+	void EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight);
 	BOOL EntryOnClose();
 	void EntryOnDestroy(uiWindow* pWnd);
 	void EntryOnMove(INT x, INT y, const stFormMoveInfo* pInfo);
@@ -237,7 +265,7 @@ public:
 	void EntryOnKBLoseFocus();
 
 	virtual void EntryOnCommand(UINT_PTR id);
-	virtual void EntryOnPaint(uiDrawer* pDrawer, INT depth);
+	virtual void EntryOnPaint(uiDrawer* pDrawer);
 
 	virtual uiSize GetMinSize() { return uiSize(-1, -1); }
 	virtual uiSize GetMaxSize() { return uiSize(-1, -1); }
@@ -245,11 +273,15 @@ public:
 	virtual BOOL OnClose() { return TRUE; }
 	virtual BOOL OnCreate() { return TRUE; }
 	virtual void OnDestroy() {}
-	virtual void OnActivate(BOOL bActive) {}
+
+	virtual uiFormBase* TryActivate();
+	virtual void OnActivate(BOOL bActive);
+	virtual void OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode);
 
 	virtual void OnCommand(INT_PTR id, BOOL &bDone);
 
 	virtual BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
+	virtual void OnSubnodeDestroy(uiFormBase* pSubnode) {}
 
 	virtual void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	virtual void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
@@ -261,6 +293,7 @@ public:
 	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	virtual void OnMove(INT x, INT y, const stFormMoveInfo* pInfo);
 	virtual void OnPaint(uiDrawer* pDrawer);
+	virtual void OnPreCreate(FORM_CREATION_FLAG& fcf);
 	virtual void OnFrameSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnTimer(stTimerInfo* ti);
@@ -289,16 +322,17 @@ public:
 	}
 
 
-	//INLINE uiFormBase* NextSibling()
-	//{
-	//	if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.next, m_pParent->m_ListChildren))
-	//		return CONTAINING_RECORD(m_ListChildrenEntry.next, uiFormBase, m_ListChildrenEntry);
-	//}
-	//INLINE uiFormBase* PrevSibling()
-	//{
-	//	if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.prev, m_pParent->m_ListChildren))
-	//		return CONTAINING_RECORD(m_ListChildrenEntry.prev, uiFormBase, m_ListChildrenEntry);
-	//}
+	INLINE uiFormBase* NextSibling()
+	{
+		if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.next, m_pParent->m_ListChildren))
+			return CONTAINING_RECORD(m_ListChildrenEntry.next, uiFormBase, m_ListChildrenEntry);
+		return nullptr;
+	}
+	INLINE uiFormBase* PrevSibling()
+	{
+		if (m_pParent != nullptr && IS_VALID_ENTRY(m_ListChildrenEntry.prev, m_pParent->m_ListChildren))
+			return CONTAINING_RECORD(m_ListChildrenEntry.prev, uiFormBase, m_ListChildrenEntry);
+	}
 	//INLINE uiFormBase* GetFirstChild()
 	//{
 	//	if (!LIST_IS_EMPTY(m_ListChildren))
@@ -382,14 +416,21 @@ public:
 	INLINE const uiString& GetName() const { return m_strName; }
 	INLINE void SetName(const TCHAR* pStrName) { m_strName = pStrName; }
 
-	BOOL IsDirectChildForm(uiFormBase *pForm)
+	BOOL IsDirectChildForm(const uiFormBase* pForm) const
 	{
 		for (list_entry *pNext = LIST_GET_HEAD(m_ListChildren); IS_VALID_ENTRY(pNext, m_ListChildren); pNext = pNext->next)
 		{
-			uiFormBase *pSubForm = CONTAINING_RECORD(pNext, uiFormBase, m_ListChildrenEntry);
+			uiFormBase* pSubForm = CONTAINING_RECORD(pNext, uiFormBase, m_ListChildrenEntry);
 			if (pSubForm == pForm)
 				return TRUE;
 		}
+		return FALSE;
+	}
+	BOOL IsSubnode(const uiFormBase* pUpperNode) const
+	{
+		for (const uiFormBase* pSubForm = this; pSubForm != nullptr; pSubForm = pSubForm->GetPlate())
+			if (pSubForm == pUpperNode)
+				return TRUE;
 		return FALSE;
 	}
 
@@ -404,6 +445,7 @@ public:
 	typedef void(*OnFind)(uiFormBase* pDest, void* ctx);
 	static UINT EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callback, void* CBCtx);
 
+	static uiFormBase* FindTheParent(uiFormBase* pForm1, uiFormBase* pForm2);
 
 	DECLARE_INTERFACE(IAreaCursor)
 
@@ -417,9 +459,15 @@ protected:
 		return pPlate->m_pWnd;
 	}
 
+	INLINE INT GetDepth() const
+	{
+		INT i = 0;
+		for (const uiFormBase* pPlate = this; pPlate->GetPlate() != nullptr; ++i, pPlate = pPlate->GetPlate());
+		return i;
+	}
 	INLINE BOOL FBTestFlag(FORM_BASE_FLAGS flag) const;
 	INLINE void FBSetFlag(FORM_BASE_FLAGS flag);
-	INLINE void FBCleanFlag(FORM_BASE_FLAGS flag);
+	INLINE void FBClearFlag(FORM_BASE_FLAGS flag);
 
 
 private:
@@ -429,9 +477,12 @@ private:
 	friend void UpdateDockRect(stFormSplitter &splitter, FORM_DOCKING_FLAG df, UINT SizingBarWidth, uiRect &RectPlate, uiFormBase *pDocking, uiFormBase *pPlate);
 
 	friend class uiForm;
+	friend class uiHeaderForm;
+	friend class IFrameImp;
 	friend class uiSideDockableFrame;
 	friend class uiWindow;
 
+	INLINE uiWindow* GetWnd() const { return m_pWnd; }
 
 	INLINE std::vector<UINT>& GetIDList() { return m_IDList; }
 	INLINE UINT GetTimerCount() const { return m_TimerCount; }
@@ -470,7 +521,7 @@ IMPLEMENT_ENUM_FLAG(uiFormBase::FORM_BASE_FLAGS)
 
 INLINE BOOL uiFormBase::FBTestFlag(uiFormBase::FORM_BASE_FLAGS flag) const { return m_Flag & flag; }
 INLINE void uiFormBase::FBSetFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag |= flag; }
-INLINE void uiFormBase::FBCleanFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
+INLINE void uiFormBase::FBClearFlag(uiFormBase::FORM_BASE_FLAGS flag) { m_Flag &= ~flag; }
 
 
 class UI_INTERFACE IAreaCursor
@@ -486,24 +537,20 @@ class IFrameImp
 {
 public:
 
-	struct stParamPack
-	{
-		stParamPack(const uiImage& imgIn, BOOL bBigIn):img(imgIn), bBig(bBigIn) {}
-		const uiImage& img;
-		BOOL bBig;
-	};
+	IFrameImp() :m_pActive(nullptr), m_pHeaderForm(nullptr) {}
 
+	void OnNCPaintImp(uiFormBase* pForm, uiDrawer* pDrawer, FORM_PAINT_MODE mode);
 	BOOL SetTitleImp(uiFormBase* pForm, const uiString& str);
 	BOOL SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig);
 
-	static void CBTitleChanged(uiFormBase *pDest, void* ctx);
-	static void CBIconChanged(uiFormBase *pDest, void* ctx);
-
 	INLINE uiImage& GetIcon(BOOL bSmall = TRUE) { return bSmall ? m_IconS : m_IconB; }
+	INLINE void SetHeader(uiHeaderFormBase* pHBase) { ASSERT(m_pHeaderForm == nullptr); m_pHeaderForm = pHBase; }
 
 
 protected:
 
+	uiFormBase* m_pActive;
+	uiHeaderFormBase* m_pHeaderForm;
 	uiImage m_IconS, m_IconB;
 
 
@@ -537,7 +584,8 @@ public:
 	}
 
 
-	void EntryOnPaint(uiDrawer* pDrawer, INT depth) override;
+	void OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode) override;
+	void EntryOnPaint(uiDrawer* pDrawer) override;
 
 	INT FindByPos(uiFormBase **pDest, INT fcX, INT fcY, uiPoint *ptCS) override;
 
@@ -548,6 +596,7 @@ public:
 	uiRect GetClientRect() const override;
 
 	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override;
+
 	virtual void OnFramePaint(uiDrawer* pDrawer);
 
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
@@ -559,6 +608,40 @@ public:
 
 	INLINE void SetIcon(uiImage img, BOOL bBig = FALSE) { SetIconImp(this, img, bBig); }
 	INLINE void SetTitle(const uiString& str) { m_strName = str; SetTitleImp(this, str); }
+
+
+	uiFormBase* FindFirstChild()
+	{
+		for (list_entry* entry = LIST_GET_HEAD(m_ListChildren); IS_VALID_ENTRY(entry, m_ListChildren); entry = entry->next)
+		{
+			uiFormBase *pForm = CONTAINING_RECORD(entry, uiFormBase, m_ListChildrenEntry);
+			if (pForm->IsSideDocked())
+				continue;
+			return pForm;
+		}
+		return nullptr;
+	}
+	uiFormBase* TryActivate() override
+	{
+		if (FBTestFlag(FBF_ACTIVATED))
+			return nullptr;
+		if (m_pActive != nullptr)
+			return m_pActive->TryActivate();
+		else
+		{
+			if ((m_pActive = FindFirstChild()) != nullptr)
+				return m_pActive;
+		}
+		return this;
+	}
+	void OnSubnodeDestroy(uiFormBase* pSubnode)
+	{
+		if (m_pActive == pSubnode)
+		{
+		//	uiFormBase* pNextActive = pSubnode->Next; // TODO
+			m_pActive = pSubnode->NextSibling();
+		}
+	}
 
 
 protected:
@@ -619,7 +702,7 @@ public:
 	uiMenu* GetRootMenu();
 
 
-	virtual void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetFrameRect();
 		pDrawer->FillRect(rect, RGB(200, 200, 200));
@@ -632,7 +715,7 @@ public:
 				pDrawer->FillRect(m_RectArray[i], RGB(220, 220, 220));
 		}
 	}
-	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override
 	{
 	//	printx("---> uiMenuBar::OnMouseMove\n");
 		if (m_Count == 0)
@@ -680,7 +763,15 @@ class uiHeaderFormBase : public uiFormBase
 {
 public:
 
-	virtual FORM_CLASS GetClass() const override { return FC_HEADER_BAR; }
+
+	FORM_CLASS GetClass() const override final { return FC_HEADER_BAR; }
+
+
+	void OnPaint(uiDrawer* pDrawer) override final;
+
+
+	virtual void PaintBG(uiDrawer* pDrawer, const uiRect& rect) = 0;
+	virtual void Paint(uiDrawer* pDrawer, const uiRect& rect) = 0;
 
 	virtual void OnTitleChanged(const uiString& str) = 0;
 	virtual void OnIconChanged(const uiImage& img, BOOL bBig) = 0;
@@ -701,12 +792,13 @@ public:
 	BOOL ShowButton(BOOL bShowMin, BOOL bShowMax, BOOL bShowClose);
 
 	void OnMouseEnter(INT x, INT y) override;
-	void OnMouseLeave();
+	void OnMouseLeave() override;
 
-	BOOL OnCreate();
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
-	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y);
-	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
+	BOOL OnCreate() override;
+	void OnPreCreate(FORM_CREATION_FLAG& fcf) override;
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override;
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override;
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override;
 
 	//void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//{
@@ -717,12 +809,13 @@ public:
 	//	printx("---> uiHeaderForm::OnMouseBtnDbClk\n");
 	//}
 
-	void OnPaint(uiDrawer* pDrawer);
-	void OnSize(UINT nNewWidth, UINT nNewHeight);
+	void PaintBG(uiDrawer* pDrawer, const uiRect& rect) override;
+	void Paint(uiDrawer* pDrawer, const uiRect& rect) override;
+	void OnSize(UINT nNewWidth, UINT nNewHeight) override;
 
 	// framework notification.
-	virtual void OnTitleChanged(const uiString& str) override { printx("Title changed!\n"); }
-	virtual void OnIconChanged(const uiImage& img, BOOL bBig) override { printx("Icon changed!\n"); }
+	void OnTitleChanged(const uiString& str) override { printx("Title changed!\n"); }
+	void OnIconChanged(const uiImage& img, BOOL bBig) override { printx("Icon changed!\n"); }
 
 
 protected:
@@ -744,6 +837,8 @@ protected:
 class uiForm : public uiSideDockableFrame//, public IMessageHandler
 {
 public:
+
+	enum { DEFAULT_HEADER_BAR_HEIGHT = 26, };
 
 
 	uiForm()

@@ -58,7 +58,7 @@ public:
 		printx("---> uiDraggableButton::OnMouseBtnDbClk: %d %d %d\n", KeyType, x, y);
 	//	SetCapture();
 	}
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override
 	{
 		printx("---> uiDraggableButton::OnMouseMove x: %d, y: %d\n", x, y);
 
@@ -105,12 +105,12 @@ class CTabFormContext1 : public uiFormBase, public IDerivedAC
 {
 public:
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		SetName(_T("Tab Pane No. 1"));
 		return TRUE;
 	}
-	void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		printx("---> CTabFormContext1::OnPaint\n");
 		uiRect rect = GetClientRect();
@@ -139,23 +139,23 @@ class CTabFormContext2 : public uiFormBase
 {
 public:
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		SetName(_T("Tab Pane No. 2"));
 		return TRUE;
 	}
-	void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(10, 125, 175));
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
 		pDrawer->Text(uiString(_T("Context 2")), rect, f);
 	}
-	void OnMouseEnter(INT x, INT y)
+	void OnMouseEnter(INT x, INT y) override
 	{
 		printx("---> CTabFormContext2::OnMouseEnter\n");
 	}
-	void OnMouseLeave()
+	void OnMouseLeave() override
 	{
 		printx("---> CTabFormContext2::OnMouseLeave\n");
 	}
@@ -166,7 +166,7 @@ class CTabFormContext3 : public uiFormBase
 {
 public:
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		SetName(_T("Tab Pane No. 3"));
 
@@ -178,18 +178,18 @@ public:
 
 		return TRUE;
 	}
-	void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(199, 225, 175));
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
 		pDrawer->Text(uiString(_T("Context 3")), rect, f);
 	}
-	void OnMouseEnter(INT x, INT y)
+	void OnMouseEnter(INT x, INT y) override
 	{
 		printx("---> CTabFormContext3::OnMouseEnter\n");
 	}
-	void OnMouseLeave()
+	void OnMouseLeave() override
 	{
 		printx("---> CTabFormContext3::OnMouseLeave\n");
 	}
@@ -203,16 +203,16 @@ public:
 	CFormEx() = default;
 	~CFormEx() = default;
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		uiForm::OnCreate();
 		printx("---> CFormEx::OnCreate\n");
 
 		SetHeaderBar(_T("test child form TechPowerUp"));
 
-		m_pButton = new uiButton2;
-		m_pButton->Create(this, 10, 10, 80, 80, FCF_CENTER);
-		Bind(m_pButton->GetID());
+	//	m_pButton = new uiButton2;
+	//	m_pButton->Create(this, 10, 10, 80, 80, FCF_CENTER);
+	//	Bind(m_pButton->GetID());
 
 		m_pSubForm = new uiForm;
 		m_pSubForm->Create(this, 20, 20, 110, 35, FCF_CENTER);
@@ -224,19 +224,19 @@ public:
 
 		return TRUE;
 	}
-	void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(100, 125, 125));
 	}
 
-	void OnCommand(INT_PTR id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone) override
 	{
 		ASSERT(id == m_pButton->GetID());
 		CaretShow(TRUE, 5, 5, 5, 15);
 	}
 	
-	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
+	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override
 	{
 	}
 	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
@@ -249,11 +249,11 @@ public:
 		printx("---> CFormEx::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
 	//	ReleaseCapture();
 	}
-	void OnMouseEnter(INT x, INT y)
+	void OnMouseEnter(INT x, INT y) override
 	{
 		printx("--->CFormEx::OnMouseEnter\n");
 	}
-	void OnMouseLeave()
+	void OnMouseLeave() override
 	{
 		printx("--->CFormEx::OnMouseLeave\n");
 	}
@@ -274,7 +274,7 @@ public:
 	CTimerTestForm() = default;
 	~CTimerTestForm() = default;
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 30, 100, 120, 30);
@@ -289,7 +289,7 @@ public:
 		return TRUE;
 	}
 
-	void OnCommand(INT_PTR id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone) override
 	{
 		if (id == m_pButton->GetID())
 		{
@@ -301,7 +301,7 @@ public:
 			VERIFY(TimerStop(m_TimerHandle, FALSE));
 		}
 	}
-	void OnTimer(stTimerInfo* ti)
+	void OnTimer(stTimerInfo* ti) override
 	{
 		printx("---> CTimerTestForm::OnTimer ID: %d, Time stamp: %u\n", ti->id, GetTickCount());
 
@@ -324,7 +324,7 @@ public:
 	CFormEx2() = default;
 	~CFormEx2() = default;
 
-	BOOL OnCreate()
+	BOOL OnCreate() override
 	{
 		uiForm::OnCreate();
 		printx("---> CFormEx2::OnCreate\n");
@@ -351,22 +351,35 @@ public:
 		m_pButton2->Create(this, 125, 400, 50, 50);
 		Bind(m_pButton2->GetID());
 
-		VERIFY(SetTimer(0, 1000, -1, nullptr));
-	//	VERIFY(SetTimer(1, 2000, 3, nullptr));
+		VERIFY(TimerStart((UINT)0, 1000, -1, nullptr));
 
 		return TRUE;
 	}
 
-	void OnTimer(stTimerInfo* ti)
+	void OnTimer(stTimerInfo* ti) override
 	{
 		printx("---> CFormEx2::OnTimer ID: %d\n", ti->id);
-		if (ti->id == 0)
-			MoveByOffset(0, -20);
-		else if (ti->id == 1)
-			MoveByOffset(20, 0);
+
+		if (GetKeyState(VK_F4) < 0)
+		{
+			uiFormBase* pOldForm = SetActive();
+			if (pOldForm != nullptr)
+			{
+				printx(_T("Original active form: %s\n"), pOldForm->GetName());
+			}
+			else
+			{
+				printx(_T("Nothing happened!\n"));
+			}
+		}
+
+		//if (ti->id == 0)
+		//	MoveByOffset(0, -20);
+		//else if (ti->id == 1)
+		//	MoveByOffset(20, 0);
 	}
 
-	void OnCommand(INT_PTR id, BOOL &bDone)
+	void OnCommand(INT_PTR id, BOOL &bDone) override
 	{
 		printx("---> CFormEx2::OnCommand ID: %d\n", id);
 		static INT CalledCount = 0;
@@ -400,7 +413,7 @@ public:
 		}
 	}
 
-	virtual void OnPaint(uiDrawer* pDrawer)
+	void OnPaint(uiDrawer* pDrawer) override
 	{
 		uiRect rect = GetClientRect();
 		pDrawer->FillRect(rect, RGB(200, 200, 200));

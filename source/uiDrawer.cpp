@@ -24,11 +24,14 @@ UINT32 uiGetSysColor(INT index)
 		//	color = RGB();
 			break;
 
+		case SCN_INACTIVECAPTION:
+			color = ::GetSysColor(COLOR_INACTIVECAPTION);
+			break;
 		case SCN_FRAME:
 		//	color = RGB();
-			color = GetSysColor(COLOR_ACTIVECAPTION);
-			color = GetSysColor(COLOR_3DHILIGHT);
-			color = GetSysColor(COLOR_3DLIGHT);
+			color = ::GetSysColor(COLOR_ACTIVECAPTION);
+			color = ::GetSysColor(COLOR_3DHILIGHT);
+			color = ::GetSysColor(COLOR_3DLIGHT);
 			break;
 	}
 
@@ -297,12 +300,12 @@ uiGDIObjCacher::~uiGDIObjCacher()
 
 HGDIOBJ uiGDIObjCacher::Find(const stGDIObjectName& ObjName)
 {
-	size_t key = HashState(&ObjName);
+	const size_t key = HashState(&ObjName);
+
 	auto it = HandleMap.find(key);
 	if (it != HandleMap.end())
 	{
-		it->second->Detach();
-		list_add(*it->second, &ListHead);
+		it->second->RemoveToHead(ListHead);
 		return it->second->pData;
 	}
 
@@ -436,6 +439,7 @@ void uiWndDrawer::End(void* pCtx)
 {
 	ASSERT(m_OriginX == 0 && m_OriginY == 0);
 	ASSERT(m_hRgn == NULL);
+	ASSERT(m_CurDepth == 1);
 
 	if (m_TotalBackBuffer > 0)
 	{
@@ -447,8 +451,60 @@ void uiWndDrawer::End(void* pCtx)
 	m_CurFont.Release();
 	m_WndDrawDC.Detach();
 	VERIFY(::SelectObject(m_hMemDC, m_hOldBmp) != NULL);
-	EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
+
+	if (pCtx != nullptr)
+		EndPaint(m_hWnd, (PAINTSTRUCT*)pCtx);
+
 	m_PaintDC = NULL;
+}
+
+BOOL uiWndDrawer::BeginCache(const uiRect& rect)
+{
+	ASSERT(m_RectList.GetCounts() == 0);
+	ASSERT(m_PaintDC == NULL);
+	ASSERT(rect.IsValidRect());
+
+	m_RenderDestRect = rect;
+
+	HDC hDC = ::GetDC(m_hWnd);
+	VERIFY(hDC != NULL);
+
+	if (m_TotalBackBuffer == 0)
+		m_WndDrawDC.Attach(hDC);
+	else
+	{
+		if (--m_CurrentBackBufferIndex < 0)
+			m_CurrentBackBufferIndex = m_TotalBackBuffer - 1;
+
+		m_WndDrawDC.Attach(m_BackBuffer[m_CurrentBackBufferIndex].GetMemDC());
+	}
+
+	m_PaintDC = hDC;
+
+	return TRUE;
+}
+
+BOOL uiWndDrawer::EndCache()
+{
+	ASSERT(m_OriginX == 0 && m_OriginY == 0);
+	ASSERT(m_hRgn == NULL);
+	ASSERT(m_CurDepth == 1);
+
+	if (m_TotalBackBuffer > 0)
+	{
+		VERIFY(::BitBlt(m_PaintDC, 0, 0, m_nWidth, m_nHeight, m_WndDrawDC.GetDC(), 0, 0, SRCCOPY));
+		if (++m_CurrentBackBufferIndex == m_TotalBackBuffer)
+			m_CurrentBackBufferIndex = 0;
+	}
+
+	m_CurFont.Release();
+	m_WndDrawDC.Detach();
+	VERIFY(::SelectObject(m_hMemDC, m_hOldBmp) != NULL);
+	VERIFY(::ReleaseDC(m_hWnd, m_PaintDC) == 1);
+
+	m_PaintDC = NULL;
+
+	return TRUE;
 }
 
 void uiWndDrawer::ResizeBackBuffer(UINT nWidth, UINT nHeight)

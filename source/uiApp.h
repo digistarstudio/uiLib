@@ -37,3 +37,25 @@ INLINE HINSTANCE uiGetAppIns() { return uiApp::AppIns; }
 void uiMonitorEvent();
 
 
+#define RunBench(m1, m2, count) \
+{ \
+	CPerformanceCounter pc1, pc2; \
+	pc1.Start(); \
+	for (INT i = 0; i < count; ++i) \
+	{ \
+		m1; \
+	} \
+	pc1.End(); \
+	pc2.Start(); \
+	for (INT i = 0; i < count; ++i) \
+	{ \
+		m2; \
+	} \
+	pc2.End(); \
+	FILE* pFile; \
+	_tfopen_s(&pFile, _T("r:\\result.txt"), _T("a+t")); \
+	fprintf(pFile, "Method 1: %f, Method 2: %f\n", pc1.Get(), pc2.Get()); \
+	fclose(pFile); \
+}
+
+

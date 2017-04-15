@@ -998,13 +998,15 @@ public:
 
 	// Don't allocate by these methods that will involve constructor and destructor.
 	void* operator new(size_t size) = delete;
-	void operator delete(void *mem) = delete;
+	void operator delete(void* mem) = delete;
 
 	INLINE static stSimpleListNode* alloc() { ASSERT(m_ObjectPool.GetMaxPoolCount() != 0); return m_ObjectPool.AllocObj(); }
-	INLINE static void mfree(stSimpleListNode *ptr) { m_ObjectPool.FreeObj(ptr); }
+	INLINE static void mfree(stSimpleListNode* ptr) { m_ObjectPool.FreeObj(ptr); }
 	INLINE operator list_entry*() { return &list; }
 
 	INLINE void Detach() { list_remove(&list); }
+	INLINE void RemoveToHead(list_entry& head) { list_remove(&list); list_add(&list, &head); }
+
 
 	list_entry list;
 	void* pData;

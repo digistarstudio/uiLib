@@ -304,8 +304,8 @@ protected:
 enum SYS_COLOR_NAME
 {
 	SCN_CAPTAIN,
+	SCN_INACTIVECAPTION,
 	SCN_FRAME,
-
 };
 
 
@@ -318,10 +318,15 @@ public:
 
 	enum DEST_CHANGE_TYPE { DEST_RESTORE, DEST_PUSH, DEST_UPDATE };
 
-	uiDrawerBase() :m_OriginX(0), m_OriginY(0) {}
+
+	uiDrawerBase() { m_CurDepth = 1; m_ModeFlag = m_OriginX = m_OriginY = 0; }
 	//~uiDrawerBase() {}
 
-	//INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
+
+	INLINE const uiRect& GetDestRect() { return m_RenderDestRect; }
+	INLINE void SetMode(INT mode) { m_ModeFlag = mode; }
+	INLINE INT  GetMode() const { return m_ModeFlag; }
+	INLINE int  GetCurrentDepth() const { return m_CurDepth; }
 	INLINE void UpdateCoordinate(uiRect& rect)
 	{
 		rect.Move(m_OriginX, m_OriginY);
@@ -343,8 +348,10 @@ protected:
 		void*  ctx;
 	};
 
+	INT  m_CurDepth, m_ModeFlag;
+	INT  m_OriginX, m_OriginY;
+
 	uiRect m_RenderDestRect;
-	INT m_OriginX, m_OriginY;
 	TList<stRenderDestInfo> m_RectList; // x86: 24 Bytes
 
 
@@ -374,6 +381,7 @@ public:
 
 			m_OriginX += pt.x;
 			m_OriginY += pt.y;
+			++m_CurDepth;
 
 			return TRUE;
 		}
@@ -392,6 +400,8 @@ public:
 		m_OriginY = RDInfo.OriginY;
 		m_RenderDestRect = RDInfo.rect;
 		OnDestRectChanged(DEST_RESTORE, RDInfo.ctx);
+
+		--m_CurDepth;
 	}
 
 //	INLINE void UpdateDestRect() { OnDestRectChanged(DEST_UPDATE, void*()); }
@@ -430,6 +440,9 @@ public:
 	virtual BOOL Begin(void* pCtx) = 0;
 	virtual void End(void* pCtx) = 0;
 
+	virtual BOOL BeginCache(const uiRect& rect) = 0; // Directly paint on previous back buffer.
+	virtual BOOL EndCache() = 0;
+
 	virtual void ResizeBackBuffer(UINT nWidth, UINT nHeight) = 0;
 
 	virtual void FillRect(uiRect rect, UINT32 color) = 0;
@@ -452,7 +465,7 @@ class uiGDIObjCacher // Save almost 80% time if cache hit.
 {
 public:
 
-	enum { DEFAULT_MAX_CACHE_COUNT = 5, };
+	enum { DEFAULT_MAX_CACHE_COUNT = 50, };
 	enum OBJECT_TYPE { TYPE_BRUSH, TYPE_PEN, TYPE_REGION };
 
 	struct stGDIObjectName
@@ -723,7 +736,7 @@ class uiWndDrawer : public DRAWER_BASE_TYPE
 {
 public:
 
-	enum { MAX_BACKBUFFER_COUNT = 1, };
+	enum { MAX_BACKBUFFER_COUNT = 3, };
 
 	uiWndDrawer()
 	:m_hWnd(NULL), m_PaintDC(NULL), m_hMemDC(NULL)
@@ -750,6 +763,9 @@ public:
 
 	BOOL Begin(void* pCtx) OVERRIDE;
 	void End(void* pCtx) OVERRIDE;
+
+	BOOL BeginCache(const uiRect& rect) OVERRIDE;
+	BOOL EndCache() OVERRIDE;
 
 	void ResizeBackBuffer(UINT nWidth, UINT nHeight) OVERRIDE;
 

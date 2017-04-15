@@ -1,6 +1,5 @@
 
 
-
 #include "stdafx.h"
 #include "uiForm.h"
 #include "uiControl.h"
@@ -44,7 +43,10 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 {
 	BOOL bResult = TRUE;
 
-	if (/*!UICore::bSilentMode &&*/ parent == nullptr)
+	if (fcf & FCF_POPUP)
+	{
+	}
+	else if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
 		stWindowCreateParam wcp(x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
 		uiWindow *pWnd = uiWindow::CreateTemplateWindow(UWT_NORMAL, this, nullptr, wcp);
@@ -52,6 +54,7 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 			bResult = FALSE;
 		else
 		{
+			ASSERT(!(fcf & FCF_NO_ACTIVATE));
 			if (fcf & FCF_CENTER)
 				pWnd->MoveToCenter();
 		}
@@ -65,6 +68,7 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 			bResult = FALSE;
 		else
 		{
+			ASSERT(!(fcf & FCF_NO_ACTIVATE));
 			parent->AddChild(this);
 			if (fcf & FCF_CENTER)
 				pWnd->MoveToCenter();
@@ -96,7 +100,7 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 		return FALSE;
 	}
 
-	EntryOnCreate(!(fcf & FCF_INVISIBLE), nWidth, nHeight);
+	EntryOnCreate(fcf, nWidth, nHeight);
 
 	return bResult;
 }
@@ -135,18 +139,20 @@ void uiFormBase::Close()
 {
 	if (OnClose())
 	{
+		uiWindow* pBaseWnd = GetBaseWnd(), * pWnd = m_pWnd; // Cache this first.
+		uiFormBase* pPlate = GetPlate();
+
 		if (GetParent() != nullptr)
 			GetParent()->DetachChild(this);
-		if (GetPlate() != nullptr)
+		if (pPlate != nullptr)
 		{
-			// TODO.
-
+			pPlate->OnSubnodeDestroy(this);
 			RedrawFrame();
 		}
 
-		uiWindow *pWnd = m_pWnd; // Cache this first.
-
-		EntryOnDestroy(GetBaseWnd()); // m_pForm will delete itself after this call.
+		pBaseWnd->OnFormPreClose(this);
+		EntryOnDestroy(pBaseWnd); // m_pForm will delete itself after this call.
+		pBaseWnd->OnFormPostClose(pPlate);
 
 		if (pWnd != nullptr)
 			pWnd->CloseImp();
@@ -239,7 +245,7 @@ void uiFormBase::Show(FORM_SHOW_MODE sm)
 	switch (sm)
 	{
 	case FSM_HIDE:
-		FBCleanFlag(FBF_SHOW);
+		FBClearFlag(FBF_SHOW);
 		break;
 
 	case FSM_SHOW:
@@ -247,14 +253,18 @@ void uiFormBase::Show(FORM_SHOW_MODE sm)
 		break;
 
 	case FSM_RESTORE:
-		FBSetFlag(FBF_SHOW);
+		FBClearFlag(FBF_MAXIMIZED);
+		FBClearFlag(FBF_MINIMIZED);
 		break;
 
 	case FSM_MINIMIZE:
-		FBCleanFlag(FBF_SHOW);
+		FBClearFlag(FBF_MAXIMIZED);
+		FBSetFlag(FBF_MINIMIZED);
 		break;
 
 	case FSM_MAXIMIZE:
+		FBClearFlag(FBF_MINIMIZED);
+		FBSetFlag(FBF_MAXIMIZED);
 		break;
 	}
 
@@ -301,6 +311,12 @@ UINT uiFormBase::TimerStart(UINT id, UINT msElapsedTime, INT nRunCount, void* pC
 	return GetBaseWnd()->TimerAdd(this, id, msElapsedTime, nRunCount, pCtx);
 }
 
+UINT uiFormBase::TimerStart(TimerCallback tcb, UINT msElapsedTime, INT nRundCount, void* pCtx)
+{
+
+	return 0;
+}
+
 BOOL uiFormBase::TimerStop(UINT key, BOOL bByID)
 {
 	return GetBaseWnd()->TimerClose(this, key, bByID);
@@ -339,6 +355,29 @@ void uiFormBase::RedrawFrame(const uiRect* pUpdateRect)
 		GetBaseWnd()->RedrawImp(&dest);
 }
 
+uiFormBase* uiFormBase::SetActive()
+{
+	uiFormBase* pRet;
+	uiWindow* pBaseWnd = GetBaseWnd();
+	if (pBaseWnd->UpdateAT(this, pRet))
+	{
+		if (pBaseWnd->SetActiveWindow(pRet))
+		{
+		}
+		else
+		{
+			if (pRet != nullptr)
+			{
+				pRet->FBClearFlag(FBF_ACTIVATED);
+				pRet->OnActivate(FALSE);
+			}
+			FBSetFlag(FBF_ACTIVATED);
+			OnActivate(TRUE);
+		}
+	}
+	return pRet;
+}
+
 uiFormBase* uiFormBase::SetCapture()
 {
 	return GetBaseWnd()->CaptureMouseFocus(this);
@@ -354,7 +393,7 @@ BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
 	if (!bShow)
 	{
 		GetBaseWnd()->CaretHideImp(this);
-		FBCleanFlag(FBF_OWN_CARET);
+		FBClearFlag(FBF_OWN_CARET);
 	}
 	else
 	{
@@ -517,7 +556,36 @@ uiPoint uiFormBase::GetCursorPos() const
 	return uiPoint();
 }
 
-void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
+void uiFormBase::EntryOnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode)
+{
+	OnUpdateAT(as, pSubNode);
+
+	if (as == AS_NOTIFY)
+	{
+		if (!FBTestFlag(FBF_ACTIVE_TRAIL))
+			_CrtDbgBreak();
+		return;
+	}
+
+	if (as == AS_ACTIVE)
+	{
+		//	ASSERT(!FBTestFlag(FBF_ACTIVE_TRAIL));
+		if (FBTestFlag(FBF_ACTIVE_TRAIL))
+			_CrtDbgBreak();
+
+		FBSetFlag(FBF_ACTIVE_TRAIL);
+	}
+	else
+	{
+		//	ASSERT(FBTestFlag(FBF_ACTIVE_TRAIL));
+		if (!FBTestFlag(FBF_ACTIVE_TRAIL))
+			_CrtDbgBreak();
+
+		FBClearFlag(FBF_ACTIVE_TRAIL);
+	}
+}
+
+void uiFormBase::EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight)
 {
 	ASSERT(!IsCreated() && !IsCreating() && !IsVisible());
 
@@ -526,6 +594,13 @@ void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 
 	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
+
+	OnPreCreate(fcf);
+
+	if (fcf & FCF_NO_ACTIVATE)
+		FBSetFlag(FBF_NO_ACTIVE_TRAIL);
+	else
+		SetActive();
 
 	OnCreate();
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
@@ -543,8 +618,9 @@ void uiFormBase::EntryOnCreate(BOOL bShowIn, UINT nWidth, UINT nHeight)
 	m_pStyle = GetDefaultStyleObject(this);
 
 	FBSetFlag(FBF_CREATED);
-	FBCleanFlag(FBF_CREATING);
-	if (bShowIn)
+	FBClearFlag(FBF_CREATING);
+
+	if (!(fcf & FCF_INVISIBLE))
 		FBSetFlag(FBF_SHOW); // Put this at last to prevent move and size functions from calling RedrawForm.
 }
 
@@ -629,7 +705,7 @@ void uiFormBase::EntryOnCommand(UINT_PTR id)
 	}
 }
 
-void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
+void uiFormBase::EntryOnPaint(uiDrawer* pDrawer)
 {
 	OnPaint(pDrawer);
 
@@ -645,11 +721,32 @@ void uiFormBase::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 		if (pDrawer->PushDestRect(pChild->m_FrameRect))
 		{
 			ASSERT(pChild->m_FrameRect.IsValidRect());
-			pChild->EntryOnPaint(pDrawer, depth + 1);
+			pChild->EntryOnPaint(pDrawer);
 			pDrawer->PopDestRect();
 		}
 	}
 }
+
+uiFormBase* uiFormBase::TryActivate()
+{
+	if (FBTestFlag(FBF_ACTIVATED))
+		return nullptr;
+	if (FBTestFlag(FBF_NO_ACTIVE_TRAIL))
+	{
+		ASSERT(GetPlate() != nullptr);
+		return GetPlate()->TryActivate();
+	}
+	return this;
+}
+
+void uiFormBase::OnActivate(BOOL bActive)
+{
+}
+
+void uiFormBase::OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode)
+{
+}
+
 
 void uiFormBase::OnCommand(INT_PTR id, BOOL &bDone)
 {
@@ -727,6 +824,10 @@ void uiFormBase::OnPaint(uiDrawer* pDrawer)
 	pDrawer->FillRect(GetClientRect(), RGB(60, 80, 60));
 }
 
+void uiFormBase::OnPreCreate(FORM_CREATION_FLAG& fcf)
+{
+}
+
 void uiFormBase::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 {
 	OnSize(nNewWidth, nNewHeight);
@@ -759,35 +860,49 @@ UINT uiFormBase::EnumChildByClass(FORM_CLASS fc, uiFormBase* pForm, OnFind Callb
 	return nCount;
 }
 
+uiFormBase* uiFormBase::FindTheParent(uiFormBase* pForm1, uiFormBase* pForm2)
+{
+	ASSERT(pForm1 != pForm2);
+
+	uiFormBase* pRet = nullptr;
+	INT iDepth1 = pForm1->GetDepth(), iDepth2 = pForm2->GetDepth();
+
+	pRet = (iDepth1 < iDepth2) ? pForm1 : pForm2;
+	if (pRet->GetPlate() != nullptr)
+		return pRet->GetPlate();
+	return pRet;
+}
+
+
+void IFrameImp::OnNCPaintImp(uiFormBase* pForm, uiDrawer* pDrawer, FORM_PAINT_MODE mode)
+{
+}
 
 BOOL IFrameImp::SetTitleImp(uiFormBase* pForm, const uiString& str)
 {
-	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CBTitleChanged, const_cast<uiString*>(&str));
+	if (pForm->IsRootForm())
+		pForm->GetWnd()->SetWindowText(str);
+
+	m_pHeaderForm->OnTitleChanged(str);
+
+	return TRUE;
 }
 
 BOOL IFrameImp::SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig)
 {
-	stParamPack pp(img, bBig);
-	return uiFormBase::EnumChildByClass(FC_HEADER_BAR, pForm, CBIconChanged, &pp);
+	m_pHeaderForm->OnIconChanged(img, bBig);
+
+	return TRUE;
 }
 
-void IFrameImp::CBTitleChanged(uiFormBase *pDest, void* ctx)
+
+void uiSideDockableFrame::OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode)
 {
-	uiHeaderFormBase* pHeaderForm = dynamic_cast<uiHeaderFormBase*>(pDest);
-	ASSERT(pHeaderForm != nullptr);
-	pHeaderForm->OnTitleChanged(*(uiString*)ctx);
+	if (as != AS_INACTIVE && pSubNode != nullptr)
+		m_pActive = pSubNode;
 }
 
-void IFrameImp::CBIconChanged(uiFormBase *pDest, void* ctx)
-{
-	stParamPack& pp = *(stParamPack*)ctx;
-	uiHeaderFormBase* pHeaderForm = dynamic_cast<uiHeaderFormBase*>(pDest);
-	ASSERT(pHeaderForm != nullptr);
-	pHeaderForm->OnIconChanged(pp.img, pp.bBig);
-}
-
-
-void uiSideDockableFrame::EntryOnPaint(uiDrawer* pDrawer, INT depth)
+void uiSideDockableFrame::EntryOnPaint(uiDrawer* pDrawer)
 {
 	OnFramePaint(pDrawer);
 
@@ -808,15 +923,21 @@ void uiSideDockableFrame::EntryOnPaint(uiDrawer* pDrawer, INT depth)
 			if (pDrawer->PushDestRect(temp))
 			{
 				ASSERT(pForm->m_FrameRect.IsValidRect());
-				pForm->EntryOnPaint(pDrawer, depth + 1);
+				pForm->EntryOnPaint(pDrawer);
 				pDrawer->PopDestRect();
 			}
 		}
 	}
 
+	//if (pDrawer->GetMode() & FPM_NCPAINT)
+	//{
+	//	ASSERT(pDrawer->GetCurrentDepth() == 1);
+	//	return;
+	//}
+
 	if (pDrawer->PushDestRect(m_ClientRect))
 	{
-		uiFormBase::EntryOnPaint(pDrawer, depth);
+		uiFormBase::EntryOnPaint(pDrawer);
 		pDrawer->PopDestRect();
 	}
 }
@@ -934,11 +1055,13 @@ void uiSideDockableFrame::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 	UpdataClientRect();
 }
 
+
 void uiSideDockableFrame::OnFramePaint(uiDrawer* pDrawer)
 {
 	INT    offset;
 	DWORD  color = uiGetSysColor(SCN_FRAME);
 	uiRect rect = GetFrameRect();
+
 	//pDrawer->FillRect(rect, RGB(255, 255, 255));
 
 	offset = m_BTLeft >> 1;
@@ -979,6 +1102,9 @@ BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 
 	if (!FBTestFlag(FBF_CREATED | FBF_CREATING))
 		return FALSE;
+
+	if (pDockingForm->GetClass() == FC_HEADER_BAR)
+		SetHeader(static_cast<uiHeaderFormBase*>(pDockingForm));
 
 	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
 	pDockingForm->m_DockFlag = fdf;
@@ -1134,6 +1260,14 @@ BOOL uiMenuBar::Create(uiFormBase* parent, uiMenu *pMenu)
 }
 
 
+void uiHeaderFormBase::OnPaint(uiDrawer* pDrawer)
+{
+	uiRect rect = GetFrameRect();
+	PaintBG(pDrawer, rect);
+	Paint(pDrawer, rect);
+}
+
+
 void uiHeaderForm::EntryOnCommand(UINT_PTR id)
 {
 	ASSERT(GetParent() != nullptr);
@@ -1174,18 +1308,23 @@ BOOL uiHeaderForm::OnCreate()
 	if ((m_pCloseBtn = new uiButton) != nullptr)
 	{
 		m_pCloseBtn->SetID(uiID_CLOSE);
-		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28);
+		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28, FCF_NO_ACTIVATE);
 	}
 
 	if ((m_pMinBtn = new uiButton) != nullptr)
 	{
 		m_pMinBtn->SetID(uiID_MINIMIZE);
-		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28);
+		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28, FCF_NO_ACTIVATE);
 	}
 
 	UpdateLayout(rect.Width(), rect.Height());
 
 	return TRUE;
+}
+
+void uiHeaderForm::OnPreCreate(FORM_CREATION_FLAG& fcf)
+{
+	fcf |= FCF_NO_ACTIVATE;
 }
 
 void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
@@ -1230,29 +1369,48 @@ void uiHeaderForm::OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y)
 	//printx("---> uiHeaderForm::OnMouseBtnUp\n");
 }
 
-
-void uiHeaderForm::OnPaint(uiDrawer* pDrawer)
+void uiHeaderForm::PaintBG(uiDrawer* pDrawer, const uiRect& rect)
 {
-//	printx("---> uiHeaderForm::OnPaint\n");
+	UINT32 color;
+	FORM_PAINT_MODE mode = (FORM_PAINT_MODE)pDrawer->GetMode();
+	BOOL bAT = GetParent()->FBTestFlag(FBF_ACTIVE_TRAIL);
 
-	uiRect rect = GetFrameRect();
-	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
+	if (mode & FPM_NCPAINT)
+	{
+		color = uiGetSysColor(((mode & FPM_ACTIVE) && bAT) ? SCN_CAPTAIN : SCN_INACTIVECAPTION);
+	}
+	else
+	{
+		color = uiGetSysColor((bAT && (mode & FPM_ACTIVE)) ? SCN_CAPTAIN : SCN_INACTIVECAPTION);
+	}
+
 	pDrawer->FillRect(rect, color);
-//	pDrawer->FillRect(rect, RGB(255, 255, 255));
+	//	pDrawer->FillRect(rect, RGB(255, 255, 255));
+}
+
+void uiHeaderForm::Paint(uiDrawer* pDrawer, const uiRect& rect)
+{
+	//printx("---> uiHeaderForm::Paint\n");
+
+	UINT32 color = uiGetSysColor(SCN_CAPTAIN);
+	FORM_PAINT_MODE mode = (FORM_PAINT_MODE)pDrawer->GetMode();
+	//	pDrawer->FillRect(rect, RGB(255, 255, 255));
 
 	const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
 	pDrawer->Text(GetParent()->GetName(), rect, f);
 
-//	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
+	//	uiImage& icon = dynamic_cast<uiSideDockableFrame*>(GetParent())->GetIcon();
 
 	if (!m_temp.IsValid())
-	//	m_temp.LoadIconRes(IDI_SMALL);
+		//	m_temp.LoadIconRes(IDI_SMALL);
 		m_temp.LoadFromFile(_T("R:\\tt.bmp"));
 
-	stDrawImageParam param(m_rectIcon.Left, m_rectIcon.Top, m_rectIcon.Width(), m_rectIcon.Height());
-	pDrawer->DrawImage(m_temp, param);
-
-//	pDrawer->FillRect(m_rectIcon, RGB(255, 0, 255));
+	if (m_temp.IsValid())
+	{
+		stDrawImageParam param(m_rectIcon.Left, m_rectIcon.Top, m_rectIcon.Width(), m_rectIcon.Height());
+		pDrawer->DrawImage(m_temp, param);
+	}
+	//	pDrawer->FillRect(m_rectIcon, RGB(255, 0, 255));
 }
 
 void uiHeaderForm::OnSize(UINT nNewWidth, UINT nNewHeight)
@@ -1288,10 +1446,9 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 
 BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm)
 {
-	INT HeaderHeight = 26;
+	INT HeaderHeight = DEFAULT_HEADER_BAR_HEIGHT;
 	INT BorderWidth = m_BTTop + m_BTBottom;
 
-	SetName(pStr);
 	if (pHeaderForm == nullptr)
 	{
 		pHeaderForm = new uiHeaderForm;
@@ -1301,6 +1458,7 @@ BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm)
 	m_minSize.iWidth = 150;
 
 	SideDock(pHeaderForm, FDF_TOP | FDF_AUTO_SIZE);
+	SetTitle(pStr);
 
 	return FALSE;
 }

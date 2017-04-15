@@ -29,18 +29,31 @@ public:
 		uiImage::stImageInfo ii;
 		m_AniCursor.GetInfo(ii);
 
-
+		TimerStart(1, 1000, -1, nullptr);
 
 	//	TimerStart(1, 1000 / m_ii.DispRate, -1, nullptr);
 		return TRUE;
 	}
 
-	//void OnTimer(stTimerInfo* ti) override
-	//{
+	void OnTimer(stTimerInfo* ti) override
+	{
 	//	if (++m_CurFrame == m_ii.TotalFrame)
 	//		m_CurFrame = 0;
 	//	RedrawForm(&uiRect(m_ii.Width, m_ii.Height));
-	//}
+
+		if (GetKeyState(VK_F3) < 0)
+		{
+			uiFormBase* pOldForm = SetActive();
+			if (pOldForm != nullptr)
+			{
+				printx(_T("Original active form: %s\n"), pOldForm->GetName());
+			}
+			else
+			{
+				printx(_T("Nothing happened!\n"));
+			}
+		}
+	}
 
 	//void OnPaint(uiDrawer* pDrawer)
 	//{
@@ -59,90 +72,62 @@ protected:
 
 };
 
-
-class CTBase
+class uiButtonWnd : public uiButton
 {
 public:
 
-	CTBase() :i(0), j(0), k(0) {}
-	~CTBase() {}
+	BOOL OnCreate() override
+	{
+		uiButton::OnCreate();
+		Bind(GetID());
+		return TRUE;
+	}
+	void OnCommand(INT_PTR id, BOOL &bDone) override
+	{
+		Close();
+	}
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> uiButtonWnd::OnMouseBtnDown: %d %d %d\n", KeyType, x, y);
 
-	INT i, j, k;
-
+		uiPoint pt(x, y);
+		ClientToWindow(pt);
+		printx("ClientToWindow %d: %d\n", pt.x, pt.y);
+		switch (KeyType)
+		{
+		case MKT_LEFT:
+			Close(); // StartDragging(MKT_LEFT, pt.x, pt.y);
+			break;
+		case MKT_MIDDLE:
+			StartDragging(MKT_MIDDLE, pt.x, pt.y);
+			break;
+		case MKT_RIGHT:
+			StartDragging(MKT_RIGHT, pt.x, pt.y);
+			break;
+		}
+	}
+	void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> uiButtonWnd::OnMouseBtnUp: %d %d %d\n", KeyType, x, y);
+		switch (KeyType)
+		{
+		case MKT_MIDDLE:
+			break;
+		case MKT_RIGHT:
+			//		ReleaseCapture();
+			break;
+		}
+	}
 };
 
-template<typename T>
-class CTypeT : public T
-{
-public:
-
-	void DoSomething() { Print(); }
-
-};
-
-
-class CVInterface : public CTBase
-{
-public:
-
-	virtual void Print() = 0;
-
-};
-
-//#define NO_VTABLE_LOOKUP
-
-#ifdef NO_VTABLE_LOOKUP
-	#define _BASE_TYPE CTypeT<CTBase>
-//	#define DRAWER_BASE_TYPE uiDrawerBase
-#else
-	#define _BASE_TYPE CTypeT<CVInterface>
-	#define OVERRIDE override
-#endif
-
-class MyType : public _BASE_TYPE
-{
-public:
-	void Print() { printx("---> MyType::Print\n"); }
-};
-class MyType2 : public _BASE_TYPE
-{
-public:
-	void Print() { printx("---> MyType2::Print\n"); }
-};
-
-
-MyType mt;
-MyType2 mt2;
-void SetInterface(_BASE_TYPE*& pI)
-{
-#ifndef NO_VTABLE_LOOKUP
-	static INT i = 0;
-	if (i % 2 == 0)
-		pI = &mt;
-	else
-		pI = &mt2;
-	++i;
-#endif
-}
 
 void GUITest()
 {
-	uiFormBase *pForm = new uiCursorDrawForm;
+	uiFormBase* pForm = new uiCursorDrawForm;
 	pForm->Create(nullptr, 0, 0, 200, 100, FCF_CENTER);
 
-	printx("Sizeof MyType: %d\n", sizeof(MyType));
-
-#ifndef NO_VTABLE_LOOKUP
-	_BASE_TYPE* pI;
-	for (INT i = 0; i < 5; ++i)
-	{
-		SetInterface(pI);
-		pI->DoSomething();
-	}
-#else
-	mt.Print();
-#endif
-
+	uiFormBase* pButton = new uiButtonWnd;
+	pButton->Create(nullptr, 0, 0, 200, 100, FCF_CENTER);
 
 }
 

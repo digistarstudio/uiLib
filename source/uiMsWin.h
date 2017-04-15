@@ -10,7 +10,7 @@
 #include "uiControl.h"
 
 
-#define DEFAULT_BACKBUFFER_COUNT 1
+#define DEFAULT_BACKBUFFER_COUNT 0
 
 #define WM_CUSTOM   (WM_USER + 0x0001)
 #define WM_CTRL_MSG (WM_USER + 0x0002)
@@ -38,6 +38,7 @@ struct stWndTimerInfo
 
 	uiFormBase* pFormBase;
 	UINT_PTR    TimerHandle;
+	uiFormBase::TimerCallback tcb;
 
 };
 
@@ -93,15 +94,19 @@ public:
 	uiWindow(uiFormBase *pFormIn);
 	virtual ~uiWindow();
 
-	BOOL DockForm(uiFormBase *pForm);
-	void OnFormDestroy(uiFormBase *pForm);
-	void OnFormHide(uiFormBase *pForm);
+	BOOL DockForm(uiFormBase* pForm);
+
+	void OnFormPreClose(uiFormBase* pForm);
+	void OnFormPostClose(uiFormBase* pForm);
+	void OnFormDestroy(uiFormBase* pForm);
+	void OnFormHide(uiFormBase* pForm);
 
 	void CloseImp();
 	BOOL CloseDialogImp(INT_PTR ret);
 	BOOL MoveImp(INT scX, INT scY);
 	BOOL MoveByOffsetImp(INT x, INT y);
 	void MoveToCenter();
+	BOOL UpdateAT(uiFormBase* pActiveForm, uiFormBase*& pPrevForm);
 	void ShowImp(FORM_SHOW_MODE sm);
 	BOOL SizeImp(UINT nWidth, UINT nHeight);
 	BOOL StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, INT y, uiRect MouseMoveRect);
@@ -126,6 +131,7 @@ public:
 
 	void OnActivate(WPARAM wParam, LPARAM lParam);
 	void OnNCActivate(WPARAM wParam, LPARAM lParam);
+	void OnMouseActivate(WPARAM wParam, LPARAM lParam);
 	BOOL OnClose();
 	BOOL OnCreate(const uiRect* pRect);
 	void OnDestroy();
@@ -166,6 +172,7 @@ public:
 	INLINE uiPoint ClientToScreen(uiPoint& pt) const { return (pt += uiPoint(m_ScreenCoordinateX, m_ScreenCoordinateY)); }
 	INLINE void ClientToScreen(INT& x, INT& y) const { x += m_ScreenCoordinateX; y += m_ScreenCoordinateY; }
 	INLINE void ScreenToClient(INT& x, INT& y) const { x -= m_ScreenCoordinateX; y -= m_ScreenCoordinateY; }
+//	INLINE void ScreenToClient(INT& x, INT& y) const { uiPoint pt(x, y); ::ScreenToClient(m_Handle, (POINT*)&pt); x = pt.x; y = pt.y; }
 	INLINE BOOL PostMessage(UINT msg, WPARAM wParam, LPARAM lParam) const { return ::PostMessage(m_Handle, msg, wParam, lParam); }
 	INLINE BOOL UpdateWindow() const { return ::UpdateWindow(m_Handle); }
 	INLINE BOOL GetWindowRect(uiRect &rect) const { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
@@ -173,24 +180,42 @@ public:
 	INLINE BOOL ShowWindow(INT nCmdShow) const { return ::ShowWindow(m_Handle, nCmdShow); }
 	INLINE HWND SetCapture() const { return ::SetCapture(m_Handle); }
 	INLINE BOOL ReleaseCapture() const { return ::ReleaseCapture(); }
-
+	INLINE BOOL SetWindowText(const uiString& str) const { return ::SetWindowText(m_Handle, str); }
+	INLINE BOOL IsActive() const { return m_bActive; }
 
 	INLINE static HGLOBAL GetDialogTemplate() { return hGDialogTemplate; }
 	INLINE static void SetDialogTemplate(HGLOBAL hMem) { hGDialogTemplate = hMem; }
 
-	static uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase *pForm, uiFormBase *ParentForm, const stWindowCreateParam& wcp);
-	static void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-	static INT_PTR uiWindow::CreateModalDialog(const stDialogCreateParam* pDCP);
+	static uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, const stWindowCreateParam& wcp);
+	static INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP);
+
+
+
+	void Dbg() const { if (uiMessageLookUp(WM_KILLFOCUS)) _CrtDbgBreak(); }
+
+	INLINE BOOL SetActiveWindow(uiFormBase*& pPrevForm) const
+	{
+		DEBUG_CHECK(Dbg());
+
+		if (!m_bActive)
+		{
+			ASSERT(::GetActiveWindow() != m_Handle);
+			HWND hWndPrev = ::SetActiveWindow(m_Handle);
+			pPrevForm = (hWndPrev == NULL) ? nullptr : ((uiWindow*)GetWindowLongPtr(hWndPrev, GWLP_USERDATA))->m_pActiveForm; // TODO
+			return TRUE;
+		}
+		return FALSE;
+	}
 
 
 	// For debugging.
 	// Don't use SetWindowPos to show windows.
 //	INLINE LRESULT SendMessage(UINT Msg, WPARAM wParam, LPARAM lParam) { return ::SendMessage(m_Handle, Msg, wParam, lParam); }
-	INLINE HWND SetActiveWindow()
-	{
-		ASSERT(!uiMessageLookUp(WM_KILLFOCUS));
-		return ::SetActiveWindow(m_Handle);
-	}
+	//INLINE HWND SetActiveWindow()
+	//{
+	//	ASSERT(!uiMessageLookUp(WM_KILLFOCUS));
+	//	return ::SetActiveWindow(m_Handle);
+	//}
 
 
 protected:
@@ -241,12 +266,13 @@ protected:
 
 	HWND m_Handle;
 
-	uiFormBase *m_pForm;
-	uiFormBase *m_pHoverForm;
-	uiFormBase *m_pGrayForm;  // Mouse enters the form but doesn't leave its sizeable border region.
-	uiFormBase *m_pDraggingForm;
-	uiFormBase *m_pMouseFocusForm;
-	uiFormBase *m_pKeyboardFocusForm;
+	uiFormBase* m_pForm;
+	uiFormBase* m_pActiveForm;
+	uiFormBase* m_pHoverForm;
+	uiFormBase* m_pGrayForm;  // Mouse enters the form but doesn't leave its sizeable border region.
+	uiFormBase* m_pDraggingForm;
+	uiFormBase* m_pMouseFocusForm;
+	uiFormBase* m_pKeyboardFocusForm;
 
 	uiPoint m_LastMousePos; // window client spcae
 	UINT8   m_TrackMouseClick;
@@ -271,6 +297,8 @@ protected:
 	bool bMouseFocusCaptured = false;
 	bool bKBFocusCaptured = false;
 	bool bIsDialog = false;
+//	bool bWindowMove = false;
+	bool m_bActive = false;
 
 
 };
@@ -355,9 +383,11 @@ public:
 		return FALSE;
 	}
 
+
 protected:
 
 	INT m_x, m_y;
+
 
 };
 

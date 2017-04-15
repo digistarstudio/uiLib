@@ -60,7 +60,7 @@ public:
 	}
 
 
-	BOOL OnCreate() override final
+	BOOL OnCreate() override // final
 	{
 		if (m_ID == uiID_INVALID)
 			m_ID = uiGetID();
@@ -116,7 +116,7 @@ public:
 	}
 	INLINE UINT GetID()
 	{
-		ASSERT(IsCreated());
+		ASSERT(IsCreated() || IsCreating());
 		return m_ID;
 	}
 	INLINE void SetID(UINT id)
