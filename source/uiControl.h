@@ -163,7 +163,7 @@ public:
 	}
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override
 	{
-		//	printx("OnMouseMove client pos x:%d, y:%d. Screen pos x:%d, y:%d\n", x, y);
+		printx("OnMouseMove client pos x:%d, y:%d\n", x, y);
 	}
 
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override

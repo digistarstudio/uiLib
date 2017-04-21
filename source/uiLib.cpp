@@ -765,6 +765,8 @@ void CMyApp::Run()
 	printx("sizeof uiWindow: %d Bytes\n", sizeof uiWindow);
 	printx("sizeof uiFormBase: %d Bytes\n", sizeof uiFormBase);
 	printx("sizeof uiForm: %d Bytes\n", sizeof uiForm);
+	printx("sizeof uiTabForm: %d Bytes\n", sizeof uiTabForm);
+	printx("sizeof uiDockSiteBase: %d Bytes\n", sizeof uiDockSiteBase);
 
 
 	CMyForm* pForm = new CMyForm;

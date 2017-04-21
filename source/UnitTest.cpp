@@ -16,10 +16,24 @@ public:
 	uiCursorDrawForm() = default;
 	~uiCursorDrawForm() = default;
 
+
+	void OnMouseEnter(INT x, INT y)
+	{
+		printx("---> uiCursorDrawForm::OnMouseEnter\n");
+	}
+	void OnMouseLeave()
+	{
+		printx("---> uiCursorDrawForm::OnMouseLeave\n");
+	}
+
 	BOOL OnCreate() override
 	{
 		SetHeaderBar(_T("Draw cursor test"));
 		m_AniCursor.LoadFromFile(_T("r:\\img\\wait.ani"));
+
+
+		pBtn = new uiButton();
+		pBtn->Create(this, 20, 20, 80, 15);
 
 		m_pIV = new uiImageViewer;
 		m_pIV->Create(this, 0, 0, 28, 28);
@@ -35,12 +49,30 @@ public:
 		return TRUE;
 	}
 
+	void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y)
+	{
+	//	uiFormBase* pOld = pBtn->SetCapture();
+
+		switch (KeyType)
+		{
+		case MKT_LEFT:
+			pBtn->SetCapture();
+			break;
+		case MKT_RIGHT:
+			break;
+		}
+	//	if ()
+	}
 	void OnTimer(stTimerInfo* ti) override
 	{
 	//	if (++m_CurFrame == m_ii.TotalFrame)
 	//		m_CurFrame = 0;
 	//	RedrawForm(&uiRect(m_ii.Width, m_ii.Height));
-
+	/*	if (GetKeyState(VK_F2) < 0)
+		{
+			pBtn->Close();
+			return;
+		} //*/
 		if (GetKeyState(VK_F3) < 0)
 		{
 			uiFormBase* pOldForm = SetActive();
@@ -53,6 +85,16 @@ public:
 				printx(_T("Nothing happened!\n"));
 			}
 		}
+
+		if (GetKeyState(VK_F4) < 0)
+			pBtn->SetCapture();
+		if (GetKeyState(VK_F5) < 0)
+			pBtn->ReleaseCapture();
+
+		if (GetKeyState(VK_F7) < 0)
+			pBtn->MoveByOffset(5, 0);
+		if (GetKeyState(VK_F8) < 0)
+			pBtn->MoveByOffset(-5, 0);
 	}
 
 	//void OnPaint(uiDrawer* pDrawer)
@@ -68,7 +110,7 @@ protected:
 	uiImage m_AniCursor;
 
 	uiImageViewer* m_pIV;
-
+	uiButton* pBtn;
 
 };
 
@@ -118,6 +160,172 @@ public:
 			break;
 		}
 	}
+
+
+};
+
+
+class uiDropdownFormBase : public uiForm
+{
+public:
+
+
+	FORM_CLASS GetClass() const override final
+	{
+		return FC_DROPDOWN_FORM;
+	}
+
+	MOUSE_ACTIVATE_RESULT OnMouseActivate() override // MAR_ACTIVATE, MAR_ACTIVATE_EAT, MAR_NO_ACTIVATE, MAR_NO_ACTIVATE_EAT
+	{
+		return MAR_NO_ACTIVATE;
+	}
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		printx("---> uiDropdownForm::OnMouseBtnDown: %d %d %d\n", KeyType, x, y);
+
+		switch (KeyType)
+		{
+		case MKT_LEFT:
+			break;
+		case MKT_MIDDLE:
+			Close();
+			break;
+		case MKT_RIGHT:
+			break;
+		}
+	}
+
+
+};
+
+
+class uiComboBox : public uiFormBase
+{
+public:
+
+	enum
+	{
+		BTN_WIDTH = 18,
+		FRAME_THICKNESS = 2,
+	};
+
+
+	uiComboBox()
+	:m_pDDF(nullptr)
+	{
+	}
+
+	void OnActivate(BOOL bActive) override
+	{
+		printx("---> uiComboBox::OnActivate Active: %d\n", bActive);
+		uiFormBase::OnActivate(bActive);
+
+		if (!bActive)
+		{
+			if (m_pDDF != nullptr)
+			{
+				m_pDDF->Close();
+				m_pDDF = nullptr;
+			}
+		}
+	}
+
+	void OnKBFocus(BOOL bGet, uiFormBase* pForm) override
+	{
+		printx("---> uiComboBox::OnKBGetFocus. bGet: %d\n", bGet);
+
+		if (bGet)
+		{
+
+		}
+		else
+		{
+			if (GetKeyState(VK_F2) < 0)
+			_CrtDbgBreak();
+		}
+	}
+
+	void OnMouseEnter(INT x, INT y) override
+	{
+		RedrawForm();
+	}
+	void OnMouseLeave() override
+	{
+		RedrawForm();
+	}
+
+	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override
+	{
+		uiPoint pt(x, y);
+		ClientToWindow(pt);
+
+		switch (KeyType)
+		{
+		case MKT_LEFT:
+		//	new uiDropdownFormBase();
+
+			break;
+
+		case MKT_MIDDLE:
+			StartDragging(MKT_MIDDLE, pt.x, pt.y);
+			break;
+
+		case MKT_RIGHT:
+			StartDragging(MKT_RIGHT, pt.x, pt.y);
+			break;
+		}
+	}
+	void OnPaint(uiDrawer* pDrawer) override
+	{
+		uiRect rect = GetClientRect(), rect2 = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
+		UINT FrameColor = IsMouseHovering() ? RGB(200, 200, 255) : RGB(200, 200, 200);
+		
+		pDrawer->FillRect(rect, FrameColor);
+		pDrawer->FillRect(rect2, RGB(255, 255, 255));
+
+		const uiFont& font = uiGetSysFont(SFT_SM_CAPTION);
+
+
+		pDrawer->Text(uiString(_T("Test string")), rect, font);
+
+
+		pDrawer->FillRect(BtnRect, FrameColor);
+		pDrawer->Text(uiString(_T("¡¿")), BtnRect, font);
+	}
+	void UpdateLayout(const uiRect& rect)
+	{
+		BtnRect = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
+		BtnRect.Left = BtnRect.Right - BTN_WIDTH;
+	}
+	void OnSize(UINT nNewWidth, UINT nNewHeight) override
+	{
+		uiRect rect(nNewWidth, nNewHeight);
+		UpdateLayout(rect);
+	}
+
+
+protected:
+
+	uiRect BtnRect;
+	uiDropdownFormBase *m_pDDF;
+
+
+};
+
+
+class uiTestForm : public uiForm
+{
+public:
+
+	BOOL OnCreate() override
+	{
+		SetHeaderBar(_T("Combobox Test"));
+		uiFormBase* pCombo = new uiComboBox;
+		pCombo->Create(this, 0, 0, 100, 23, FCF_CENTER);
+		return TRUE;
+	}
+
+
 };
 
 
@@ -126,7 +334,7 @@ void GUITest()
 	uiFormBase* pForm = new uiCursorDrawForm;
 	pForm->Create(nullptr, 0, 0, 200, 100, FCF_CENTER);
 
-	uiFormBase* pButton = new uiButtonWnd;
+	uiFormBase* pButton = new uiTestForm;
 	pButton->Create(nullptr, 0, 0, 200, 100, FCF_CENTER);
 
 }

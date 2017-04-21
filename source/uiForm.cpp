@@ -54,7 +54,7 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 			bResult = FALSE;
 		else
 		{
-			ASSERT(!(fcf & FCF_NO_ACTIVATE));
+			ASSERT(!(fcf & FCF_NO_AT));
 			if (fcf & FCF_CENTER)
 				pWnd->MoveToCenter();
 		}
@@ -68,7 +68,7 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 			bResult = FALSE;
 		else
 		{
-			ASSERT(!(fcf & FCF_NO_ACTIVATE));
+			ASSERT(!(fcf & FCF_NO_AT));
 			parent->AddChild(this);
 			if (fcf & FCF_CENTER)
 				pWnd->MoveToCenter();
@@ -357,24 +357,8 @@ void uiFormBase::RedrawFrame(const uiRect* pUpdateRect)
 
 uiFormBase* uiFormBase::SetActive()
 {
-	uiFormBase* pRet;
-	uiWindow* pBaseWnd = GetBaseWnd();
-	if (pBaseWnd->UpdateAT(this, pRet))
-	{
-		if (pBaseWnd->SetActiveWindow(pRet))
-		{
-		}
-		else
-		{
-			if (pRet != nullptr)
-			{
-				pRet->FBClearFlag(FBF_ACTIVATED);
-				pRet->OnActivate(FALSE);
-			}
-			FBSetFlag(FBF_ACTIVATED);
-			OnActivate(TRUE);
-		}
-	}
+	uiFormBase* pRet = nullptr;
+	GetBaseWnd()->SetActiveImp(this, pRet);
 	return pRet;
 }
 
@@ -386,6 +370,14 @@ uiFormBase* uiFormBase::SetCapture()
 BOOL uiFormBase::ReleaseCapture()
 {
 	return GetBaseWnd()->ReleaseMouseFocus(this);
+}
+
+uiFormBase* uiFormBase::SetFocus()
+{
+	if (FBTestFlag(FBF_KB_FOCUS))
+		return this;
+
+	return GetBaseWnd()->SetKBFocusImp(this);
 }
 
 BOOL uiFormBase::CaretShow(BOOL bShow, INT x, INT y, INT width, INT height)
@@ -546,7 +538,7 @@ void uiFormBase::StartDragging(MOUSE_KEY_TYPE mkt, INT wcX, INT wcY)
 		}
 	}
 
-	uiWindow *pWnd = GetBaseWnd();
+	uiWindow* pWnd = GetBaseWnd();
 	pWnd->StartDraggingImp(this, mkt, wcX, wcY, rect);
 }
 
@@ -590,15 +582,20 @@ void uiFormBase::EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight
 	ASSERT(!IsCreated() && !IsCreating() && !IsVisible());
 
 	UTX::CSimpleList PostCreateList;
-	SetPostCreateList(&PostCreateList);
+
+	if (GetParent() != nullptr && GetParent()->IsCreating())
+		SetPostCreateList(GetParent()->m_pStyle);
+	else
+		SetPostCreateList(&PostCreateList);
 
 	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
 
 	OnPreCreate(fcf);
 
-	if (fcf & FCF_NO_ACTIVATE)
+	if (fcf & FCF_NO_AT)
 		FBSetFlag(FBF_NO_ACTIVE_TRAIL);
+//	if (!(fcf & FCF_NO_ACTIVATE))
 	else
 		SetActive();
 
@@ -606,13 +603,16 @@ void uiFormBase::EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
 	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &stFormMoveInfo());
 
-	uiFormBase* pFormBase;
-	for (; PostCreateList.size();)
+	if ((UTX::CSimpleList*)m_pStyle == &PostCreateList)
 	{
-		pFormBase = (uiFormBase*)PostCreateList.pop_back();
-		pFormBase->MoveToCenter();
+		uiFormBase* pFormBase;
+		for (; PostCreateList.size();)
+		{
+			pFormBase = (uiFormBase*)PostCreateList.pop_back();
+			pFormBase->MoveToCenter();
+		}
+		ASSERT(PostCreateList.size() == 0);
 	}
-	ASSERT(PostCreateList.size() == 0);
 
 	// CleanPostCreateList();
 	m_pStyle = GetDefaultStyleObject(this);
@@ -631,6 +631,12 @@ BOOL uiFormBase::EntryOnClose()
 
 void uiFormBase::EntryOnDestroy(uiWindow* pWnd)
 {
+	if (FBTestFlag(FBF_KB_FOCUS))
+	{
+		ASSERT(pWnd->HasKBFocus());
+		EntryOnKBKillFocus(nullptr);
+	}
+
 	uiFormBase *pChild;
 	list_entry *pCurrent, *pNext;
 	for (pCurrent = m_ListChildren.next; IS_VALID_ENTRY(pCurrent, m_ListChildren); pCurrent = pNext)
@@ -667,14 +673,20 @@ void uiFormBase::EntryOnSize(UINT nNewWidth, UINT nNewHeight)
 	OnFrameSize(nNewWidth, nNewHeight);
 }
 
-void uiFormBase::EntryOnKBGetFocus()
+void uiFormBase::EntryOnKBGetFocus(uiFormBase* pPrevForm)
 {
-	OnKBGetFocus();
+	ASSERT(!FBTestFlag(FBF_KB_FOCUS));
+	FBSetFlag(FBF_KB_FOCUS);
+
+	OnKBFocus(TRUE, pPrevForm);
 }
 
-void uiFormBase::EntryOnKBLoseFocus()
+void uiFormBase::EntryOnKBKillFocus(uiFormBase* pNewForm)
 {
-	OnKBLoseFocus();
+	ASSERT(FBTestFlag(FBF_KB_FOCUS));
+	FBClearFlag(FBF_KB_FOCUS);
+
+	OnKBFocus(FALSE, pNewForm);
 
 	if (FBTestFlag(FBF_OWN_CARET))
 		CaretShow(FALSE);
@@ -741,12 +753,18 @@ uiFormBase* uiFormBase::TryActivate()
 
 void uiFormBase::OnActivate(BOOL bActive)
 {
+	if (bActive)
+		SetFocus();
 }
 
 void uiFormBase::OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode)
 {
 }
 
+MOUSE_ACTIVATE_RESULT uiFormBase::OnMouseActivate()
+{
+	return MAR_ACTIVATE;
+}
 
 void uiFormBase::OnCommand(INT_PTR id, BOOL &bDone)
 {
@@ -806,7 +824,7 @@ void uiFormBase::OnMouseLeave()
 	//printx("---> uiFormBase::OnMouseLeave\n");
 }
 
-void uiFormBase::OnMouseFocusLost()
+void uiFormBase::OnMouseFocusLost(uiFormBase* pNewForm)
 {
 }
 
@@ -1308,13 +1326,13 @@ BOOL uiHeaderForm::OnCreate()
 	if ((m_pCloseBtn = new uiButton) != nullptr)
 	{
 		m_pCloseBtn->SetID(uiID_CLOSE);
-		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28, FCF_NO_ACTIVATE);
+		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28, FCF_NO_AT);
 	}
 
 	if ((m_pMinBtn = new uiButton) != nullptr)
 	{
 		m_pMinBtn->SetID(uiID_MINIMIZE);
-		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28, FCF_NO_ACTIVATE);
+		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28, FCF_NO_AT);
 	}
 
 	UpdateLayout(rect.Width(), rect.Height());
@@ -1324,12 +1342,12 @@ BOOL uiHeaderForm::OnCreate()
 
 void uiHeaderForm::OnPreCreate(FORM_CREATION_FLAG& fcf)
 {
-	fcf |= FCF_NO_ACTIVATE;
+	fcf |= FCF_NO_AT;
 }
 
 void uiHeaderForm::OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd)
 {
-	printx("---> uiHeaderForm::OnMouseMove. client pos x:%d, y:%d.\n", x, y);
+	//printx("---> uiHeaderForm::OnMouseMove. client pos x:%d, y:%d.\n", x, y);
 
 
 //	if (GetKeyState(VK_F2) < 0)
@@ -1473,21 +1491,6 @@ BOOL uiForm::SetMenuBar(uiMenu* pMenu)
 
 	SideDock(pMenuBar, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
 
-	return TRUE;
-}
-
-
-uiDockableForm::uiDockableForm()
-{
-	INIT_LIST_HEAD(&m_ListDockingForm);
-}
-
-uiDockableForm::~uiDockableForm()
-{
-}
-
-BOOL uiDockableForm::OnDeplate(INT iReason, uiFormBase *pDockingForm)
-{
 	return TRUE;
 }
 
@@ -1890,6 +1893,20 @@ void uiTabForm::OnPaint(uiDrawer* pDrawer)
 		const uiFont& f = uiGetSysFont(SYSTEM_FONT_TYPE::SFT_CAPTION);
 		pDrawer->Text(pPaneInfo->pForm->GetName(), tRect, f);
 	}
+}
+
+
+uiDockSiteBase::uiDockSiteBase()
+{
+}
+
+uiDockSiteBase::~uiDockSiteBase()
+{
+}
+
+BOOL uiDockSiteBase::OnDeplate(INT iReason, uiFormBase *pDockingForm)
+{
+	return TRUE;
 }
 
 

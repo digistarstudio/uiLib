@@ -156,6 +156,7 @@
     <ClInclude Include="source\uiControl.h" />
     <ClInclude Include="source\uiDrawer.h" />
     <ClInclude Include="source\uiForm.h" />
+    <ClInclude Include="source\uiKeyCode.h" />
     <ClInclude Include="source\uiLib.h" />
     <ClInclude Include="source\uiMsWin.h" />
     <ClInclude Include="source\UnitTest.h" />

@@ -5,6 +5,7 @@
 
 #include "uiDrawer.h"
 #include "uiCommon.h"
+#include "uiKeyCode.h"
 
 
 class uiMenu;
@@ -14,17 +15,30 @@ class uiHeaderFormBase;
 class uiWindow;
 struct uiFormStyle;
 
+class IAreaCursor;
+
 
 BOOL WndClientToScreen(uiWindow *pWnd, INT &x, INT &y); // Declare this for inline function.
 BOOL WndCreateMessage(uiWindow *pWnd, uiFormBase *pSrc, UINT_PTR id);
 
 
+enum MOUSE_ACTIVATE_RESULT
+{
+	MAR_ACTIVATE,
+	MAR_ACTIVATE_EAT,
+	MAR_NO_ACTIVATE,
+	MAR_NO_ACTIVATE_EAT,
+
+	MAR_TOTAL,
+};
+
 enum FORM_SHOW_MODE
 {
 	FSM_HIDE,
 	FSM_SHOW,
+	FSM_NOACTIVATE,
 
-	// For base window only.
+	// For frame form only.
 	FSM_RESTORE,
 	FSM_MINIMIZE,
 	FSM_MAXIMIZE,
@@ -33,7 +47,6 @@ enum FORM_SHOW_MODE
 enum UI_WINDOW_TYPE
 {
 	UWT_NORMAL,
-	UWT_DIALOG,
 	UWT_TOOL,
 	UWT_MENU,
 };
@@ -49,7 +62,8 @@ enum FORM_CREATION_FLAG
 	FCF_CENTER      = 0x01 << 3,
 	FCF_CLIENT_RECT = 0x01 << 4, // Create form with specific client rectangle size.
 
-	FCF_NO_ACTIVATE = 0x01 << 5,
+	FCF_NO_AT       = 0x01 << 5, // Active trail: used to track frame state for painting non-client area.
+	FCF_NO_ACTIVATE = 0x01 << 6,
 };
 
 enum MOUSE_KEY_TYPE
@@ -75,9 +89,13 @@ enum FORM_CLASS
 {
 	FC_BASE,
 
+	FC_DOCKSITE,
+
 	FC_TOOLBAR,
 	FC_FORM,
 	FC_HEADER_BAR,
+
+	FC_DROPDOWN_FORM,
 
 	FC_CONTROL,
 	FC_BUTTON,
@@ -127,7 +145,12 @@ struct stFormSplitter
 };
 
 
-class IAreaCursor;
+struct stKeyEventInfo
+{
+	VUI_KEY_CODE KeyCode;
+	INT  iRepeatCount;
+	bool bKeyDownPrev;
+};
 
 
 class uiFormBase
@@ -173,6 +196,8 @@ public:
 		FBF_MODAL_MODE      = 0x01 << 10,
 		FBF_ACTIVE_TRAIL    = 0x01 << 11,
 		FBF_NO_ACTIVE_TRAIL = 0x01 << 12,
+		FBF_KB_FOCUS        = 0x01 << 13,
+		FBF_MOUSE_FOCUS     = 0x01 << 14,
 	};
 
 	enum ACTIVATE_STATE
@@ -234,6 +259,8 @@ public:
 	uiFormBase* SetCapture();
 	BOOL ReleaseCapture();
 
+	uiFormBase* SetFocus();
+
 	BOOL CaretShow(BOOL bShow, INT x = -1, INT y = -1, INT width = -1, INT height = -1);
 	BOOL CaretMoveByOffset(INT OffsetX, INT OffsetY);
 	BOOL CaretMove(INT x, INT y);
@@ -261,8 +288,8 @@ public:
 	void EntryOnMove(INT x, INT y, const stFormMoveInfo* pInfo);
 	void EntryOnSize(UINT nNewWidth, UINT nNewHeight);
 
-	void EntryOnKBGetFocus();
-	void EntryOnKBLoseFocus();
+	void EntryOnKBGetFocus(uiFormBase* pPrevForm);
+	void EntryOnKBKillFocus(uiFormBase* pNewForm);
 
 	virtual void EntryOnCommand(UINT_PTR id);
 	virtual void EntryOnPaint(uiDrawer* pDrawer);
@@ -278,6 +305,8 @@ public:
 	virtual void OnActivate(BOOL bActive);
 	virtual void OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode);
 
+	virtual MOUSE_ACTIVATE_RESULT OnMouseActivate();
+
 	virtual void OnCommand(INT_PTR id, BOOL &bDone);
 
 	virtual BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
@@ -289,7 +318,7 @@ public:
 	virtual void OnMouseBtnUp(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	virtual void OnMouseEnter(INT x, INT y);
 	virtual void OnMouseLeave();
-	virtual void OnMouseFocusLost();
+	virtual void OnMouseFocusLost(uiFormBase* pNewForm);
 	virtual void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd);
 	virtual void OnMove(INT x, INT y, const stFormMoveInfo* pInfo);
 	virtual void OnPaint(uiDrawer* pDrawer);
@@ -298,8 +327,10 @@ public:
 	virtual void OnSize(UINT nNewWidth, UINT nNewHeight);
 	virtual void OnTimer(stTimerInfo* ti);
 
-	virtual void OnKBGetFocus() {}
-	virtual void OnKBLoseFocus() {}
+	virtual void OnKBFocus(BOOL bGet, uiFormBase* pForm) {}
+
+	virtual void OnKeyDown(const stKeyEventInfo* pKEI) {}
+	virtual void OnKeyUp(const stKeyEventInfo* pKEI) {}
 
 
 	struct stFindCtx
@@ -342,6 +373,7 @@ public:
 
 	INLINE void AddChild(uiFormBase *pChildForm)
 	{
+		ASSERT(GetClass() != FC_DOCKSITE);
 		ASSERT(pChildForm->m_pParent == nullptr);
 		ASSERT(pChildForm->m_ListChildrenEntry.next == nullptr && pChildForm->m_ListChildrenEntry.prev == nullptr);
 		pChildForm->m_pParent = this;
@@ -664,6 +696,10 @@ protected:
 IMPLEMENT_ENUM_FLAG(uiSideDockableFrame::FORM_BORDER_FLAGS)
 
 
+
+
+
+
 class IMessageHandler : virtual public uiFormBase
 {
 public:
@@ -865,24 +901,6 @@ protected:
 };
 
 
-class uiDockableForm : public uiForm
-{
-public:
-
-	uiDockableForm();
-	~uiDockableForm();
-
-	BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
-
-
-protected:
-
-	list_head m_ListDockingForm;
-
-
-};
-
-
 class uiTabForm : public uiForm
 {
 public:
@@ -960,7 +978,7 @@ public:
 			m_HighlightIndex = -1;
 		}
 	}
-	void OnMouseFocusLost() override
+	void OnMouseFocusLost(uiFormBase* pNewForm) override
 	{
 		printx("---> uiTabForm::OnMouseFocusLost\n");
 		m_bDraggingTab = false;
@@ -1001,11 +1019,11 @@ public:
 
 protected:
 
-	INT m_ActiveIndex, m_HighlightIndex, m_TotalPane;
-	INT m_LeftMargin, m_TopMargin, m_RightMargin, m_BottomMargin;
-	UINT m_Flag;
+	SHORT m_ActiveIndex, m_HighlightIndex, m_TotalPane;
+	SHORT m_LeftMargin, m_TopMargin, m_RightMargin, m_BottomMargin;
+	UINT  m_Flag;
 
-	UINT m_ColorActive, m_ColorHover, m_ColorDefault;
+	UINT   m_ColorActive, m_ColorHover, m_ColorDefault;
 	UINT16 m_TabWidth, m_TabHeight;
 
 	std::vector<stPaneInfo> m_PaneInfoArray;
@@ -1020,9 +1038,9 @@ private:
 	INT AddPaneInfo(stPaneInfo *pNewPaneInfo, INT index = -1)
 	{
 		if (index == -1)
-			index = (INT)m_PaneInfoArray.size();
+			index = static_cast<SHORT>(m_PaneInfoArray.size());
 		m_PaneInfoArray.insert(m_PaneInfoArray.begin() + index, 1, *pNewPaneInfo);
-		m_TotalPane = (INT)m_PaneInfoArray.size();
+		m_TotalPane = static_cast<SHORT>(m_PaneInfoArray.size());
 		return index;
 	}
 	stPaneInfo* GetPaneInfo(INT index)
@@ -1049,3 +1067,20 @@ private:
 IMPLEMENT_ENUM_FLAG(uiTabForm::TAB_FORM_FLAGS)
 
 
+class uiDockSiteBase : public uiTabForm
+{
+public:
+
+	uiDockSiteBase();
+	~uiDockSiteBase();
+
+	FORM_CLASS GetClass() const final { return FC_DOCKSITE; }
+
+
+	BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
+
+
+protected:
+
+
+};

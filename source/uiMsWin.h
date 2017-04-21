@@ -3,8 +3,6 @@
 #pragma once
 
 
-//#include <Windows.h>
-//#include <WinUser.h>
 #include "uiCommon.h"
 #include "uiForm.h"
 #include "uiControl.h"
@@ -17,6 +15,12 @@
 
 
 BOOL uiMessageLookUp(UINT message);
+
+
+INLINE uiWindow* uiWindowGet(HWND hWnd)
+{
+	return (uiWindow*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+}
 
 
 struct stWndTimerInfo
@@ -91,6 +95,15 @@ public:
 		MOUSE_CLICK_INTERVAL = 300,
 	};
 
+	enum WINDOW_CLASS_NAME
+	{
+		WCN_NORMAL,
+		WCN_MENU,
+
+		WCN_TOTAL
+	};
+
+
 	uiWindow(uiFormBase *pFormIn);
 	virtual ~uiWindow();
 
@@ -107,6 +120,7 @@ public:
 	BOOL MoveByOffsetImp(INT x, INT y);
 	void MoveToCenter();
 	BOOL UpdateAT(uiFormBase* pActiveForm, uiFormBase*& pPrevForm);
+	void SetActiveImp(uiFormBase* pActiveForm, uiFormBase*& pPrevForm);
 	void ShowImp(FORM_SHOW_MODE sm);
 	BOOL SizeImp(UINT nWidth, UINT nHeight);
 	BOOL StartDraggingImp(uiFormBase *pForm, MOUSE_KEY_TYPE mkt, INT x, INT y, uiRect MouseMoveRect);
@@ -117,8 +131,14 @@ public:
 	void RetrackMouseCheck(uiFormBase* pFormBase);
 	void UpdateCursor(uiFormBase* pForm, INT csX, INT csY);
 
+
+	void PopupMenuImp(uiMenu* pRootMenu, INT wsX, INT wsY);
+
+
 	uiFormBase* CaptureMouseFocus(uiFormBase* pForm);
 	BOOL ReleaseMouseFocus(uiFormBase* pForm);
+
+	uiFormBase* SetKBFocusImp(uiFormBase* pForm);
 
 	BOOL CaretShowImp(uiFormBase* pFormBase, INT x, INT y, INT width, INT height);
 	BOOL CaretHideImp(uiFormBase* pFormBase);
@@ -131,16 +151,16 @@ public:
 
 	void OnActivate(WPARAM wParam, LPARAM lParam);
 	void OnNCActivate(WPARAM wParam, LPARAM lParam);
-	void OnMouseActivate(WPARAM wParam, LPARAM lParam);
+	void OnMouseActivate(LPARAM& ret, WPARAM wParam, LPARAM lParam);
 	BOOL OnClose();
 	BOOL OnCreate(const uiRect* pRect);
 	void OnDestroy();
-	void OnKeyDown(INT iKey);
-	void OnKeyUp(INT iKey);
+	void OnKeyDown(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
+	void OnKeyUp(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
 	void OnMove(INT scx, INT scy);
 	void OnPaint();
-	void OnGetKBFocus(HWND hOldFocusWnd);
-	void OnLoseKBFocus();
+	void OnKBSetFocus(HWND hOldFocusWnd);
+	void OnKBKillFocus(HWND hNewFocusWnd);
 	void OnSize(UINT_PTR nType, UINT nNewWidth, UINT nNewHeight);
 	void OnSizing(INT_PTR fwSide, RECT* pRect);
 	void OnTimer(const UINT_PTR TimerID, LPARAM lParam);
@@ -149,7 +169,7 @@ public:
 
 	BOOL DragSizingEventCheck(INT x, INT y);
 	BOOL DragEventForMouseBtnUp(INT wcX, INT wcY);
-	void OnMouseCaptureLost();
+	void OnMouseCaptureLost(HWND hNewWnd);
 	void OnDragging(INT x, INT y);
 
 	void OnMouseLeave();
@@ -178,10 +198,13 @@ public:
 	INLINE BOOL GetWindowRect(uiRect &rect) const { return ::GetWindowRect(m_Handle, (LPRECT)&rect); }
 	INLINE BOOL GetClientRect(uiRect &rect) const { return ::GetClientRect(m_Handle, (LPRECT)&rect); }
 	INLINE BOOL ShowWindow(INT nCmdShow) const { return ::ShowWindow(m_Handle, nCmdShow); }
-	INLINE HWND SetCapture() const { return ::SetCapture(m_Handle); }
+	INLINE HWND SetCapture() { ASSERT(!bMouseFocusCaptured); bMouseFocusCaptured = true; return ::SetCapture(m_Handle); }
 	INLINE BOOL ReleaseCapture() const { return ::ReleaseCapture(); }
 	INLINE BOOL SetWindowText(const uiString& str) const { return ::SetWindowText(m_Handle, str); }
 	INLINE BOOL IsActive() const { return m_bActive; }
+	INLINE BOOL HasKBFocus() const { return bKBFocusCaptured; }
+
+	INLINE static BOOL GetDesktopWorkArea(uiRect& rect) { return ::SystemParametersInfo(SPI_GETWORKAREA, 0, (RECT*)&rect, 0); }
 
 	INLINE static HGLOBAL GetDialogTemplate() { return hGDialogTemplate; }
 	INLINE static void SetDialogTemplate(HGLOBAL hMem) { hGDialogTemplate = hMem; }
@@ -189,22 +212,18 @@ public:
 	static uiWindow* CreateTemplateWindow(UI_WINDOW_TYPE uwt, uiFormBase* pForm, uiFormBase* ParentForm, const stWindowCreateParam& wcp);
 	static INT_PTR CreateModalDialog(const stDialogCreateParam* pDCP);
 
-
+	static const TCHAR* GetClassName(WINDOW_CLASS_NAME wcn) { ASSERT(wcn < WCN_TOTAL); return WndClassName[wcn]; }
+	static void RegisterWindowClass(BOOL bReg);
 
 	void Dbg() const { if (uiMessageLookUp(WM_KILLFOCUS)) _CrtDbgBreak(); }
 
-	INLINE BOOL SetActiveWindow(uiFormBase*& pPrevForm) const
+	INLINE void SetActiveWindow(uiFormBase*& pPrevForm) const
 	{
 		DEBUG_CHECK(Dbg());
-
-		if (!m_bActive)
-		{
-			ASSERT(::GetActiveWindow() != m_Handle);
-			HWND hWndPrev = ::SetActiveWindow(m_Handle);
-			pPrevForm = (hWndPrev == NULL) ? nullptr : ((uiWindow*)GetWindowLongPtr(hWndPrev, GWLP_USERDATA))->m_pActiveForm; // TODO
-			return TRUE;
-		}
-		return FALSE;
+		ASSERT(!m_bActive);
+		ASSERT(::GetActiveWindow() != m_Handle);
+		HWND hWndPrev = ::SetActiveWindow(m_Handle);
+		pPrevForm = (hWndPrev == NULL) ? nullptr : uiWindowGet(hWndPrev)->m_pActiveForm;
 	}
 
 
@@ -262,6 +281,7 @@ protected:
 	}
 
 	static HGLOBAL hGDialogTemplate;
+	static const TCHAR* WndClassName[];
 
 
 	HWND m_Handle;
