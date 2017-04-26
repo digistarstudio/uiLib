@@ -78,7 +78,7 @@ class IDerivedAC : public IAreaCursor
 {
 public:
 
-	uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override
+	uiImage GetCursorImage(uiFormBase* pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE cat) override
 	{
 		uiRect crect = pForm->GetClientRect();
 
@@ -105,7 +105,7 @@ class CTabFormContext1 : public uiFormBase, public IDerivedAC
 {
 public:
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
 		SetName(_T("Tab Pane No. 1"));
 		return TRUE;
@@ -139,7 +139,7 @@ class CTabFormContext2 : public uiFormBase
 {
 public:
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
 		SetName(_T("Tab Pane No. 2"));
 		return TRUE;
@@ -166,7 +166,7 @@ class CTabFormContext3 : public uiFormBase
 {
 public:
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
 		SetName(_T("Tab Pane No. 3"));
 
@@ -203,12 +203,14 @@ public:
 	CFormEx() = default;
 	~CFormEx() = default;
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
-		uiForm::OnCreate();
+		uiForm::OnCreate(fcf);
+
 		printx("---> CFormEx::OnCreate\n");
 
-		SetHeaderBar(_T("test child form TechPowerUp"));
+	//	SetHeaderBar(_T("test child form TechPowerUp"));
+		SetTitle(_T("test child form TechPowerUp"));
 
 	//	m_pButton = new uiButton2;
 	//	m_pButton->Create(this, 10, 10, 80, 80, FCF_CENTER);
@@ -217,7 +219,8 @@ public:
 		m_pSubForm = new uiForm;
 		m_pSubForm->Create(this, 20, 20, 110, 35, FCF_CENTER);
 	//	m_pSubForm->Create(this, 20, 20, 110, 60);
-		m_pSubForm->SetHeaderBar(_T("test child form"));
+	//	m_pSubForm->SetHeaderBar(_T("test child form"));
+		m_pSubForm->SetTitle(_T("test child form"));
 
 		uiButton *pBtn = new uiDraggableButton;
 		pBtn->Create(m_pSubForm, 10, 10, 80, 80, FCF_CENTER);
@@ -274,7 +277,7 @@ public:
 	CTimerTestForm() = default;
 	~CTimerTestForm() = default;
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
 		m_pButton = new uiButton;
 		m_pButton->Create(this, 30, 100, 120, 30);
@@ -324,13 +327,14 @@ public:
 	CFormEx2() = default;
 	~CFormEx2() = default;
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
-		uiForm::OnCreate();
+		uiForm::OnCreate(fcf);
+
 		printx("---> CFormEx2::OnCreate\n");
 
 		m_pTabForm = new uiTabForm;
-	
+
 		m_pTabForm->Create(this, 5, 5, 100, 150, FCF_CENTER);
 		m_pTabForm->SetMargin(3, 3, 3, 3);
 		m_pTabForm->SetProperty(uiTabForm::TFF_TAB_TOP | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
@@ -338,7 +342,7 @@ public:
 	//	m_pTabForm->SetProperty(uiTabForm::TFF_TAB_LEFT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
 	//	m_pTabForm->SetProperty(uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
 
-		m_pTabForm->SetHeaderBar(_T("test child form"));
+		m_pTabForm->SetTitle(_T("test child form"));
 
 	//	uiFormBase *pBase = nullptr;
 	//	m_pTabForm->AddPane(pBase, -1);
@@ -436,13 +440,15 @@ public:
 	CMyForm() = default;
 	~CMyForm() = default;
 
-	BOOL OnCreate()
+	BOOL OnCreate(FORM_CREATION_FLAG fcf)
 	{
-		uiForm::OnCreate();
+		uiForm::OnCreate(fcf);
 
 		printx("---> CMyForm::OnCreate\n");
 
-		SetHeaderBar(_T("test"));
+	//	SetHeaderBar(_T("test"));
+		SetTitle(_T("test"));
+
 	//	SetMenuBar(nullptr);
 
 //*
@@ -480,7 +486,8 @@ public:
 		m_pTabForm->Create(m_pSubForm, 5, 5, 100, 150, FCF_CENTER);
 		m_pTabForm->SetMargin(3, 3, 3, 3);
 		m_pTabForm->SetProperty(uiTabForm::TFF_TAB_RIGHT | uiTabForm::TFF_FORCE_SHOW_TAB | uiTabForm::TFF_DRAGGABLE_TAB);
-		m_pTabForm->SetHeaderBar(_T("test child form"));
+	//	m_pTabForm->SetHeaderBar(_T("test child form"));
+		m_pTabForm->SetTitle(_T("test child form"));
 
 	//	TimerStart(0, 1000, -1, nullptr);
 
@@ -578,7 +585,7 @@ public:
 			if (!pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER))
 				return;
 
-			pForm->SetHeaderBar(_T("test"));
+			pForm->SetTitle(_T("test"));
 		}
 		else if (id == m_pButton3->GetID())
 		{
@@ -593,7 +600,8 @@ public:
 
 			uiForm *pForm = new CTimerTestForm;
 			pForm->Create(this, 100, 100, 200, 280, FCF_TOOL | FCF_CENTER);
-			pForm->SetHeaderBar(_T("test"));
+		//	pForm->SetHeaderBar(_T("test"));
+			pForm->SetTitle(_T("test"));
 		}
 
 		if (id == uiID_CLOSE)

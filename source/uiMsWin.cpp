@@ -110,9 +110,9 @@ static void WndAddMap(void* handle, uiWindow* pWnd)
 #define LogWndMsg printx
 
 
-#define MOUSE_KEY_DOWN(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnDown(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
-#define MOUSE_KEY_UP(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnUp(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
-#define MOUSE_KEY_DBCLK(mkt) { pWnd = uiWindowGet(hWnd); pWnd->OnMouseBtnDbClk(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
+#define MOUSE_KEY_DOWN(mkt) { pWnd = uiWindowSafeGet(hWnd); pWnd->OnMouseBtnDown(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
+#define MOUSE_KEY_UP(mkt) { pWnd = uiWindowSafeGet(hWnd); pWnd->OnMouseBtnUp(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
+#define MOUSE_KEY_DBCLK(mkt) { pWnd = uiWindowSafeGet(hWnd); pWnd->OnMouseBtnDbClk(mkt, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)); bProcessed = TRUE; break; }
 
 
 BOOL InitWindowSystem()
@@ -160,6 +160,13 @@ HGLOBAL uiWindow::hGDialogTemplate = NULL;
 const TCHAR* uiWindow::WndClassName[] = { _T("vuiWndClass"), _T("vuiMenuClass") };
 
 
+INLINE uiWindow* uiWindowSafeGet(HWND hWnd)
+{
+	uiWindow* pOut = uiWindowGet(hWnd);
+	pOut->AddRef();
+	return pOut;
+}
+
 void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	BOOL& bProcessed = ret.bProcessed;
@@ -177,59 +184,57 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		pWnd->SetHandle(hWnd);
 		WndAddMap(hWnd, pWnd);
 		::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pWnd);
-		RECT rect;
-		::GetWindowRect(hWnd, &rect);
-		lRet = pWnd->OnCreate((uiRect*)&rect);
+		lRet = pWnd->OnCreate();
 		bProcessed = TRUE;
+		pWnd = nullptr;
 		break;
 
 	case WM_DESTROY:
-		LogWndMsg("Msg: WM_DESTROY wParam:%p lParam:%p\n", wParam, lParam);
+		LogWndMsg("Msg: WM_DESTROY HWND:%p\n", hWnd);
 		pWnd = uiWindowGet(hWnd);
 		if (WndRemoveMap(hWnd) == 0)
 			PostQuitMessage(0);
 		pWnd->SetHandle(NULL);
-		delete pWnd;
 		bProcessed = TRUE;
-		return;
+		break;
 
 	case WM_MOVE:
 	//	LogWndMsg("Msg: WM_MOVE Type:%d X:%d Y:%d\n", wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		bProcessed = TRUE;
 		break;
 
 	case WM_SIZE: // This is sent after size has changed.
 	//	LogWndMsg("Msg: WM_SIZE Type:%d Width:%d Height:%d\n", wParam, LOWORD(lParam), HIWORD(lParam));
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnSize(wParam, LOWORD(lParam), HIWORD(lParam));
 		bProcessed = TRUE;
 		break;
 
 	case WM_ACTIVATE:
 		LogWndMsg("Msg: WM_ACTIVATE 0x%p 0x%p\n", wParam, lParam);
-		pWnd = uiWindowGet(hWnd);
-		pWnd->OnActivate(wParam, lParam);
+		pWnd = uiWindowSafeGet(hWnd);
+		pWnd->OnActivate(bProcessed, wParam, lParam);
 	//	bProcessed = TRUE;
 		break;
 
 	case WM_SETFOCUS:
 	//	LogWndMsg("Msg: WM_SETFOCUS 0x%p 0x%p\n", wParam, lParam);
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnKBSetFocus((HWND)wParam);
 		bProcessed = TRUE;
 		break;
 
 	case WM_KILLFOCUS:
 	//	LogWndMsg("Msg: WM_KILLFOCUS 0x%p 0x%p\n", wParam, lParam);
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnKBKillFocus((HWND)wParam);
 		bProcessed = TRUE;
 		break;
 
 	case WM_PAINT:
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnPaint();
 		bProcessed = TRUE;
 		break;
@@ -282,14 +287,32 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		break;
 
 	case WM_KEYDOWN:
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnKeyDown(lRet, wParam, lParam);
 		bProcessed = TRUE;
 		break;
 
 	case WM_KEYUP:
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnKeyUp(lRet, wParam, lParam);
+		bProcessed = TRUE;
+		break;
+
+	//case WM_CHAR:
+	//	break;
+
+	//case WM_DEADCHAR:
+	//	break;
+
+	case WM_SYSKEYDOWN:
+		pWnd = uiWindowSafeGet(hWnd);
+		pWnd->OnSysKeyDown(lRet, wParam, lParam);
+		bProcessed = TRUE;
+		break;
+
+	case WM_SYSKEYUP:
+		pWnd = uiWindowSafeGet(hWnd);
+		pWnd->OnSysKeyUp(lRet, wParam, lParam);
 		bProcessed = TRUE;
 		break;
 
@@ -305,7 +328,7 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 
 	case WM_TIMER:
 	//	LogWndMsg("Msg: WM_TIMER ID:%d Callback: 0x%p\n", wParam, lParam);
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnTimer(wParam, lParam);
 		bProcessed = TRUE;
 		break;
@@ -316,7 +339,7 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 
 	case WM_MOUSEMOVE:
 	//	LogWndMsg("Msg: WM_MOUSEMOVE x:%d y:%d\n", GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnMouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		bProcessed = TRUE;
 		break;
@@ -341,13 +364,13 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 		MOUSE_KEY_DBCLK(MKT_MIDDLE);
 
 	case WM_MOUSEWHEEL:
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnMouseWheel(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), GET_WHEEL_DELTA_WPARAM(wParam), GET_KEYSTATE_WPARAM(wParam));
 		bProcessed = TRUE;
 		break;
 
 	case WM_SIZING:
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnSizing(wParam, (RECT*)lParam);
 		bProcessed = TRUE;
 		lRet = TRUE;
@@ -355,14 +378,14 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 
 	case WM_CAPTURECHANGED:
 		LogWndMsg("Msg: WM_CAPTURECHANGED HWND: %p\n", lParam);
-		pWnd = uiWindowGet(hWnd);
-		pWnd->OnMouseCaptureLost((HWND)lParam);
+		pWnd = uiWindowSafeGet(hWnd);
+		pWnd->OnMouseCaptureLost((HWND)lParam); // pWnd could be invalid after this call.
 		bProcessed = TRUE;
 		break;
 
 	case WM_MOUSELEAVE:
 		LogWndMsg("Msg: WM_MOUSELEAVE\n");
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pWnd->OnMouseLeave();
 		bProcessed = TRUE;
 		break;
@@ -373,21 +396,23 @@ void uiMsgProc(stMsgProcRetInfo& ret, HWND hWnd, UINT message, WPARAM wParam, LP
 
 	case WM_CTRL_MSG:
 		LogWndMsg("Msg: WM_CTRL_MSG\n");
-		pWnd = uiWindowGet(hWnd);
+		pWnd = uiWindowSafeGet(hWnd);
 		pForm = (uiFormBase*)wParam;
 		pForm->EntryOnCommand(lParam); // pForm might be destroyed after calling this method.
 		bProcessed = TRUE;
 		break;
 	}
 
-	if (pWnd != nullptr)
+	if (pWnd != nullptr && pWnd->ReleaseRef())
 		pWnd->PostMsgHandler(message);
 }
 
 static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	stMsgProcRetInfo rInfo;
+//	printx("Before WndProc: %d\n", message);
 	uiMsgProc(rInfo, hWnd, message, wParam, lParam);
+//	printx("After WndProc: %d\n", message);
 
 	if (rInfo.bProcessed)
 		return rInfo.ret;
@@ -420,15 +445,13 @@ BOOL OnInitDialog(stDialogCreateParam* pDCP, HWND hDlg)
 	else
 		pWnd->MoveImp(pDCP->x, pDCP->y);
 
-	uiRect rect;
-	pWnd->GetWindowRect(rect);
-	if (pWnd->OnCreate(&rect) == -1)
+	if (pWnd->OnCreate() == -1)
 		return FALSE;
 
 	if (pDCP->pParent != nullptr)
 		pDCP->pParent->AddChild(pDCP->pForm);
 
-	pForm->EntryOnCreate(pDCP->fcf, rect.Width(), rect.Height());
+	pForm->EntryOnCreate(pDCP->fcf, pDCP->cx, pDCP->cy);
 
 	return TRUE;
 }
@@ -466,6 +489,7 @@ static void PreCustomCreateWindow(uiFormBase* pForm, const TCHAR*& pClass, DWORD
 	{
 	case FC_DROPDOWN_FORM:
 		pClass = uiWindow::GetClassName(uiWindow::WCN_MENU);
+		dwExStyle |= WS_EX_TOPMOST;
 		break;
 
 //	default:
@@ -600,6 +624,8 @@ uiWindow::uiWindow(uiFormBase* pFormIn)
 
 uiWindow::~uiWindow()
 {
+	printx("---> uiWindow::~uiWindow\n");
+
 	ASSERT(m_Handle == NULL);
 	ASSERT(m_pForm == nullptr);
 	ASSERT(m_TotalWorkingTimer == 0);
@@ -608,6 +634,12 @@ uiWindow::~uiWindow()
 
 void uiWindow::OnFormPreClose(uiFormBase* pForm)
 {
+	if (pForm->FBTestFlag(uiFormBase::FBF_MOUSE_FOCUS))
+	{
+		ReleaseCapture();
+		ASSERT(!pForm->FBTestFlag(uiFormBase::FBF_MOUSE_FOCUS));
+	}
+
 	if (m_pActiveForm->IsSubnode(pForm))
 	{
 		if (m_pActiveForm->FBTestFlag(uiFormBase::FBF_ACTIVATED))
@@ -691,7 +723,8 @@ void uiWindow::CloseImp()
 	if (IsDialog())
 		::EndDialog(m_Handle, 0);
 	else
-		::PostMessage(m_Handle, WM_CLOSE, NULL, NULL);
+		::SendMessage(m_Handle, WM_CLOSE, NULL, NULL);
+	//	::PostMessage(m_Handle, WM_CLOSE, NULL, NULL);
 
 //	::PostMessage(m_Handle, WM_DESTROY, NULL, NULL); // This won't work for tool windows.
 }
@@ -1145,7 +1178,7 @@ void DbgSetFocusCheck()
 {
 	DWORD ec = GetLastError();
 //	printx("Null returned when calling ::SetFocus()! ec: %d\n", ec);
-	ASSERT(ec == 0);
+//	ASSERT(ec == 0);
 }
 
 uiFormBase* uiWindow::SetKBFocusImp(uiFormBase* pForm)
@@ -1173,14 +1206,8 @@ uiFormBase* uiWindow::SetKBFocusImp(uiFormBase* pForm)
 			if (pOldFocusForm != nullptr)
 				pOldFocusForm->EntryOnKBKillFocus(pForm);
 
-			//ASSERT(pOldFocusForm->FBTestFlag(uiFormBase::FBF_KB_FOCUS));
-			//pOldFocusForm->FBClearFlag(uiFormBase::FBF_KB_FOCUS);
-			//pOldFocusForm->OnKBFocus(FALSE, pForm);
-
 			pForm->EntryOnKBGetFocus(pOldFocusForm);
-			//ASSERT(!pForm->FBTestFlag(uiFormBase::FBF_KB_FOCUS));
-			//pForm->FBSetFlag(uiFormBase::FBF_KB_FOCUS);
-			//pForm->OnKBFocus(TRUE, pOldFocusForm);
+
 			m_pKeyboardFocusForm = pForm;
 		}
 	}
@@ -1352,8 +1379,9 @@ void uiWindow::TimerRemoveAll(uiFormBase* const pFormBase)
 	ASSERT(pFormBase->GetTimerCount() == 0);
 }
 
-void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
+void uiWindow::OnActivate(BOOL& bProcessed, WPARAM wParam, LPARAM lParam)
 {
+	BOOL bMinimized = HIWORD(wParam);
 	HWND hActivated = NULL, hDeactivated = NULL;
 
 	switch (LOWORD(wParam))
@@ -1365,21 +1393,25 @@ void uiWindow::OnActivate(WPARAM wParam, LPARAM lParam)
 	case WA_ACTIVE:
 		hDeactivated = (HWND)lParam;
 		m_bActive = TRUE;
+		bProcessed = bMinimized;
 		break;
 	case WA_CLICKACTIVE:
 		hDeactivated = (HWND)lParam;
 		m_bActive = TRUE;
+	//	bProcessed = bMinimized;
 		break;
 	}
-	BOOL bMinimized = HIWORD(wParam);
 
 	if (m_pForm == nullptr || !m_pForm->IsCreated())
 		return;
 
 	if (m_bActive)
 	{
-		uiFormBase* pPrev;
-		SetActiveImp(m_pActiveForm, pPrev);
+	//	if (!bMinimized)
+		{
+			uiFormBase* pPrev;
+			SetActiveImp(m_pActiveForm, pPrev);
+		}
 	}
 	else
 	{
@@ -1466,13 +1498,18 @@ BOOL uiWindow::OnClose()
 	return FALSE;
 }
 
-BOOL uiWindow::OnCreate(const uiRect* pRect)
+BOOL uiWindow::OnCreate()
 {
 	//printx("---> uiWindow::OnCreate\n");
 
-	if (m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, pRect->Width(), pRect->Height()))
+	m_RefCount = 1;
+
+	uiRect rect;
+	GetWindowRect(rect);
+	if (m_Drawer.InitBackBuffer(DEFAULT_BACKBUFFER_COUNT, m_Handle, rect.Width(), rect.Height()))
 		return 0;
 
+	// failure
 	m_pForm = nullptr;
 	return -1;
 }
@@ -1506,6 +1543,32 @@ void uiWindow::OnKeyUp(LRESULT& lRet, WPARAM wParam, LPARAM lParam)
 	kei.bKeyDownPrev = (lParam & (0x00000001 << 31)) != 0;
 
 	m_pKeyboardFocusForm->OnKeyUp(&kei);
+}
+
+void uiWindow::OnSysKeyDown(LRESULT& lRet, WPARAM wParam, LPARAM lParam)
+{
+	//printx("---> uiWindow::OnSysKeyDown\n");
+	ASSERT(m_pKeyboardFocusForm != nullptr);
+
+	stKeyEventInfo kei;
+	kei.KeyCode = static_cast<VUI_KEY_CODE>(wParam);
+	kei.iRepeatCount = lParam & 0x000000FF;
+	kei.bKeyDownPrev = (lParam & (0x00000001 << 31)) != 0;
+
+	m_pKeyboardFocusForm->OnSysKeyDown(&kei);
+}
+
+void uiWindow::OnSysKeyUp(LRESULT& lRet, WPARAM wParam, LPARAM lParam)
+{
+	//printx("---> uiWindow::OnSysKeyUp\n");
+	ASSERT(m_pKeyboardFocusForm != nullptr);
+
+	stKeyEventInfo kei;
+	kei.KeyCode = static_cast<VUI_KEY_CODE>(wParam);
+	kei.iRepeatCount = lParam & 0x000000FF;
+	kei.bKeyDownPrev = (lParam & (0x00000001 << 31)) != 0;
+
+	m_pKeyboardFocusForm->OnSysKeyUp(&kei);
 }
 
 void uiWindow::OnMove(INT scx, INT scy)
@@ -1560,7 +1623,7 @@ void uiWindow::OnPaint()
 
 void uiWindow::OnKBSetFocus(HWND hOldFocusWnd)
 {
-	printx("---> uiWindow::OnGetKBFocus. Old focus wnd: %p\n", hOldFocusWnd);
+	printx("---> uiWindow::OnGetKBFocus. (%p) Old focus wnd: %p\n", m_Handle, hOldFocusWnd);
 	ASSERT(!bKBFocusCaptured);
 
 	uiWindow* pOldFocusWnd;
@@ -1787,6 +1850,11 @@ void uiWindow::OnMouseCaptureLost(HWND hNewWnd)
 		ASSERT(m_pMouseFocusForm->FBTestFlag(uiFormBase::FBF_MOUSE_FOCUS));
 		m_pMouseFocusForm->FBClearFlag(uiFormBase::FBF_MOUSE_FOCUS);
 		m_pMouseFocusForm->OnMouseFocusLost((hNewWnd == NULL) ? nullptr : uiWindowGet(hNewWnd)->m_pMouseFocusForm);
+	
+		uiRect rect;
+		m_pMouseFocusForm->GetFrameRectWS(rect);
+		if (rect.IsPointIn(cpt))
+			m_pHoverForm = m_pMouseFocusForm;
 		m_pMouseFocusForm = nullptr;
 	}
 

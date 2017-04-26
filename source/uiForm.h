@@ -64,6 +64,10 @@ enum FORM_CREATION_FLAG
 
 	FCF_NO_AT       = 0x01 << 5, // Active trail: used to track frame state for painting non-client area.
 	FCF_NO_ACTIVATE = 0x01 << 6,
+	FCF_ACCEPTFILES = 0x01 << 7,
+	FCF_NO_DBCLICK  = 0x01 << 8,
+
+	FCF_NO_HEADER = 0x01 << 24,
 };
 
 enum MOUSE_KEY_TYPE
@@ -294,23 +298,24 @@ public:
 	virtual void EntryOnCommand(UINT_PTR id);
 	virtual void EntryOnPaint(uiDrawer* pDrawer);
 
-	virtual uiSize GetMinSize() { return uiSize(-1, -1); }
-	virtual uiSize GetMaxSize() { return uiSize(-1, -1); }
+	virtual uiSize GetMinSize() const { return uiSize(-1, -1); }
+	virtual uiSize GetMaxSize() const { return uiSize(-1, -1); }
 
 	virtual BOOL OnClose() { return TRUE; }
-	virtual BOOL OnCreate() { return TRUE; }
+	virtual BOOL OnCreate(FORM_CREATION_FLAG fcf) { return TRUE; }
 	virtual void OnDestroy() {}
 
 	virtual uiFormBase* TryActivate();
 	virtual void OnActivate(BOOL bActive);
 	virtual void OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode);
 
-	virtual MOUSE_ACTIVATE_RESULT OnMouseActivate();
+	virtual MOUSE_ACTIVATE_RESULT OnMouseActivate(); // TODO
 
 	virtual void OnCommand(INT_PTR id, BOOL &bDone);
 
 	virtual BOOL OnDeplate(INT iReason, uiFormBase *pDockingForm);
 	virtual void OnSubnodeDestroy(uiFormBase* pSubnode) {}
+	virtual void OnChildDestroy(uiFormBase* pSubnode) {}
 
 	virtual void OnMouseBtnClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
 	virtual void OnMouseBtnDbClk(MOUSE_KEY_TYPE KeyType, INT x, INT y);
@@ -331,6 +336,8 @@ public:
 
 	virtual void OnKeyDown(const stKeyEventInfo* pKEI) {}
 	virtual void OnKeyUp(const stKeyEventInfo* pKEI) {}
+	virtual void OnSysKeyDown(const stKeyEventInfo* pKEI) {}
+	virtual void OnSysKeyUp(const stKeyEventInfo* pKEI) {}
 
 
 	struct stFindCtx
@@ -560,7 +567,7 @@ class UI_INTERFACE IAreaCursor
 {
 public:
 
-	virtual uiImage GetCursorImage(uiFormBase *pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
+	virtual uiImage GetCursorImage(uiFormBase* pForm, INT csX, INT csY, uiFormBase::CLIENT_AREA_TYPE) = 0;
 
 };
 
@@ -576,8 +583,8 @@ public:
 	BOOL SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig);
 
 	INLINE uiImage& GetIcon(BOOL bSmall = TRUE) { return bSmall ? m_IconS : m_IconB; }
-	INLINE void SetHeader(uiHeaderFormBase* pHBase) { ASSERT(m_pHeaderForm == nullptr); m_pHeaderForm = pHBase; }
-
+	INLINE void SetHeader(uiHeaderFormBase* pHBase) { m_pHeaderForm = pHBase; }
+	INLINE uiHeaderFormBase* GetHeader() const { return m_pHeaderForm; }
 
 protected:
 
@@ -593,7 +600,13 @@ class uiSideDockableFrame : virtual public uiFormBase, public IFrameImp
 {
 public:
 
-	enum { DEFAULT_BORDER_THICKNESS = 3, };
+	enum
+	{
+		DEFAULT_BORDER_THICKNESS = 3,
+		DEFAULT_HEADER_BAR_HEIGHT = 26,
+		MIN_HEADER_BAR_WIDTH = 150,
+	};
+
 	enum FORM_BORDER_FLAGS
 	{
 		FBF_NONE   = 0,
@@ -615,7 +628,7 @@ public:
 		m_DTLeft = m_DTTop = m_DTRight = m_DTBottom = DEFAULT_BORDER_THICKNESS;
 	}
 
-
+	void OnPreCreate(FORM_CREATION_FLAG& fcf) override;
 	void OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode) override;
 	void EntryOnPaint(uiDrawer* pDrawer) override;
 
@@ -630,9 +643,14 @@ public:
 	void OnFrameSize(UINT nNewWidth, UINT nNewHeight) override;
 
 	virtual void OnFramePaint(uiDrawer* pDrawer);
+	virtual void OnHeaderBarChanged(uiHeaderFormBase* pNewHeaderForm);
 
 	BOOL DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
 	BOOL SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf);
+
+	BOOL SetHeaderBar(uiHeaderFormBase* pHeaderForm);
+	BOOL SetMenuBar(uiMenu* pMenu);
+
 
 	INLINE void SetBorder(BYTE Thickness, FORM_BORDER_FLAGS flags = FBF_ALL) { SetBorder(Thickness, Thickness, Thickness, Thickness, flags); }
 	void SetBorder(INT left, INT top, INT right, INT bottom, FORM_BORDER_FLAGS flags = FBF_ALL);
@@ -694,10 +712,6 @@ protected:
 
 
 IMPLEMENT_ENUM_FLAG(uiSideDockableFrame::FORM_BORDER_FLAGS)
-
-
-
-
 
 
 class IMessageHandler : virtual public uiFormBase
@@ -830,7 +844,7 @@ public:
 	void OnMouseEnter(INT x, INT y) override;
 	void OnMouseLeave() override;
 
-	BOOL OnCreate() override;
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override;
 	void OnPreCreate(FORM_CREATION_FLAG& fcf) override;
 	void OnMouseMove(INT x, INT y, MOVE_DIRECTION mmd) override;
 	void OnMouseBtnDown(MOUSE_KEY_TYPE KeyType, INT x, INT y) override;
@@ -870,12 +884,9 @@ protected:
 };
 
 
-class uiForm : public uiSideDockableFrame//, public IMessageHandler
+class uiForm : public uiSideDockableFrame
 {
 public:
-
-	enum { DEFAULT_HEADER_BAR_HEIGHT = 26, };
-
 
 	uiForm()
 	:m_minSize(-1, -1), m_maxSize(-1, -1)
@@ -885,11 +896,14 @@ public:
 	~uiForm() {}
 
 
-	BOOL SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm = nullptr);
-	BOOL SetMenuBar(uiMenu* pMenu);
+	uiSize GetMinSize() const override { return m_minSize; }
+	uiSize GetMaxSize() const override { return m_maxSize; }
 
-	virtual uiSize GetMinSize() { return m_minSize; }
-	virtual uiSize GetMaxSize() { return m_maxSize; }
+	void OnHeaderBarChanged(uiHeaderFormBase* pNewHeaderForm) override
+	{
+		m_minSize.iWidth = m_BTLeft + m_BTRight + MIN_HEADER_BAR_WIDTH;
+		m_minSize.iHeight = m_BTTop + m_BTBottom + DEFAULT_HEADER_BAR_HEIGHT;
+	}
 
 
 protected:

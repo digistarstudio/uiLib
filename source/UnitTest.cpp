@@ -26,9 +26,9 @@ public:
 		printx("---> uiCursorDrawForm::OnMouseLeave\n");
 	}
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
-		SetHeaderBar(_T("Draw cursor test"));
+		SetTitle(_T("Draw cursor test"));
 		m_AniCursor.LoadFromFile(_T("r:\\img\\wait.ani"));
 
 
@@ -118,9 +118,9 @@ class uiButtonWnd : public uiButton
 {
 public:
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
-		uiButton::OnCreate();
+		uiButton::OnCreate(fcf);
 		Bind(GetID());
 		return TRUE;
 	}
@@ -165,7 +165,7 @@ public:
 };
 
 
-class uiDropdownFormBase : public uiForm
+class uiDropdownFormBase : public uiFormBase
 {
 public:
 
@@ -175,6 +175,16 @@ public:
 		return FC_DROPDOWN_FORM;
 	}
 
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
+	{
+		printx("---> uiDropdownFormBase::OnCreate\n");
+		SetCapture();
+		return TRUE;
+	}
+	void OnDestroy() override
+	{
+		printx("---> uiDropdownFormBase::OnDestroy\n");
+	}
 	MOUSE_ACTIVATE_RESULT OnMouseActivate() override // MAR_ACTIVATE, MAR_ACTIVATE_EAT, MAR_NO_ACTIVATE, MAR_NO_ACTIVATE_EAT
 	{
 		return MAR_NO_ACTIVATE;
@@ -186,6 +196,7 @@ public:
 		switch (KeyType)
 		{
 		case MKT_LEFT:
+			Close();
 			break;
 		case MKT_MIDDLE:
 			Close();
@@ -194,8 +205,16 @@ public:
 			break;
 		}
 	}
-
-
+	void OnPaint(uiDrawer* pDrawer) override
+	{
+		uiRect rect = GetClientRect();
+		pDrawer->FillRect(rect, RGB(50, 50, 50));
+		pDrawer->FillRect(rect.InflateRV(-1, -1, -1, -1), RGB(255, 255, 255));
+	}
+	void OnMouseFocusLost(uiFormBase* pNewForm) override
+	{
+		printx("---> uiDropdownFormBase::OnMouseFocusLost\n");
+	}
 };
 
 
@@ -209,6 +228,16 @@ public:
 		FRAME_THICKNESS = 2,
 	};
 
+	enum COMBOBOX_PROPERTIES
+	{
+		CP_EDITABLE,
+	};
+
+	struct stItem
+	{
+		uiString String;
+		void*    CtxData;
+	};
 
 	uiComboBox()
 	:m_pDDF(nullptr)
@@ -220,7 +249,39 @@ public:
 		printx("---> uiComboBox::OnActivate Active: %d\n", bActive);
 		uiFormBase::OnActivate(bActive);
 
-		if (!bActive)
+		if (!bActive/* && GetKeyState(VK_F2) < 0*/)
+			DropdownMenu(FALSE);
+	}
+
+	void OnKBFocus(BOOL bGet, uiFormBase* pForm) override
+	{
+		printx("---> uiComboBox::OnKBFocus. bGet: %d\n", bGet);
+
+		if (bGet)
+		{
+		}
+		else
+		{
+			if (GetKeyState(VK_F2) < 0)
+				_CrtDbgBreak();
+		}
+	}
+
+	void DropdownMenu(BOOL bShow)
+	{
+		printx("---> uiComboBox::ShowDropdownMenu.\n");
+
+		if (bShow)
+		{
+			uiRect rect;
+			GetFrameRectWS(rect);
+			uiPoint pt = rect.GetLeftTop();
+			GetBaseWnd()->ClientToScreen(pt);
+			rect.Move(pt);
+			m_pDDF = new uiDropdownFormBase;
+			m_pDDF->Create(this, pt.x, pt.y + rect.Height(), 150, 50, FCF_NO_ACTIVATE | FCF_TOOL);
+		}
+		else
 		{
 			if (m_pDDF != nullptr)
 			{
@@ -230,19 +291,30 @@ public:
 		}
 	}
 
-	void OnKBFocus(BOOL bGet, uiFormBase* pForm) override
+	void OnKeyDown(const stKeyEventInfo* pKEI)
 	{
-		printx("---> uiComboBox::OnKBGetFocus. bGet: %d\n", bGet);
+		printx("---> uiComboBox::OnKeyDown. Key: %c\n", pKEI->KeyCode);
 
-		if (bGet)
+		switch (pKEI->KeyCode)
 		{
+		case uiK_ESC:
+			DropdownMenu(FALSE);
+			break;
+
 
 		}
-		else
-		{
-			if (GetKeyState(VK_F2) < 0)
-			_CrtDbgBreak();
-		}
+	}
+	void OnKeyUp(const stKeyEventInfo* pKEI)
+	{
+		printx("---> uiComboBox::OnKeyUp. Key: %c\n", pKEI->KeyCode);
+	}
+	void OnSysKeyDown(const stKeyEventInfo* pKEI)
+	{
+		printx("---> uiComboBox::OnSysKeyDown. Key: %c\n", pKEI->KeyCode);
+	}
+	void OnSysKeyUp(const stKeyEventInfo* pKEI)
+	{
+		printx("---> uiComboBox::OnSysKeyUp. Key: %c\n", pKEI->KeyCode);
 	}
 
 	void OnMouseEnter(INT x, INT y) override
@@ -263,7 +335,8 @@ public:
 		{
 		case MKT_LEFT:
 		//	new uiDropdownFormBase();
-
+			if (m_BtnRect.IsPointIn(x, y))
+				DropdownMenu((m_pDDF != nullptr) ? FALSE : TRUE);
 			break;
 
 		case MKT_MIDDLE:
@@ -277,36 +350,45 @@ public:
 	}
 	void OnPaint(uiDrawer* pDrawer) override
 	{
-		uiRect rect = GetClientRect(), rect2 = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
-		UINT FrameColor = IsMouseHovering() ? RGB(200, 200, 255) : RGB(200, 200, 200);
-		
+		uiRect rect = GetClientRect();
+		uiRect rect2 = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
+		UINT FrameColor = (IsMouseHovering() || m_pDDF != nullptr) ? RGB(200, 200, 255) : RGB(200, 200, 200);
+
 		pDrawer->FillRect(rect, FrameColor);
 		pDrawer->FillRect(rect2, RGB(255, 255, 255));
 
 		const uiFont& font = uiGetSysFont(SFT_SM_CAPTION);
 
-
 		pDrawer->Text(uiString(_T("Test string")), rect, font);
 
-
-		pDrawer->FillRect(BtnRect, FrameColor);
-		pDrawer->Text(uiString(_T("¡¿")), BtnRect, font);
+		pDrawer->FillRect(m_BtnRect, FrameColor);
+		pDrawer->Text(uiString(_T("¡¿")), m_BtnRect, font);
 	}
 	void UpdateLayout(const uiRect& rect)
 	{
-		BtnRect = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
-		BtnRect.Left = BtnRect.Right - BTN_WIDTH;
+		m_BtnRect = rect.InflateRV(-FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS, -FRAME_THICKNESS);
+		m_BtnRect.Left = m_BtnRect.Right - BTN_WIDTH;
 	}
 	void OnSize(UINT nNewWidth, UINT nNewHeight) override
 	{
 		uiRect rect(nNewWidth, nNewHeight);
 		UpdateLayout(rect);
 	}
+	void OnChildDestroy(uiFormBase* pSubnode) override
+	{
+		if (pSubnode == m_pDDF)
+		{
+			m_pDDF = nullptr;
+			RedrawForm();
+		}
+	}
 
 
 protected:
 
-	uiRect BtnRect;
+
+
+	uiRect m_BtnRect;
 	uiDropdownFormBase *m_pDDF;
 
 
@@ -317,9 +399,9 @@ class uiTestForm : public uiForm
 {
 public:
 
-	BOOL OnCreate() override
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override
 	{
-		SetHeaderBar(_T("Combobox Test"));
+		SetTitle(_T("Combobox Test"));
 		uiFormBase* pCombo = new uiComboBox;
 		pCombo->Create(this, 0, 0, 100, 23, FCF_CENTER);
 		return TRUE;

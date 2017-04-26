@@ -306,7 +306,7 @@ HGDIOBJ uiGDIObjCacher::Find(const stGDIObjectName& ObjName)
 	if (it != HandleMap.end())
 	{
 		it->second->RemoveToHead(ListHead);
-		return it->second->pData;
+		return it->second->pData1;
 	}
 
 	stSimpleListNode* pListNode;
@@ -320,7 +320,7 @@ HGDIOBJ uiGDIObjCacher::Find(const stGDIObjectName& ObjName)
 		pListNode = (stSimpleListNode*)LIST_GET_TAIL(ListHead);
 		pListNode->Detach();
 		HandleMap.erase((size_t)pListNode->pData2);
-		VERIFY(::DeleteObject(pListNode->pData));
+		VERIFY(::DeleteObject(pListNode->pData1));
 	}
 
 	HGDIOBJ hObj;
@@ -347,7 +347,7 @@ HGDIOBJ uiGDIObjCacher::Find(const stGDIObjectName& ObjName)
 		return NULL;
 	}
 
-	pListNode->pData = hObj;
+	pListNode->pData1 = hObj;
 	pListNode->pData2 = (void*)key;
 	list_add(*pListNode, &ListHead);
 
@@ -360,7 +360,7 @@ void uiGDIObjCacher::Release()
 {
 	for (auto it = HandleMap.begin(); it != HandleMap.end(); ++it)
 	{
-		VERIFY(::DeleteObject(it->second->pData));
+		VERIFY(::DeleteObject(it->second->pData1));
 		stSimpleListNode::mfree(it->second);
 		--CurCacheCount;
 	}

@@ -41,15 +41,16 @@ uiFormBase::~uiFormBase()
 
 BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHeight, FORM_CREATION_FLAG fcf)
 {
-	BOOL bResult = TRUE;
+	uiWindow* pWnd = nullptr;
+	BOOL bResult = TRUE, bVisible = (!(fcf & FCF_INVISIBLE) && !(fcf & FCF_NO_ACTIVATE));
 
 	if (fcf & FCF_POPUP)
 	{
 	}
 	else if (/*!UICore::bSilentMode &&*/ parent == nullptr)
 	{
-		stWindowCreateParam wcp(x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
-		uiWindow *pWnd = uiWindow::CreateTemplateWindow(UWT_NORMAL, this, nullptr, wcp);
+		stWindowCreateParam wcp(x, y, nWidth, nHeight, bVisible);
+		pWnd = uiWindow::CreateTemplateWindow(UWT_NORMAL, this, nullptr, wcp);
 		if (pWnd == nullptr)
 			bResult = FALSE;
 		else
@@ -62,8 +63,8 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	else if (fcf & FCF_TOOL)
 	{
 		ASSERT(parent != nullptr);
-		stWindowCreateParam wcp(x, y, nWidth, nHeight, !(fcf & FCF_INVISIBLE));
-		uiWindow *pWnd = uiWindow::CreateTemplateWindow(UWT_TOOL, this, parent, wcp);
+		stWindowCreateParam wcp(x, y, nWidth, nHeight, bVisible);
+		pWnd = uiWindow::CreateTemplateWindow(UWT_TOOL, this, parent, wcp);
 		if (pWnd == nullptr)
 			bResult = FALSE;
 		else
@@ -101,6 +102,9 @@ BOOL uiFormBase::Create(uiFormBase *parent, INT x, INT y, UINT nWidth, UINT nHei
 	}
 
 	EntryOnCreate(fcf, nWidth, nHeight);
+
+	if (pWnd != nullptr && !(fcf & FCF_INVISIBLE) && (fcf & FCF_NO_ACTIVATE))
+		pWnd->ShowWindow(SW_SHOWNOACTIVATE);
 
 	return bResult;
 }
@@ -140,10 +144,13 @@ void uiFormBase::Close()
 	if (OnClose())
 	{
 		uiWindow* pBaseWnd = GetBaseWnd(), * pWnd = m_pWnd; // Cache this first.
-		uiFormBase* pPlate = GetPlate();
+		uiFormBase* pPlate = GetPlate(), * pParent = GetParent();
 
-		if (GetParent() != nullptr)
-			GetParent()->DetachChild(this);
+		if (pParent != nullptr)
+		{
+			pParent->OnChildDestroy(this);
+			pParent->DetachChild(this);
+		}
 		if (pPlate != nullptr)
 		{
 			pPlate->OnSubnodeDestroy(this);
@@ -374,6 +381,8 @@ BOOL uiFormBase::ReleaseCapture()
 
 uiFormBase* uiFormBase::SetFocus()
 {
+	//printx("---> uiFormBase::SetFocus\n");
+
 	if (FBTestFlag(FBF_KB_FOCUS))
 		return this;
 
@@ -583,10 +592,16 @@ void uiFormBase::EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight
 
 	UTX::CSimpleList PostCreateList;
 
-	if (GetParent() != nullptr && GetParent()->IsCreating())
-		SetPostCreateList(GetParent()->m_pStyle);
-	else
+	uiFormBase* pParent = GetParent();
+	if (pParent == nullptr)
 		SetPostCreateList(&PostCreateList);
+	else
+	{
+		SetPostCreateList(pParent->IsCreating() ? pParent->m_pStyle : (void*)&PostCreateList);
+
+		if (pParent->FBTestFlag(FBF_NO_ACTIVE_TRAIL)) // Check inheritable flag.
+			fcf |= FCF_NO_AT;
+	}
 
 	FBSetFlag(FBF_CREATING);
 	m_FrameRect.SetSize(nWidth, nHeight);
@@ -595,11 +610,10 @@ void uiFormBase::EntryOnCreate(FORM_CREATION_FLAG fcf, UINT nWidth, UINT nHeight
 
 	if (fcf & FCF_NO_AT)
 		FBSetFlag(FBF_NO_ACTIVE_TRAIL);
-//	if (!(fcf & FCF_NO_ACTIVATE))
-	else
+	else if (!(fcf & FCF_NO_ACTIVATE))
 		SetActive();
 
-	OnCreate();
+	OnCreate(fcf);
 	OnFrameSize(m_FrameRect.Width(), m_FrameRect.Height());
 	EntryOnMove(m_FrameRect.Left, m_FrameRect.Top, &stFormMoveInfo());
 
@@ -914,6 +928,19 @@ BOOL IFrameImp::SetIconImp(uiFormBase* pForm, uiImage& img, BOOL bBig)
 }
 
 
+void uiSideDockableFrame::OnPreCreate(FORM_CREATION_FLAG& fcf)
+{
+	uiFormBase::OnPreCreate(fcf);
+
+	if (!(fcf & FCF_NO_HEADER))
+	{
+		INT HeaderHeight = DEFAULT_HEADER_BAR_HEIGHT;
+		uiHeaderForm* pHeaderForm = new uiHeaderForm;
+		pHeaderForm->Create(this, 0, 0, 100, HeaderHeight);
+		SetHeaderBar(pHeaderForm);
+	}
+}
+
 void uiSideDockableFrame::OnUpdateAT(ACTIVATE_STATE as, uiFormBase* pSubNode)
 {
 	if (as != AS_INACTIVE && pSubNode != nullptr)
@@ -946,12 +973,6 @@ void uiSideDockableFrame::EntryOnPaint(uiDrawer* pDrawer)
 			}
 		}
 	}
-
-	//if (pDrawer->GetMode() & FPM_NCPAINT)
-	//{
-	//	ASSERT(pDrawer->GetCurrentDepth() == 1);
-	//	return;
-	//}
 
 	if (pDrawer->PushDestRect(m_ClientRect))
 	{
@@ -1073,7 +1094,6 @@ void uiSideDockableFrame::OnFrameSize(UINT nNewWidth, UINT nNewHeight)
 	UpdataClientRect();
 }
 
-
 void uiSideDockableFrame::OnFramePaint(uiDrawer* pDrawer)
 {
 	INT    offset;
@@ -1090,6 +1110,10 @@ void uiSideDockableFrame::OnFramePaint(uiDrawer* pDrawer)
 	pDrawer->DrawLine(0, offset, rect.Right, offset, color, m_BTTop);
 	offset = rect.Bottom - m_BTBottom + (m_BTBottom >> 1);
 	pDrawer->DrawLine(0, offset, rect.Right, offset, color, m_BTBottom);
+}
+
+void uiSideDockableFrame::OnHeaderBarChanged(uiHeaderFormBase* pNewHeaderForm)
+{
 }
 
 BOOL uiSideDockableFrame::DockForm(uiFormBase* pDockingForm, FORM_DOCKING_FLAG fdf)
@@ -1120,9 +1144,6 @@ BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 
 	if (!FBTestFlag(FBF_CREATED | FBF_CREATING))
 		return FALSE;
-
-	if (pDockingForm->GetClass() == FC_HEADER_BAR)
-		SetHeader(static_cast<uiHeaderFormBase*>(pDockingForm));
 
 	pDockingForm->FBSetFlag(FBF_SIDE_DOCKED);
 	pDockingForm->m_DockFlag = fdf;
@@ -1169,6 +1190,35 @@ BOOL uiSideDockableFrame::SideDock(uiFormBase* pDockingForm, FORM_DOCKING_FLAG f
 	return TRUE;
 }
 
+BOOL uiSideDockableFrame::SetHeaderBar(uiHeaderFormBase* pHeaderForm)
+{
+	INT HeaderHeight = DEFAULT_HEADER_BAR_HEIGHT;
+	INT BorderWidth = m_BTTop + m_BTBottom;
+
+	if (GetHeader() != nullptr)
+	{
+		GetHeader()->Close();
+		SetHeader(nullptr);
+	}
+
+	SetHeader(pHeaderForm);
+	SideDock(pHeaderForm, FDF_TOP | FDF_AUTO_SIZE);
+
+	OnHeaderBarChanged(pHeaderForm);
+
+	return FALSE;
+}
+
+BOOL uiSideDockableFrame::SetMenuBar(uiMenu* pMenu)
+{
+	uiMenuBar *pMenuBar = new uiMenuBar;
+	pMenuBar->Create(this, pMenu);
+
+	SideDock(pMenuBar, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
+
+	return TRUE;
+}
+
 void uiSideDockableFrame::SetBorder(INT left, INT top, INT right, INT bottom, FORM_BORDER_FLAGS flags)
 {
 	if (left >= 0)
@@ -1185,6 +1235,7 @@ void uiSideDockableFrame::SetBorder(INT left, INT top, INT right, INT bottom, FO
 			m_DTBottom = m_BTBottom;
 
 	m_BorderFlags = flags;
+
 	if (IsCreated())
 	{
 		UpdataClientRect();
@@ -1317,7 +1368,7 @@ void uiHeaderForm::OnMouseLeave()
 		GetParent()->MoveByOffset(0, 5);
 }
 
-BOOL uiHeaderForm::OnCreate()
+BOOL uiHeaderForm::OnCreate(FORM_CREATION_FLAG fcf)
 {
 	//	printx("---> uiHeaderForm::OnCreate\n");
 	ASSERT(m_pCloseBtn == nullptr);
@@ -1326,13 +1377,13 @@ BOOL uiHeaderForm::OnCreate()
 	if ((m_pCloseBtn = new uiButton) != nullptr)
 	{
 		m_pCloseBtn->SetID(uiID_CLOSE);
-		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28, FCF_NO_AT);
+		m_pCloseBtn->Create(this, rect.Right - 30, 1, 28, 28);
 	}
 
 	if ((m_pMinBtn = new uiButton) != nullptr)
 	{
 		m_pMinBtn->SetID(uiID_MINIMIZE);
-		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28, FCF_NO_AT);
+		m_pMinBtn->Create(this, rect.Right - 58, 1, 28, 28);
 	}
 
 	UpdateLayout(rect.Width(), rect.Height());
@@ -1459,39 +1510,6 @@ void uiHeaderForm::UpdateLayout(INT NewWidth, INT NewHeight)
 		m_pMinBtn->Move(NewWidth - 58, 1);
 		m_pMinBtn->Size(-1, ButtonHeight);
 	}
-}
-
-
-BOOL uiForm::SetHeaderBar(const TCHAR* pStr, uiHeaderFormBase *pHeaderForm)
-{
-	INT HeaderHeight = DEFAULT_HEADER_BAR_HEIGHT;
-	INT BorderWidth = m_BTTop + m_BTBottom;
-
-	if (pHeaderForm == nullptr)
-	{
-		pHeaderForm = new uiHeaderForm;
-		pHeaderForm->Create(this, 0, 0, 100, HeaderHeight, FCF_NONE);
-	}
-	m_minSize.iHeight = HeaderHeight + BorderWidth;
-	m_minSize.iWidth = 150;
-
-	SideDock(pHeaderForm, FDF_TOP | FDF_AUTO_SIZE);
-	SetTitle(pStr);
-
-	return FALSE;
-}
-
-BOOL uiForm::SetMenuBar(uiMenu* pMenu)
-{
-	uiMenuBar *pMenuBar = new uiMenuBar;
-	pMenuBar->Create(this, pMenu);
-
-//	m_minSize.iHeight = HeaderHeight + 2 * BorderWidth;
-//	m_minSize.iWidth = 150;
-
-	SideDock(pMenuBar, (FORM_DOCKING_FLAG)(FDF_TOP | FDF_AUTO_SIZE));
-
-	return TRUE;
 }
 
 

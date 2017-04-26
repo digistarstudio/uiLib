@@ -1009,7 +1009,7 @@ public:
 
 
 	list_entry list;
-	void* pData;
+	void* pData1;
 	void* pData2;
 
 
@@ -1042,24 +1042,26 @@ public:
 			clear();
 	}
 
-	INLINE BOOL push_front(void *ptr)
+	INLINE BOOL push_front(void* ptr, void* ptr2 = nullptr)
 	{
-		stSimpleListNode *pNewNode = stSimpleListNode::alloc();
+		stSimpleListNode* pNewNode = stSimpleListNode::alloc();
 		if (pNewNode != nullptr)
 		{
-			pNewNode->pData = ptr;
+			pNewNode->pData1 = ptr;
+			pNewNode->pData2 = ptr2;
 			list_add(*pNewNode, &m_ListHead);
 			++m_Count;
 			return TRUE;
 		}
 		return FALSE;
 	}
-	INLINE BOOL push_back(void *ptr)
+	INLINE BOOL push_back(void* ptr, void* ptr2 = nullptr)
 	{
-		stSimpleListNode *pNewNode = stSimpleListNode::alloc();
+		stSimpleListNode* pNewNode = stSimpleListNode::alloc();
 		if (pNewNode != nullptr)
 		{
-			pNewNode->pData = ptr;
+			pNewNode->pData1 = ptr;
+			pNewNode->pData2 = ptr2;
 			list_add_tail(*pNewNode, &m_ListHead);
 			++m_Count;
 			return TRUE;
@@ -1071,8 +1073,8 @@ public:
 	{
 		ASSERT(!LIST_IS_EMPTY(m_ListHead));
 
-		stSimpleListNode *pHeadNode = (stSimpleListNode*)m_ListHead.next;
-		void *ptrOut = pHeadNode->pData;
+		stSimpleListNode* pHeadNode = (stSimpleListNode*)m_ListHead.next;
+		void* ptrOut = pHeadNode->pData1;
 		list_remove(*pHeadNode);
 		stSimpleListNode::mfree(pHeadNode);
 		--m_Count;
@@ -1082,28 +1084,51 @@ public:
 	{
 		ASSERT(!LIST_IS_EMPTY(m_ListHead));
 
-		stSimpleListNode *pTailNode = (stSimpleListNode*)m_ListHead.prev;
-		void *ptrOut = pTailNode->pData;
+		stSimpleListNode* pTailNode = (stSimpleListNode*)m_ListHead.prev;
+		void* ptrOut = pTailNode->pData1;
 		list_remove(*pTailNode);
 		stSimpleListNode::mfree(pTailNode);
 		--m_Count;
 		return ptrOut;
 	}
 
+	INLINE void pop_front(void*& data1, void*& data2)
+	{
+		ASSERT(!LIST_IS_EMPTY(m_ListHead));
+
+		stSimpleListNode* pHeadNode = (stSimpleListNode*)m_ListHead.next;
+		data1 = pHeadNode->pData1;
+		data2 = pHeadNode->pData2;
+		list_remove(*pHeadNode);
+		stSimpleListNode::mfree(pHeadNode);
+		--m_Count;
+	}
+	INLINE void pop_back(void*& data1, void*& data2)
+	{
+		ASSERT(!LIST_IS_EMPTY(m_ListHead));
+
+		stSimpleListNode* pTailNode = (stSimpleListNode*)m_ListHead.prev;
+		data1 = pTailNode->pData1;
+		data2 = pTailNode->pData2;
+		list_remove(*pTailNode);
+		stSimpleListNode::mfree(pTailNode);
+		--m_Count;
+	}
+
 	INLINE void* front()
 	{
 		ASSERT(!LIST_IS_EMPTY(m_ListHead));
-		return ((stSimpleListNode*)m_ListHead.next)->pData;
+		return ((stSimpleListNode*)m_ListHead.next)->pData1;
 	}
 	INLINE void* back()
 	{
 		ASSERT(!LIST_IS_EMPTY(m_ListHead));
-		return ((stSimpleListNode*)m_ListHead.prev)->pData;
+		return ((stSimpleListNode*)m_ListHead.prev)->pData1;
 	}
 
 	void clear()
 	{
-		list_entry *pEntry, *pNext;
+		list_entry* pEntry, * pNext;
 		for (pEntry = m_ListHead.prev; IS_VALID_ENTRY(pEntry, m_ListHead); )
 		{
 			pNext = pEntry->next;
@@ -1115,7 +1140,7 @@ public:
 	}
 
 
-	INLINE void* GetAt(list_entry *entry) { return ((stSimpleListNode*)entry)->pData; }
+	INLINE void* GetAt(list_entry* entry) { return ((stSimpleListNode*)entry)->pData1; }
 	INLINE UINT32 size() const { return m_Count; }
 	INLINE const list_head& GetListHead() const { return m_ListHead; }
 

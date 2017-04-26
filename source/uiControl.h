@@ -60,7 +60,7 @@ public:
 	}
 
 
-	BOOL OnCreate() override // final
+	BOOL OnCreate(FORM_CREATION_FLAG fcf) override // final
 	{
 		if (m_ID == uiID_INVALID)
 			m_ID = uiGetID();

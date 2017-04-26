@@ -149,14 +149,16 @@ public:
 	BOOL TimerClose(uiFormBase* pFormBase, UINT key, BOOL bByID);
 	void TimerRemoveAll(uiFormBase* const pFormBase);
 
-	void OnActivate(WPARAM wParam, LPARAM lParam);
+	void OnActivate(BOOL& bProcessed, WPARAM wParam, LPARAM lParam);
 	void OnNCActivate(WPARAM wParam, LPARAM lParam);
 	void OnMouseActivate(LPARAM& ret, WPARAM wParam, LPARAM lParam);
 	BOOL OnClose();
-	BOOL OnCreate(const uiRect* pRect);
+	BOOL OnCreate();
 	void OnDestroy();
 	void OnKeyDown(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
 	void OnKeyUp(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
+	void OnSysKeyDown(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
+	void OnSysKeyUp(LRESULT& lRet, WPARAM wParam, LPARAM lParam);
 	void OnMove(INT scx, INT scy);
 	void OnPaint();
 	void OnKBSetFocus(HWND hOldFocusWnd);
@@ -226,6 +228,15 @@ public:
 		pPrevForm = (hWndPrev == NULL) ? nullptr : uiWindowGet(hWndPrev)->m_pActiveForm;
 	}
 
+	INLINE BOOL AddRef() { return ++m_RefCount; }
+	INLINE INT ReleaseRef()
+	{
+		INT ref = --m_RefCount;
+		if (ref == 0)
+			delete this;
+		return ref;
+	}
+
 
 	// For debugging.
 	// Don't use SetWindowPos to show windows.
@@ -280,6 +291,7 @@ protected:
 		return ((((UINT64)filetime.dwHighDateTime) << 32) + filetime.dwLowDateTime) / 10000; // Convert to millisecond.
 	}
 
+
 	static HGLOBAL hGDialogTemplate;
 	static const TCHAR* WndClassName[];
 
@@ -296,6 +308,7 @@ protected:
 
 	uiPoint m_LastMousePos; // window client spcae
 	UINT8   m_TrackMouseClick;
+	INT8    m_RefCount;
 
 	UINT m_AreaType, m_SizingHitSide;
 	INT  m_ScreenCoordinateX, m_ScreenCoordinateY;
